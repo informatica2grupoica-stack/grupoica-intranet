@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   const body = await request.json();
 
-  // Aquí armamos el JSON tal cual lo pide la documentación de Obuma que me pasaste
+  // Aquí armamos el JSON tal cual lo pide la documentación de Obuma que me pasaste ok
   const obumaPayload = {
     producto_nombre: body.nombre,
     producto_tipo: body.tipo,
