@@ -34,7 +34,6 @@ export default function ChatPage() {
         const { data } = await supabase.from('perfiles').select('*').neq('user_id', session.user.id); 
         if (data) setUsuarios(data);
         
-        // Cargar conteo inicial de no leídos
         fetchNoLeidos(session.user.id);
       }
     };
@@ -57,7 +56,7 @@ export default function ChatPage() {
     }
   }
 
-  // 2. Suscripción Global para Notificaciones y Mensajes
+  // 2. Suscripción Global
   useEffect(() => {
     if (!myUserId) return;
 
@@ -66,23 +65,18 @@ export default function ChatPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, (payload) => {
         const nuevoMsg = payload.new;
 
-        // Si el mensaje es para mí
         if (nuevoMsg.receptor_id === myUserId) {
-          // Si NO tengo abierto ese chat, aumento el contador
           if (seleccionado?.user_id !== nuevoMsg.emisor_id) {
             setConteosNoLeidos(prev => ({
               ...prev,
               [nuevoMsg.emisor_id]: (prev[nuevoMsg.emisor_id] || 0) + 1
             }));
-            // Opcional: Alerta minimalista de nuevo mensaje
             setNotificacion({ msg: "Nuevo mensaje recibido", tipo: 'success' });
           } else {
-            // Si tengo el chat abierto, lo agrego a la vista
             setMensajes(prev => [...prev, nuevoMsg]);
             marcarComoLeido(nuevoMsg.emisor_id);
           }
         } 
-        // Si el mensaje lo envié yo y tengo el chat abierto
         else if (nuevoMsg.emisor_id === myUserId && seleccionado?.user_id === nuevoMsg.receptor_id) {
           setMensajes(prev => [...prev, nuevoMsg]);
         }
@@ -144,7 +138,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-160px)] bg-white border border-slate-200 rounded-[3rem] overflow-hidden shadow-2xl shadow-blue-900/5 relative">
       
-      {/* TOAST NOTIFICACIÓN 2026 */}
+      {/* TOAST NOTIFICACIÓN */}
       {notificacion && (
         <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border animate-in slide-in-from-top-10 duration-500 ${
           notificacion.tipo === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'
@@ -163,8 +157,12 @@ export default function ChatPage() {
             MENSAJERÍA
           </h2>
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
-            <input type="text" placeholder="Buscar colega..." className="w-full pl-12 pr-4 py-3 bg-white/10 border border-white/10 rounded-2xl text-[11px] text-white placeholder:text-white/40 font-bold outline-none focus:bg-white/20 transition-all" />
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-white/60" />
+            <input 
+              type="text" 
+              placeholder="Buscar colega..." 
+              className="w-full pl-12 pr-4 py-3 bg-white/20 border border-white/10 rounded-2xl text-[11px] text-white placeholder:text-white/60 font-bold outline-none focus:bg-white/30 transition-all focus:ring-2 ring-white/20" 
+            />
           </div>
         </div>
 
@@ -190,8 +188,6 @@ export default function ChatPage() {
                   <p className="text-[13px] font-bold truncate">{u.nombre} {u.apellido}</p>
                   <p className="text-[9px] uppercase font-black tracking-widest opacity-40">{u.cargo || 'Staff'}</p>
                 </div>
-                
-                {/* BADGE DE NOTIFICACIÓN */}
                 {count > 0 && (
                   <div className="bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg animate-bounce">
                     {count}
@@ -247,12 +243,31 @@ export default function ChatPage() {
               <div ref={scrollRef} />
             </div>
 
-            <form onSubmit={enviarMensaje} className="p-8 bg-white border-t border-slate-50">
-              <div className="relative flex items-center bg-slate-50 rounded-[2rem] p-2 pr-3 border border-slate-100 focus-within:bg-white focus-within:ring-4 ring-blue-50 transition-all">
-                <input value={nuevoMensaje} onChange={(e) => setNuevoMensaje(e.target.value)} placeholder="Escribir respuesta..." className="flex-1 bg-transparent px-6 py-3 text-sm font-medium outline-none" />
-                <button type="submit" disabled={!nuevoMensaje.trim()} className="w-12 h-12 bg-[#00338d] text-white rounded-2xl flex items-center justify-center hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 disabled:opacity-20">
-                  <Send className="w-4 h-4" />
+            {/* FORMULARIO DE MENSAJE MEJORADO (UX/Contraste) */}
+            <form onSubmit={enviarMensaje} className="p-8 bg-white border-t border-slate-100/60 shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
+              <div className="relative flex items-center bg-slate-100/80 rounded-[2rem] p-2 pr-3 border-2 border-slate-200/50 focus-within:border-[#00338d]/20 focus-within:bg-white focus-within:ring-8 ring-blue-50/50 transition-all duration-300">
+                <input 
+                  value={nuevoMensaje} 
+                  onChange={(e) => setNuevoMensaje(e.target.value)} 
+                  placeholder="Escribe un mensaje..." 
+                  className="flex-1 bg-transparent px-6 py-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-semibold outline-none" 
+                />
+                <button 
+                  type="submit" 
+                  disabled={!nuevoMensaje.trim()} 
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-lg ${
+                    nuevoMensaje.trim() 
+                    ? 'bg-[#00338d] text-white shadow-blue-900/30 hover:scale-105 active:scale-95' 
+                    : 'bg-slate-200 text-slate-400 shadow-none opacity-50 cursor-not-allowed'
+                  }`}
+                >
+                  <Send className={`w-4 h-4 ${nuevoMensaje.trim() ? 'animate-in fade-in zoom-in' : ''}`} />
                 </button>
+              </div>
+              <div className="flex justify-center mt-3 gap-2 opacity-30">
+                <div className="h-1 w-1 bg-slate-400 rounded-full" />
+                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">Canal de comunicación privado</p>
+                <div className="h-1 w-1 bg-slate-400 rounded-full" />
               </div>
             </form>
           </>
