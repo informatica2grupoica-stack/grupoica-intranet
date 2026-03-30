@@ -1,16 +1,15 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Copy, Loader2, Save, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
   
-  // Listas de Obuma
   const [categorias, setCategorias] = useState<any[]>([]);
-  const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]); // Todas
-  const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]); // Las que se muestran
+  const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
+  const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -27,7 +26,7 @@ export default function NuevoProductoForm() {
     se_mantiene_stock: true,
   });
 
-  // 1. CARGA INICIAL DE DATOS
+  // 1. CARGA INICIAL (Corregida para el formato de tu API)
   useEffect(() => {
     async function loadObumaData() {
       try {
@@ -39,9 +38,9 @@ export default function NuevoProductoForm() {
         const cats = await resCat.json();
         const subs = await resSub.json();
         
-        // Obuma devuelve los datos en la propiedad 'data'
-        setCategorias(cats.data || []);
-        setAllSubcategorias(subs.data || []);
+        // Como tu route.ts ya hace el filtro (data.data || []), aquí asignamos directo
+        setCategorias(Array.isArray(cats) ? cats : []);
+        setAllSubcategorias(Array.isArray(subs) ? subs : []);
       } catch (err) {
         console.error("Error cargando datos de Obuma");
       } finally {
@@ -51,12 +50,11 @@ export default function NuevoProductoForm() {
     loadObumaData();
   }, []);
 
-  // 2. FILTRAR SUBCATEGORIAS CUANDO CAMBIA LA CATEGORIA
+  // 2. FILTRADO DE SUBCATEGORÍAS
   useEffect(() => {
     if (form.categoria_id) {
-      // Obuma usa 'rel_producto_categoria_id' para enlazar subcategorías
       const filtradas = allSubcategorias.filter(
-        sub => sub.rel_producto_categoria_id === form.categoria_id
+        sub => String(sub.rel_producto_categoria_id) === String(form.categoria_id)
       );
       setFilteredSubcategorias(filtradas);
     } else {
@@ -78,10 +76,10 @@ export default function NuevoProductoForm() {
 
       if (res.ok) {
         setStatus({ type: 'success', msg: 'Producto creado exitosamente en Obuma' });
-        setForm({ ...form, nombre: "", sku: "", precio_costo: 0, precio_venta: 0 });
+        setForm({ ...form, nombre: "", sku: "", precio_costo: 0, precio_venta: 0, categoria_id: "", subcategoria_id: "" });
       } else {
         const result = await res.json();
-        throw new Error(result.message || 'Error al crear producto');
+        throw new Error(result.error || 'Error al crear producto');
       }
     } catch (error: any) {
       setStatus({ type: 'error', msg: error.message });
@@ -106,24 +104,23 @@ export default function NuevoProductoForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* NOMBRE */}
         <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-black uppercase text-slate-400 italic">Nombre del Producto</label>
+          <label className="text-[10px] font-black uppercase text-slate-400 italic">Nombre del Producto *</label>
           <input 
             required
-            type="text" 
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase outline-none focus:border-[#00338d]"
             placeholder="EJ: CEMENTO POLPAICO 25KG"
-            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:border-[#00338d] font-bold uppercase"
             value={form.nombre}
             onChange={(e) => setForm({...form, nombre: e.target.value.toUpperCase()})}
           />
         </div>
 
-        {/* CATEGORÍA Y SUBCATEGORÍA (Lógica de Obuma) */}
-        <div className="grid grid-cols-2 gap-6">
+        {/* CATEGORÍA Y SUBCATEGORÍA */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic">Categoría (Mercado Público/Mayorista)</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Categoría (Mercado Público/Mayorista) *</label>
             <select 
               required
-              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none"
+              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none appearance-none"
               value={form.categoria_id}
               onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
             >
@@ -137,11 +134,11 @@ export default function NuevoProductoForm() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic">Subcategoría (Ferretería/Jardín/etc)</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Subcategoría (Ferretería/Jardín/etc) *</label>
             <select 
               required
               disabled={!form.categoria_id}
-              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50"
+              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50 appearance-none"
               value={form.subcategoria_id}
               onChange={(e) => setForm({...form, subcategoria_id: e.target.value})}
             >
@@ -156,9 +153,9 @@ export default function NuevoProductoForm() {
         </div>
 
         {/* TIPO Y SKU */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic">Tipo de Ítem</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Tipo de Ítem *</label>
             <select 
               className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold"
               value={form.tipo}
@@ -168,28 +165,74 @@ export default function NuevoProductoForm() {
               <option value="Servicio">Servicio</option>
               <option value="Kit">Kit</option>
               <option value="Fabricación">Fabricación</option>
+              <option value="Virtual">Virtual</option>
             </select>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-slate-400 italic">SKU</label>
             <input 
-              type="text" 
+              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono placeholder:font-sans"
               placeholder="Código interno"
-              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono"
               value={form.sku}
               onChange={(e) => setForm({...form, sku: e.target.value})}
             />
           </div>
         </div>
 
-        {/* BOTÓN GUARDAR */}
-        <div className="flex justify-end pt-6">
+        {/* PRECIOS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Precio Costo Neto *</label>
+            <div className="relative">
+              <span className="absolute left-4 top-4 text-slate-400 font-bold">$</span>
+              <input 
+                type="number"
+                required
+                className="w-full p-4 pl-8 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold"
+                value={form.precio_costo}
+                onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Precio Venta Neto *</label>
+            <div className="relative">
+              <span className="absolute left-4 top-4 text-slate-400 font-bold">$</span>
+              <input 
+                type="number"
+                required
+                className="w-full p-4 pl-8 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold"
+                value={form.precio_venta}
+                onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* INDICADORES (Checkboxes como en la imagen) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={form.se_puede_vender} onChange={(e) => setForm({...form, se_puede_vender: e.target.checked})} className="w-5 h-5 accent-[#00338d]" />
+            <span className="text-xs font-bold text-slate-600 uppercase italic">¿Se puede vender?</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={form.se_puede_comprar} onChange={(e) => setForm({...form, se_puede_comprar: e.target.checked})} className="w-5 h-5 accent-[#00338d]" />
+            <span className="text-xs font-bold text-slate-600 uppercase italic">¿Se puede comprar?</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={form.se_mantiene_stock} onChange={(e) => setForm({...form, se_mantiene_stock: e.target.checked})} className="w-5 h-5 accent-[#00338d]" />
+            <span className="text-xs font-bold text-slate-600 uppercase italic">¿Se mantiene stock?</span>
+          </label>
+        </div>
+
+        {/* BOTÓN FINAL */}
+        <div className="flex justify-end pt-8">
           <button 
             type="submit" 
             disabled={loading || loadingData}
-            className="bg-[#00338d] hover:bg-blue-900 text-white px-12 py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl flex items-center gap-3 transition-all disabled:opacity-50"
+            className="bg-[#00338d] hover:bg-[#00266b] text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center gap-3 transition-all active:scale-95 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
             Crear en Obuma
           </button>
         </div>
