@@ -1,9 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Loader2, Save, Package, Tag, DollarSign, CheckCircle } from "lucide-react";
+import { Loader2, Package, CheckCircle } from "lucide-react";
+
+// Definimos esto para que TypeScript no dé error en el Build
+interface Categoria {
+  producto_categoria_id: string;
+  producto_categoria_nombre: string;
+}
 
 export default function FormularioNuevoProducto() {
-  const [categorias, setCategorias] = useState<any[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchingCats, setFetchingCats] = useState(true);
   
@@ -12,20 +18,17 @@ export default function FormularioNuevoProducto() {
     tipo: "Producto",
     sku: "",
     categoria_id: "",
-    subcategoria_id: "",
     precio_costo: 0,
     precio_venta: 0,
-    incluye_iva_costo: false,
-    incluye_iva_venta: false
   });
 
-  // 1. Cargar categorías de Obuma al montar el componente
   useEffect(() => {
     async function loadCategorias() {
       try {
         const res = await fetch('/api/obuma/categorias');
         const data = await res.json();
-        setCategorias(data);
+        // Verificamos que data sea un array antes de setearlo
+        setCategorias(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error cargando categorías:", err);
       } finally {
@@ -48,12 +51,18 @@ export default function FormularioNuevoProducto() {
 
       const result = await res.json();
 
-      if (result.status === "success" || result.data) {
-        const nuevoSku = result.data.producto_codigo_comercial || "Generado por Obuma";
+      // Obuma responde con status o directamente con la data del producto
+      if (result && (result.status === "success" || result.data)) {
+        // Acceso seguro a la data para evitar errores de compilación
+        const dataRes = Array.isArray(result.data) ? result.data[0] : result.data;
+        const nuevoSku = dataRes?.producto_codigo_comercial || "Generado";
+        
         alert(`¡Producto creado con éxito!\nSKU: ${nuevoSku}`);
-        // Aquí podrías limpiar el formulario o redireccionar
+        
+        // Limpiamos el nombre para el siguiente
+        setForm(prev => ({ ...prev, nombre: "", sku: "" }));
       } else {
-        alert("Error de Obuma: " + (result.message || "No se pudo crear"));
+        alert("Error de Obuma: " + (result.message || "Verifica los datos"));
       }
     } catch (error) {
       alert("Error de conexión con el Proxy");
@@ -69,7 +78,6 @@ export default function FormularioNuevoProducto() {
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* FILA 1: NOMBRE */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre *</label>
           <input 
@@ -82,7 +90,6 @@ export default function FormularioNuevoProducto() {
           />
         </div>
 
-        {/* FILA 2: TIPO Y SKU */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo *</label>
@@ -110,7 +117,6 @@ export default function FormularioNuevoProducto() {
           </div>
         </div>
 
-        {/* FILA 3: CATEGORÍA */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Categoría *</label>
           <select 
@@ -120,7 +126,7 @@ export default function FormularioNuevoProducto() {
             onChange={(e) => setForm({...form, categoria_id: e.target.value})}
           >
             <option value="">{fetchingCats ? "Cargando categorías..." : "Selecciona una categoría"}</option>
-            {categorias.map((cat: any) => (
+            {categorias.map((cat) => (
               <option key={cat.producto_categoria_id} value={cat.producto_categoria_id}>
                 {cat.producto_categoria_nombre}
               </option>
@@ -128,33 +134,26 @@ export default function FormularioNuevoProducto() {
           </select>
         </div>
 
-        {/* FILA 4: PRECIOS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-blue-50/30 rounded-3xl border border-blue-100/50">
           <div>
             <label className="text-[10px] font-black uppercase text-blue-600 ml-1">Precio Costo (Neto) *</label>
-            <div className="relative mt-1">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-              <input 
-                required
-                type="number" 
-                className="w-full pl-8 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none"
-                value={form.precio_costo}
-                onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})}
-              />
-            </div>
+            <input 
+              required
+              type="number" 
+              className="w-full mt-1 p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none"
+              value={form.precio_costo}
+              onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})}
+            />
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-blue-600 ml-1">Precio Venta (Neto) *</label>
-            <div className="relative mt-1">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-              <input 
-                required
-                type="number" 
-                className="w-full pl-8 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none"
-                value={form.precio_venta}
-                onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
-              />
-            </div>
+            <input 
+              required
+              type="number" 
+              className="w-full mt-1 p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none"
+              value={form.precio_venta}
+              onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
+            />
           </div>
         </div>
 
