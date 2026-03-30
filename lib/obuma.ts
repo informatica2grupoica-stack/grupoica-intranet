@@ -1,5 +1,5 @@
 export const obumaService = {
-  // Traer todas las categorías
+  // Traer todas las categorías ok
   getCategorias: async () => {
     const res = await fetch('/api/obuma/categorias');
     return res.json();
