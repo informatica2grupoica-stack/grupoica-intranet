@@ -1,34 +1,24 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
-  // Usamos las mismas variables que usas en productos
-  const urlBase = process.env.OBUMA_API_URL;
-  const token = process.env.OBUMA_API_TOKEN;
-
+export async function GET() {
   try {
-    // Endpoint oficial según la documentación que enviaste
-    const finalUrl = `${urlBase}/comprasOc.list.json`;
-
-    const response = await fetch(finalUrl, {
+    const response = await fetch('https://www.obuma.cl/api/v1/compras/ordenes_de_compras.json', {
       method: 'GET',
       headers: {
-        'access-token': token || '',
+        // Usa las mismas variables que te funcionan en productos
+        'Authorization': `Bearer ${process.env.OBUMA_TOKEN}`, 
+        'api-key': process.env.OBUMA_API_KEY || '',
         'Content-Type': 'application/json'
       },
-      next: { revalidate: 0 }
+      cache: 'no-store' 
     });
 
-    const res = await response.json();
-
-    // Normalizamos igual que en tu código de productos para que sea consistente
-    return NextResponse.json({
-      success: true,
-      data: res.data || res.compras || [],
-      pagination: res.pagination || null
-    });
-
-  } catch (error: any) {
-    console.error("Error Obuma OC:", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    const data = await response.json();
+    
+    // IMPORTANTE: Obuma a veces devuelve los datos dentro de un objeto. 
+    // Basado en tu JSON: { "success": true, "data": [...] }
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json({ success: false, error: 'Error en el servidor' }, { status: 500 });
   }
 }
