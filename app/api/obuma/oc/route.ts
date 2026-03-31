@@ -1,36 +1,41 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 
-export async function GET() {
-  // Usamos el token de tu variable, pero escribimos la URL a mano para mayor seguridad
+export async function GET(request: NextRequest) {
+  const API_URL = process.env.OBUMA_API_URL;
   const API_TOKEN = process.env.OBUMA_API_TOKEN;
-  const FULL_URL = "https://api.obuma.cl/v1.0/comprasOc.list.json";
+
+  // Construimos la URL igual que en productos
+  const obumaUrl = new URL(`${API_URL}/comprasOc.list.json`);
 
   try {
-    const response = await fetch(FULL_URL, {
+    const response = await fetch(obumaUrl.toString(), {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'access-token': API_TOKEN || '',
+        'Content-Type': 'application/json'
       },
-      // Esto obliga a Vercel a buscar datos frescos y no usar caché viejo
-      cache: 'no-store' 
+      next: { revalidate: 0 } 
     });
 
-    const result = await response.json();
-    
-    // Verificamos si la respuesta tiene la estructura { ok: true, data: [...] }
-    if (result && result.data) {
-      return NextResponse.json(result.data);
-    }
-    
-    // Si por alguna razón devuelve el array directo
-    if (Array.isArray(result)) {
-      return NextResponse.json(result);
+    if (!response.ok) {
+      throw new Error(`Error de Obuma: ${response.status}`);
     }
 
-    return NextResponse.json([]);
-  } catch (error) {
-    console.error("Error capturado:", error);
-    return NextResponse.json({ error: 'Error de conexión con Obuma' }, { status: 500 });
+    const data = await response.json();
+
+    // AQUÍ ESTÁ EL TRUCO: 
+    // Normalizamos igual que en productos. 
+    // Obuma para OC suele mandar los datos en 'data'.
+    return NextResponse.json({
+      success: true,
+      data: data.data || data.compras || data || []
+    });
+
+  } catch (error: any) {
+    console.error("Error en Compras Obuma:", error.message);
+    return NextResponse.json(
+      { success: false, error: 'Error al conectar con la API', details: error.message }, 
+      { status: 500 }
+    );
   }
 }
