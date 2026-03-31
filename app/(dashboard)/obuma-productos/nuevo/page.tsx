@@ -51,7 +51,7 @@ export default function NuevoProductoForm() {
     setForm(prev => ({ ...prev, nombre: nombreConstruido }));
   }, [piezas]);
 
-  // 3. CARGA INICIAL DE DATOS
+  // 3. CARGA INICIAL DE DATO
   useEffect(() => {
     async function loadObumaData() {
       try {
