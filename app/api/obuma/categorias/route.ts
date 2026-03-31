@@ -10,9 +10,9 @@ export async function GET() {
       },
     });
 
-    const data = await response.json();
-    // Retornamos solo el array de categorías para que el select se llene
-    return NextResponse.json(data.data || []);
+    const result = await response.json();
+    // IMPORTANTE: Envolvemos en { data: ... } para que el front lo lea bien
+    return NextResponse.json({ data: result.data || [] });
   } catch (error) {
     return NextResponse.json({ error: 'Error al conectar con Obuma' }, { status: 500 });
   }
