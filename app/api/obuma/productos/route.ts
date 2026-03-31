@@ -4,33 +4,46 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. Mapeo EXACTO basado en la estructura que ya te funciona
+    // MAPEADO EXACTO SEGÚN LA INTRANET ANTIGUA
     const obumaPayload: any = {
+      // 1. Identificación y Tipo
       producto_nombre: body.nombre.toUpperCase().trim(),
-      producto_tipo: body.tipo || "Producto",
+      producto_tipo: "0", // CAMBIO: La intranet antigua usa "0" para productos físicos
+      producto_activo: "1",
+      producto_id: "", // Se envía vacío para creación
       
-      // Clasificación (IDs numéricos)
-      rel_producto_categoria_id: Number(body.categoria_id),
-      rel_producto_subcategoria_id: Number(body.subcategoria_id),
+      // 2. Clasificación (Se envían ambos formatos por si acaso)
+      id_categoria: body.categoria_id.toString(),
+      id_subcategoria: body.subcategoria_id.toString(),
+      producto_categoria: body.categoria_id.toString(),
+      producto_subcategoria: body.subcategoria_id.toString(),
       
-      // Costos y Precios (Convertidos a número para evitar rechazo)
-      producto_costo_clp_neto: Number(body.precio_costo) || 0,
-      producto_precio_clp_neto: Number(body.precio_venta) || 0,
+      // 3. Precios y Costos
+      producto_costo_clp_neto: body.precio_costo.toString() || "0",
+      producto_precio_clp_neto: body.precio_venta.toString() || "0",
+      producto_precio_clp_iva: "0",
+      producto_precio_clp_total: "0",
+      producto_costo_clp_neto_estandar: "0",
       
-      // Estados (1 para activo, 0 para inactivo)
-      producto_se_puede_vender: body.se_puede_vender ? 1 : 0,
-      producto_se_puede_comprar: body.se_puede_comprar ? 1 : 0,
-      producto_se_mantiene_stock: body.se_mantiene_stock ? 1 : 0,
+      // 4. Flags de Estado (Nombres exactos de la captura)
+      producto_para_venta: body.se_puede_vender ? "1" : "0",
+      producto_para_compra: body.se_puede_comprar ? "1" : "0",
+      producto_inventariable: body.se_mantiene_stock ? "1" : "0", // Ojo: aquí se llama inventariable
+      
+      // 5. Los campos "temp" que vimos en tu captura
+      temp_can_sell: body.se_puede_vender,
+      temp_can_buy: body.se_puede_comprar,
+      temp_can_keep_stock: body.se_mantiene_stock,
+      temp_cost_price: Number(body.precio_costo),
+      temp_selling_price: Number(body.precio_venta)
     };
 
-    // 2. Lógica de SKU Automático:
-    // Si el SKU viene vacío desde la intranet, ELIMINAMOS la propiedad del envío.
-    // Esto obliga a Obuma a usar su propio contador interno.
+    // 6. Código Comercial (SKU)
     if (body.sku && body.sku.toString().trim() !== "") {
       obumaPayload.producto_codigo_comercial = body.sku.toString().trim();
     }
 
-    // 3. Envío a la API
+    // Envío a Obuma
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.create.json`, {
       method: 'POST',
       headers: {
@@ -42,23 +55,20 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
-    // 4. Validación de respuesta de Obuma
-    // Importante: Revisamos si 'success' es false aunque el servidor responda 200 OK
     if (result.success === false || result.status === false) {
       console.log("Error detallado de Obuma:", result);
       return NextResponse.json({ 
-        error: result.message || 'Obuma no pudo crear el producto',
+        error: result.message || 'Error en Obuma',
         details: result 
       }, { status: 400 });
     }
 
-    // Retornamos el éxito (incluye el nuevo SKU generado por Obuma)
     return NextResponse.json(result);
 
   } catch (error) {
-    console.error("Error crítico en la ruta de productos:", error);
+    console.error("Error crítico:", error);
     return NextResponse.json(
-      { error: 'Error de comunicación con el servidor de Obuma' }, 
+      { error: 'Error de comunicación' }, 
       { status: 500 }
     );
   }
