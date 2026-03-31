@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // Usamos las mismas variables que ya tienes en Vercel para Productos
   const API_URL = process.env.OBUMA_API_URL;
   const API_TOKEN = process.env.OBUMA_API_TOKEN;
 
@@ -16,23 +15,16 @@ export async function GET() {
     });
 
     const result = await response.json();
+    
+    // DEBUG PARA VERCEL: Revisa esto en la pestaña "Logs" de tu despliegue
+    console.log("Respuesta RAW de Obuma OC:", JSON.stringify(result).substring(0, 200));
 
-    // Obuma a veces devuelve la data en result.docs o directamente en result
-    // Dependiendo de la versión de su API. Validamos ambos:
-    const dataFinal = result.docs || result;
-
-    if (!Array.isArray(dataFinal)) {
-       console.error("Respuesta inesperada de Obuma:", result);
-       return NextResponse.json([]);
-    }
+    // Según tu doc, puede venir como array directo o dentro de una llave
+    const dataFinal = Array.isArray(result) ? result : (result.docs || result.data || []);
 
     return NextResponse.json(dataFinal);
     
   } catch (error) {
-    console.error("Error Crítico OC:", error);
-    return NextResponse.json(
-      { error: 'Fallo en la comunicación con el servidor' }, 
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Fallo en comunicación' }, { status: 500 });
   }
 }
