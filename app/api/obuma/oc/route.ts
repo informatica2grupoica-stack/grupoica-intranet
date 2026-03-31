@@ -15,16 +15,14 @@ export async function GET() {
     });
 
     const result = await response.json();
-    
-    // DEBUG PARA VERCEL: Revisa esto en la pestaña "Logs" de tu despliegue
-    console.log("Respuesta RAW de Obuma OC:", JSON.stringify(result).substring(0, 200));
 
-    // Según tu doc, puede venir como array directo o dentro de una llave
-    const dataFinal = Array.isArray(result) ? result : (result.docs || result.data || []);
+    // Según tu JSON, los datos vienen en result.data
+    const dataFinal = result.data || result.docs || (Array.isArray(result) ? result : []);
 
     return NextResponse.json(dataFinal);
     
   } catch (error) {
-    return NextResponse.json({ error: 'Fallo en comunicación' }, { status: 500 });
+    console.error("Error Obuma OC:", error);
+    return NextResponse.json({ error: 'Error de conexión' }, { status: 500 });
   }
 }
