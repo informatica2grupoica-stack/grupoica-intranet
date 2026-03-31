@@ -29,6 +29,18 @@ export default function ComprasPage() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Función auxiliar para formatear la fecha
+  const formatearFecha = (fechaRaw: string | null) => {
+    if (!fechaRaw) return '-';
+    // Obuma suele enviar la fecha como "AAAA-MM-DD HH:MM:SS"
+    // Usamos split para tomar solo la parte de la fecha (AAAA-MM-DD)
+    const fechaParte = fechaRaw.split(' ')[0];
+    const [year, month, day] = fechaParte.split('-');
+    
+    // Retornamos en formato DD-MM-AAAA
+    return `${day}-${month}-${year}`;
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -62,12 +74,21 @@ export default function ComprasPage() {
               ordenes.map((oc: any) => (
                 <tr key={oc.compra_oc_id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-8 py-5 font-bold text-[#00338d]">#{oc.compra_oc_folio}</td>
-                  <td className="px-8 py-5 text-sm">{oc.compra_oc_fecha}</td>
+                  
+                  {/* CAMBIO AQUÍ: Usamos formatearFecha con compra_oc_fecha_ingreso */}
+                  <td className="px-8 py-5 text-sm text-slate-600">
+                    {formatearFecha(oc.compra_oc_fecha_ingreso)}
+                  </td>
+                  
                   <td className="px-8 py-5 text-right font-black">
                     ${Number(oc.compra_oc_total).toLocaleString('es-CL')}
                   </td>
                   <td className="px-8 py-5 text-center">
-                    <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+                      oc.compra_oc_estado === 'FACTURADA' 
+                        ? 'bg-green-50 text-green-600 border-green-100' 
+                        : 'bg-amber-50 text-amber-600 border-amber-100'
+                    }`}>
                       {oc.compra_oc_estado}
                     </span>
                   </td>
