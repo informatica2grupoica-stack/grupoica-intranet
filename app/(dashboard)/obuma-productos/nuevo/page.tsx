@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Save, Loader2, CheckCircle2, AlertCircle, Hash, RefreshCcw } from "lucide-react";
+import { Save, Loader2, CheckCircle2, AlertCircle, Hash, RefreshCcw, Copy } from "lucide-react";
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
@@ -84,29 +84,22 @@ export default function NuevoProductoForm() {
     }
   }, [form.categoria_id, allSubcategorias]);
 
-  // FUNCIÓN CRÍTICA MEJORADA: Obtener correlativo real
   const sugerirSkuCorrelativo = async (subId: string) => {
     if (!subId) return;
     setGeneratingSku(true);
     try {
-      // 1. Consultamos el último SKU de esta subcategoría en tu base de datos/API
       const res = await fetch(`/api/obuma/siguiente-sku?subcategoria_id=${subId}`);
       const data = await res.json();
       
       if (data.sku) {
-        // Si la API devuelve un SKU (ej: 6026423201), lo asignamos directamente
         setForm(prev => ({ ...prev, sku: String(data.sku), subcategoria_id: subId }));
       } else {
-        // Si no hay productos, iniciamos el correlativo limpio: SubID + 0001
-        // Ej: Subcategoría 6026 -> SKU 60260001
         const nuevoSku = `${subId}0001`;
         setForm(prev => ({ ...prev, sku: nuevoSku, subcategoria_id: subId }));
       }
     } catch (err) {
-      // Fallback de emergencia pero controlado para no romper el flujo
       const emergencySku = `${subId}${Math.floor(Math.random() * 9000) + 1000}`;
       setForm(prev => ({ ...prev, sku: emergencySku, subcategoria_id: subId }));
-      console.error("Error al generar correlativo, usando fallback aleatorio.");
     } finally {
       setGeneratingSku(false);
     }
@@ -137,7 +130,6 @@ export default function NuevoProductoForm() {
           msg: `PRODUCTO CREADO EXITOSAMENTE: ${form.sku}` 
         });
 
-        // Limpiamos los campos variables, pero mantenemos la configuración de IVA y Stock
         setForm(prev => ({ 
           ...prev, 
           nombre: "", 
@@ -191,7 +183,7 @@ export default function NuevoProductoForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         
-        {/* PIEZAS */}
+        {/* SECCIÓN 1: PIEZAS (NOMBRE) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-slate-400">1. Tipo Producto</label>
@@ -216,68 +208,97 @@ export default function NuevoProductoForm() {
           </div>
         </div>
 
-        {/* SKU Y CATEGORIZACIÓN */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* SECCIÓN 2: TIPO, SKU Y CATEGORIZACIÓN (IGUAL A LA CAPTURA) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Tipo *</label>
+            <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" value={form.tipo} onChange={(e) => setForm({...form, tipo: e.target.value})}>
+              <option value="Producto">Producto</option>
+              <option value="Servicio">Servicio</option>
+              <option value="Kit">Kit</option>
+              <option value="Fabricación">Fabricación</option>
+            </select>
+          </div>
+          
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-[#00338d] italic flex justify-between items-center">
-              SKU CORRELATIVO *
-              <button 
-                type="button" 
-                onClick={() => sugerirSkuCorrelativo(form.subcategoria_id)}
-                className="hover:rotate-180 transition-transform duration-500"
-              >
+              SKU:
+              <button type="button" onClick={() => sugerirSkuCorrelativo(form.subcategoria_id)}>
                 <RefreshCcw size={14} className={generatingSku ? "animate-spin text-slate-400" : "text-slate-400"} />
               </button>
             </label>
             <div className="relative">
-                <input 
-                  required
-                  readOnly
-                  className="w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-base font-mono font-black text-amber-700 text-center outline-none"
-                  placeholder="CÓDIGO AUTO"
-                  value={form.sku}
-                />
-                <Hash className="absolute right-4 top-4 text-amber-300" size={18} />
+              <input readOnly className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500 outline-none" value={form.sku} placeholder="6026423201" />
+              <Copy className="absolute right-4 top-4 text-slate-300" size={18} />
             </div>
           </div>
+
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic">Categoría Obuma *</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Categoría *</label>
             <select required className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" value={form.categoria_id} onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
-              <option value="">{loadingData ? "Cargando..." : "Selecciona..."}</option>
+              <option value="">{loadingData ? "Cargando..." : "Selecciona una categoria"}</option>
               {categorias.map((cat) => <option key={cat.producto_categoria_id} value={cat.producto_categoria_id}>{cat.producto_categoria_nombre}</option>)}
             </select>
           </div>
+
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic">Subcategoría *</label>
-            <select 
-              required 
-              disabled={!form.categoria_id} 
-              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50" 
-              value={form.subcategoria_id} 
-              onChange={(e) => sugerirSkuCorrelativo(e.target.value)} 
-            >
-              <option value="">{form.categoria_id ? "Selecciona..." : "Elige categoría"}</option>
+            <label className="text-[10px] font-black uppercase text-slate-400 italic">Subcategoria *</label>
+            <select required disabled={!form.categoria_id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50" value={form.subcategoria_id} onChange={(e) => sugerirSkuCorrelativo(e.target.value)}>
+              <option value="">Selecciona una subcategoria</option>
               {filteredSubcategorias.map((sub) => <option key={sub.producto_subcategoria_id} value={sub.producto_subcategoria_id}>{sub.producto_subcategoria_nombre}</option>)}
             </select>
           </div>
         </div>
 
-        {/* PRECIOS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner">
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 italic text-center">Precio Costo Neto *</label>
-            <div className="relative">
-              <span className="absolute left-4 top-4 text-slate-400 font-bold">$</span>
-              <input type="number" required className="w-full p-4 pl-8 bg-white border border-slate-200 rounded-2xl text-lg font-black text-center outline-none focus:border-[#00338d]" value={form.precio_costo} onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})} />
+        {/* SECCIÓN 3: PRECIOS E IVA (ESTILO CAPTURA) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 italic">Precio Costo *</label>
+                <div className="relative mt-1">
+                  <span className="absolute left-4 top-3.5 text-slate-400 font-bold">$</span>
+                  <input type="number" required className="w-full p-3 pl-8 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none" value={form.precio_costo} onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 mt-6 cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.incluye_iva_costo} onChange={(e) => setForm({...form, incluye_iva_costo: e.target.checked})} />
+                <span className="text-[11px] font-bold text-slate-600 uppercase">¿Incluye IVA?</span>
+              </label>
             </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-[#00338d] italic text-center">Precio Venta Neto *</label>
-            <div className="relative">
-              <span className="absolute left-4 top-4 text-[#00338d] font-bold">$</span>
-              <input type="number" required className="w-full p-4 pl-8 bg-white border-2 border-[#00338d]/20 rounded-2xl text-lg font-black text-[#00338d] text-center outline-none focus:border-[#00338d]" value={form.precio_venta} onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})} />
+
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 italic">Precio Venta *</label>
+                <div className="relative mt-1">
+                  <span className="absolute left-4 top-3.5 text-slate-400 font-bold">$</span>
+                  <input type="number" required className="w-full p-3 pl-8 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none" value={form.precio_venta} onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 mt-6 cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.incluye_iva_venta} onChange={(e) => setForm({...form, incluye_iva_venta: e.target.checked})} />
+                <span className="text-[11px] font-bold text-slate-600 uppercase">¿Incluye IVA?</span>
+              </label>
             </div>
           </div>
+        </div>
+
+        {/* SECCIÓN 4: ESTADOS (VENDER, COMPRAR, STOCK) */}
+        <div className="flex flex-wrap gap-8 p-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" checked={form.se_puede_vender} onChange={(e) => setForm({...form, se_puede_vender: e.target.checked})} />
+            <span className="text-sm font-bold text-slate-700">¿Se puede vender?</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" checked={form.se_puede_comprar} onChange={(e) => setForm({...form, se_puede_comprar: e.target.checked})} />
+            <span className="text-sm font-bold text-slate-700">¿Se puede comprar?</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" checked={form.se_mantiene_stock} onChange={(e) => setForm({...form, se_mantiene_stock: e.target.checked})} />
+            <span className="text-sm font-bold text-slate-700">¿Se mantiene stock?</span>
+          </label>
         </div>
 
         {/* BOTÓN FINAL */}
@@ -285,10 +306,10 @@ export default function NuevoProductoForm() {
           <button 
             type="submit" 
             disabled={loading || loadingData || !form.sku} 
-            className="w-full md:w-auto bg-[#00338d] hover:bg-[#00266b] text-white px-16 py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+            className="w-full md:w-auto bg-[#00338d] hover:bg-[#00266b] text-white px-12 py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-            Sincronizar con Obuma
+            {loading ? <Loader2 className="animate-spin" size={20} /> : null}
+            Actualizar
           </button>
         </div>
       </form>
