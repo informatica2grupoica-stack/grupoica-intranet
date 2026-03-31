@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Search, Loader2, Edit3, Save, X, Copy } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, Copy, Globe, Box, DollarSign } from "lucide-react";
 
 export default function ObumaProductosListado() {
   const [productos, setProductos] = useState<any[]>([]);
@@ -13,8 +13,6 @@ export default function ObumaProductosListado() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
-  
-  // CORRECCIÓN: Inicializamos el form con un objeto vacío para evitar errores de 'null'
   const [editForm, setEditForm] = useState<any>({});
 
   useEffect(() => {
@@ -45,7 +43,7 @@ export default function ObumaProductosListado() {
     } finally { setLoading(false); }
   };
 
-  // Lógica de filtrado de subcategorías
+  // Filtrado de subcategorías al editar
   useEffect(() => {
     if (editForm?.categoria_id) {
       const filtradas = allSubcategorias.filter(
@@ -80,9 +78,7 @@ export default function ObumaProductosListado() {
       return;
     }
 
-    // Intentamos separar el nombre actual en las 4 piezas para pre-rellenar
     const partes = prod.producto_nombre.split(' ');
-    
     setEditingId(prod.producto_id);
     setEditForm({
       c1: partes[0] || "", 
@@ -122,39 +118,71 @@ export default function ObumaProductosListado() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4">
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full text-left">
+        <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
             <tr>
               <th className="px-8 py-5">Producto & Categoría</th>
-              <th className="px-6 py-5 text-center">SKU</th>
-              <th className="px-6 py-5 text-right">Precio</th>
+              <th className="px-4 py-5 text-center">SKU</th>
+              <th className="px-4 py-5 text-center">Stock</th>
+              <th className="px-4 py-5 text-right">Precio Neto</th>
+              <th className="px-4 py-5 text-right">Total (IVA)</th>
+              <th className="px-4 py-5 text-center">Web</th>
               <th className="px-8 py-5 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={4} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
+              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
             ) : productos.map((prod) => (
               <React.Fragment key={prod.producto_id}>
                 <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.producto_id ? 'bg-blue-50/20' : ''}`}>
+                  {/* Producto */}
                   <td className="px-8 py-5">
-                    <div className="text-sm font-black text-slate-700 uppercase italic">{prod.producto_nombre}</div>
-                    <div className="text-[9px] font-black text-blue-500 uppercase">{prod.categoria_nombre || 'General'}</div>
+                    <div className="text-sm font-black text-slate-700 uppercase italic leading-tight">{prod.producto_nombre}</div>
+                    <div className="text-[9px] font-black text-blue-500 uppercase mt-1">{prod.categoria_nombre || 'General'}</div>
                   </td>
-                  <td className="px-6 py-5 text-center font-mono text-xs font-bold text-slate-500">{prod.producto_codigo_comercial}</td>
-                  <td className="px-6 py-5 text-right font-black text-[#00338d]">
+                  
+                  {/* SKU */}
+                  <td className="px-4 py-5 text-center font-mono text-[11px] font-bold text-slate-500 italic">
+                    {prod.producto_codigo_comercial}
+                  </td>
+
+                  {/* Stock */}
+                  <td className="px-4 py-5 text-center">
+                    <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black ${Number(prod.stock_actual) > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                      {Math.round(prod.stock_actual || 0)}
+                    </div>
+                  </td>
+
+                  {/* Precio Neto */}
+                  <td className="px-4 py-5 text-right font-bold text-slate-400 text-[11px]">
+                    ${Math.round(Number(prod.producto_precio_clp_total || 0) / 1.19).toLocaleString('es-CL')}
+                  </td>
+
+                  {/* Total (IVA inc.) */}
+                  <td className="px-4 py-5 text-right font-black text-[#00338d] text-sm italic">
                     ${Number(prod.producto_precio_clp_total || 0).toLocaleString('es-CL')}
                   </td>
+
+                  {/* Mostrar en Web */}
+                  <td className="px-4 py-5 text-center">
+                    <div className="flex justify-center">
+                      <div className={`w-2.5 h-2.5 rounded-full ${prod.producto_para_venta === "1" ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]' : 'bg-slate-200'}`} title={prod.producto_para_venta === "1" ? "Visible en Web" : "Oculto"} />
+                    </div>
+                  </td>
+
+                  {/* Acciones */}
                   <td className="px-8 py-5 text-center">
-                    <button onClick={() => handleEditClick(prod)} className="p-2 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#00338d] hover:text-white transition-colors">
+                    <button onClick={() => handleEditClick(prod)} className="p-2.5 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#00338d] hover:text-white transition-all active:scale-90 shadow-sm">
                       {editingId === prod.producto_id ? <X size={18} /> : <Edit3 size={18} />}
                     </button>
                   </td>
                 </tr>
 
+                {/* FORMULARIO DE EDICIÓN EXPANDIDO */}
                 {editingId === prod.producto_id && (
                   <tr className="bg-slate-50/50">
-                    <td colSpan={4} className="px-6 py-8">
+                    <td colSpan={7} className="px-6 py-8">
                       <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto">
                         
                         {/* VISOR DE NOMBRE AUTOMÁTICO */}
@@ -176,7 +204,7 @@ export default function ObumaProductosListado() {
                             <div key={item.k} className="flex flex-col gap-1">
                               <label className="text-[9px] font-black text-slate-400 uppercase">{item.l}</label>
                               <input 
-                                className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d]"
+                                className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d] transition-colors"
                                 value={editForm[item.k] || ""}
                                 onChange={(e) => setEditForm({...editForm, [item.k]: e.target.value})}
                               />
@@ -184,10 +212,11 @@ export default function ObumaProductosListado() {
                           ))}
                         </div>
 
+                        {/* CONFIGURACIÓN BÁSICA */}
                         <div className="grid grid-cols-3 gap-6">
                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-black text-slate-400 uppercase italic">Tipo *</label>
-                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.tipo} onChange={(e) => setEditForm({...editForm, tipo: e.target.value})}>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer" value={editForm.tipo} onChange={(e) => setEditForm({...editForm, tipo: e.target.value})}>
                               <option value="Producto">Producto</option>
                               <option value="Servicio">Servicio</option>
                             </select>
@@ -195,13 +224,13 @@ export default function ObumaProductosListado() {
                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-black text-[#00338d] uppercase italic">SKU (Fijo):</label>
                             <div className="relative">
-                              <input readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500" value={editForm.sku || ""} />
+                              <input readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500 italic" value={editForm.sku || ""} />
                               <Copy size={14} className="absolute right-3 top-3 text-slate-300" />
                             </div>
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-black text-slate-400 uppercase italic">Categoría *</label>
-                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.categoria_id} onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer" value={editForm.categoria_id} onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}>
                               <option value="">Selecciona una categoria</option>
                               {categorias.map((cat) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
                             </select>
@@ -211,7 +240,7 @@ export default function ObumaProductosListado() {
                         <div className="grid grid-cols-3 gap-6 items-end">
                           <div className="flex flex-col gap-1">
                             <label className="text-[9px] font-black text-slate-400 uppercase italic">Subcategoria *</label>
-                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50 cursor-pointer" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
                               <option value="">Selecciona una subcategoria</option>
                               {filteredSubcategorias.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
                             </select>
@@ -220,7 +249,7 @@ export default function ObumaProductosListado() {
                           <div className="flex items-center gap-3">
                             <div className="flex-1">
                               <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Costo *</label>
-                              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" value={editForm.precio_costo || 0} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
+                              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.precio_costo || 0} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
                             </div>
                             <label className="flex items-center gap-1 cursor-pointer pt-4">
                               <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#00338d]" checked={editForm.costo_incluye_iva} onChange={(e) => setEditForm({...editForm, costo_incluye_iva: e.target.checked})} />
@@ -240,24 +269,26 @@ export default function ObumaProductosListado() {
                           </div>
                         </div>
 
+                        {/* TOGGLES DE ESTADO */}
                         <div className="flex gap-6 pt-2">
                           {[
                             { key: 'se_puede_vender', label: '¿SE PUEDE VENDER?' },
                             { key: 'se_puede_comprar', label: '¿SE PUEDE COMPRAR?' },
                             { key: 'se_mantiene_stock', label: '¿SE MANTIENE STOCK?' }
                           ].map((item) => (
-                            <label key={item.key} className="flex items-center gap-2 cursor-pointer">
+                            <label key={item.key} className="flex items-center gap-2 cursor-pointer group">
                               <input 
                                 type="checkbox" 
-                                className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" 
+                                className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d] cursor-pointer" 
                                 checked={editForm[item.key] || false} 
                                 onChange={(e) => setEditForm({...editForm, [item.key]: e.target.checked})} 
                               />
-                              <span className="text-[10px] font-black text-slate-700 uppercase">{item.label}</span>
+                              <span className="text-[10px] font-black text-slate-700 uppercase group-hover:text-[#00338d] transition-colors">{item.label}</span>
                             </label>
                           ))}
                         </div>
 
+                        {/* BOTÓN GUARDAR */}
                         <div className="flex justify-end pt-4 border-t border-slate-100">
                           <button 
                             disabled={saving === prod.producto_id}
