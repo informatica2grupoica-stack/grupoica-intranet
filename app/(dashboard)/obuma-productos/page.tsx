@@ -14,14 +14,23 @@ export default function ObumaProductosListado() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
 
+  // 1. CARGA INICIAL DE DATOS (Categorías y Subcategorías se cargan una sola vez)
   const fetchInitialData = async () => {
     try {
-      const resCat = await fetch('/api/obuma/categorias');
+      const [resCat, resSub] = await Promise.all([
+        fetch('/api/obuma/categorias'),
+        fetch('/api/obuma/subcategorias')
+      ]);
+      
       const dataCat = await resCat.json();
+      const dataSub = await resSub.json();
+      
       setCategorias(Array.isArray(dataCat) ? dataCat : []);
+      setSubcategorias(Array.isArray(dataSub) ? dataSub : []);
+      
       await fetchProductos();
     } catch (error) {
-      console.error("Error al cargar categorías", error);
+      console.error("Error al cargar datos maestros:", error);
     }
   };
 
@@ -34,23 +43,14 @@ export default function ObumaProductosListado() {
     } finally { setLoading(false); }
   };
 
-  const loadSubcategorias = async () => {
-    try {
-      const res = await fetch(`/api/obuma/subcategorias`);
-      const data = await res.json();
-      setSubcategorias(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Error subcategorías", error);
-    }
-  };
-
-  useEffect(() => { fetchInitialData(); loadSubcategorias(); }, []);
+  useEffect(() => { fetchInitialData(); }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => { fetchProductos(); }, 600);
     return () => clearTimeout(timer);
   }, [search, page]);
 
+  // 2. MANEJO DE EDICIÓN (Asegurando que los IDs sean strings para los Selects)
   const handleEditClick = (prod: any) => {
     if (editingId === prod.producto_id) {
       setEditingId(null);
@@ -59,9 +59,9 @@ export default function ObumaProductosListado() {
 
     const p = prod.producto_nombre.split(' ');
     
-    // MEJORA: Normalización de IDs a String para match perfecto en los <select>
-    const catId = String(prod.id_categoria || prod.producto_id_categoria || prod.producto_categoria || "");
-    const subId = String(prod.id_subcategoria || prod.producto_id_subcategoria || prod.producto_subcategoria || "");
+    // Convertimos a String para que el match con el <option value="..."> sea exacto
+    const catId = prod.id_categoria ? String(prod.id_categoria) : "";
+    const subId = prod.id_subcategoria ? String(prod.id_subcategoria) : "";
 
     setEditingId(prod.producto_id);
     setEditForm({
@@ -174,7 +174,6 @@ export default function ObumaProductosListado() {
                             >
                               <option value="">Selecciona...</option>
                               {subcategorias
-                                // MEJORA: Filtro robusto con conversión de tipos para evitar que la lista salga vacía
                                 .filter((s: any) => String(s.id_categoria) === String(editForm.categoria_id))
                                 .map((s: any) => (
                                   <option key={s.subcategoria_id} value={String(s.subcategoria_id)}>{s.subcategoria_nombre}</option>
