@@ -241,7 +241,7 @@ export default function ObumaProductosListado() {
 
           {/* BOTÓN NUEVO PRODUCTO (ESTILO PRIMER CÓDIGO) */}
           <Link 
-            href="/obuma/productos/nuevo" 
+            href="/obuma-productos/nuevo" 
             className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
           >
             <Plus size={24} />
