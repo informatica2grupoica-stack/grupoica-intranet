@@ -1,26 +1,38 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  // Asegúrate de tener OBUMA_API_KEY en tu archivo .env.local
-  const API_KEY = process.env.OBUMA_API_KEY;
-  const URL = "https://www.obuma.cl/api/comprasOc.list.json";
+  // Usamos las mismas variables que ya tienes en Vercel para Productos
+  const API_URL = process.env.OBUMA_API_URL;
+  const API_TOKEN = process.env.OBUMA_API_TOKEN;
 
   try {
-    const response = await fetch(URL, {
+    const response = await fetch(`${API_URL}/comprasOc.list.json`, {
       method: 'GET',
       headers: {
-        'api_key': API_KEY || '',
         'Content-Type': 'application/json',
+        'access-token': API_TOKEN || '',
       },
-      next: { revalidate: 0 } // No cachear para ver cambios en tiempo real
+      next: { revalidate: 0 } 
     });
 
-    const data = await response.json();
-    
-    // Retornamos la lista de documentos (vienen en la propiedad 'docs')
-    return NextResponse.json(data.docs || []);
+    const result = await response.json();
+
+    // Obuma a veces devuelve la data en result.docs o directamente en result
+    // Dependiendo de la versión de su API. Validamos ambos:
+    const dataFinal = result.docs || result;
+
+    if (!Array.isArray(dataFinal)) {
+       console.error("Respuesta inesperada de Obuma:", result);
+       return NextResponse.json([]);
+    }
+
+    return NextResponse.json(dataFinal);
     
   } catch (error) {
-    return NextResponse.json({ error: 'Error al conectar con Obuma' }, { status: 500 });
+    console.error("Error Crítico OC:", error);
+    return NextResponse.json(
+      { error: 'Fallo en la comunicación con el servidor' }, 
+      { status: 500 }
+    );
   }
 }
