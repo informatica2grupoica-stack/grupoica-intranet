@@ -1,12 +1,13 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Search, Plus, Loader2, Edit3, Save, X, Box } from "lucide-react";
-import Link from "next/link";
+import { Search, Loader2, Edit3, Save, X, Box } from "lucide-react";
 
 export default function ObumaProductosListado() {
   const [productos, setProductos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
-  const [subcategorias, setSubcategorias] = useState<any[]>([]);
+  const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
+  const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -14,25 +15,25 @@ export default function ObumaProductosListado() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
 
-  // 1. CARGA INICIAL DE DATOS (Categorías y Subcategorías se cargan una sola vez)
-  const fetchInitialData = async () => {
-    try {
-      const [resCat, resSub] = await Promise.all([
-        fetch('/api/obuma/categorias'),
-        fetch('/api/obuma/subcategorias')
-      ]);
-      
-      const dataCat = await resCat.json();
-      const dataSub = await resSub.json();
-      
-      setCategorias(Array.isArray(dataCat) ? dataCat : []);
-      setSubcategorias(Array.isArray(dataSub) ? dataSub : []);
-      
-      await fetchProductos();
-    } catch (error) {
-      console.error("Error al cargar datos maestros:", error);
+  // 1. CARGA DE DATOS MAESTROS (IGUAL QUE EN TU FORMULARIO DE CREACIÓN)
+  useEffect(() => {
+    async function loadInitialData() {
+      try {
+        const [resCat, resSub] = await Promise.all([
+          fetch('/api/obuma/categorias'),
+          fetch('/api/obuma/subcategorias')
+        ]);
+        const cats = await resCat.json();
+        const subs = await resSub.json();
+        setCategorias(Array.isArray(cats) ? cats : []);
+        setAllSubcategorias(Array.isArray(subs) ? subs : []);
+        await fetchProductos();
+      } catch (err) {
+        console.error("Error cargando datos de Obuma");
+      }
     }
-  };
+    loadInitialData();
+  }, []);
 
   const fetchProductos = async () => {
     setLoading(true);
@@ -43,14 +44,18 @@ export default function ObumaProductosListado() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchInitialData(); }, []);
-
+  // 2. LÓGICA DE FILTRADO DE SUBCATEGORÍAS (SINCRONIZADA CON TU CREACIÓN)
   useEffect(() => {
-    const timer = setTimeout(() => { fetchProductos(); }, 600);
-    return () => clearTimeout(timer);
-  }, [search, page]);
+    if (editForm?.categoria_id) {
+      const filtradas = allSubcategorias.filter(
+        sub => String(sub.rel_producto_categoria_id) === String(editForm.categoria_id)
+      );
+      setFilteredSubcategorias(filtradas);
+    } else {
+      setFilteredSubcategorias([]);
+    }
+  }, [editForm?.categoria_id, allSubcategorias]);
 
-  // 2. MANEJO DE EDICIÓN (Asegurando que los IDs sean strings para los Selects)
   const handleEditClick = (prod: any) => {
     if (editingId === prod.producto_id) {
       setEditingId(null);
@@ -59,9 +64,9 @@ export default function ObumaProductosListado() {
 
     const p = prod.producto_nombre.split(' ');
     
-    // Convertimos a String para que el match con el <option value="..."> sea exacto
-    const catId = prod.id_categoria ? String(prod.id_categoria) : "";
-    const subId = prod.id_subcategoria ? String(prod.id_subcategoria) : "";
+    // Mapeo de IDs desde la respuesta del listado de Obuma
+    const catId = prod.id_categoria || prod.producto_id_categoria || "";
+    const subId = prod.id_subcategoria || prod.producto_id_subcategoria || "";
 
     setEditingId(prod.producto_id);
     setEditForm({
@@ -71,8 +76,8 @@ export default function ObumaProductosListado() {
       c4: p[3] || "",
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
-      categoria_id: catId,
-      subcategoria_id: subId,
+      categoria_id: String(catId),
+      subcategoria_id: String(subId),
       precio_venta: Math.round(prod.producto_precio_clp_total || 0),
       precio_costo: Math.round(prod.producto_precio_costo || 0),
       venta_incluye_iva: true,
@@ -101,6 +106,8 @@ export default function ObumaProductosListado() {
 
   return (
     <div className="space-y-6">
+      {/* ... (Buscador y Header igual) ... */}
+      
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -154,30 +161,33 @@ export default function ObumaProductosListado() {
                           <div className="space-y-1">
                             <label className="text-[9px] font-black text-slate-400">CATEGORÍA</label>
                             <select 
-                              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" 
+                              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" 
                               value={editForm.categoria_id} 
                               onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}
                             >
-                              <option value="">Selecciona...</option>
-                              {categorias.map((c: any) => (
-                                <option key={c.categoria_id} value={String(c.categoria_id)}>{c.categoria_nombre}</option>
+                              <option value="">Selecciona una categoria</option>
+                              {categorias.map((cat) => (
+                                <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>
+                                  {cat.producto_categoria_nombre}
+                                </option>
                               ))}
                             </select>
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400">SUBCATEGORÍA</label>
+                            <label className="text-[9px] font-black text-slate-400">SUBCATEGORIA</label>
                             <select 
-                              className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                              disabled={!editForm.categoria_id}
+                              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50"
                               value={editForm.subcategoria_id}
                               onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}
                             >
-                              <option value="">Selecciona...</option>
-                              {subcategorias
-                                .filter((s: any) => String(s.id_categoria) === String(editForm.categoria_id))
-                                .map((s: any) => (
-                                  <option key={s.subcategoria_id} value={String(s.subcategoria_id)}>{s.subcategoria_nombre}</option>
-                                ))}
+                              <option value="">Selecciona una subcategoria</option>
+                              {filteredSubcategorias.map((sub) => (
+                                <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>
+                                  {sub.producto_subcategoria_nombre}
+                                </option>
+                              ))}
                             </select>
                           </div>
 
