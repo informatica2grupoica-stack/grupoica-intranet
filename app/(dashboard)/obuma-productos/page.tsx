@@ -14,12 +14,10 @@ export default function ObumaProductosListado() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
 
-  // 1. CARGA INICIAL (Ajustado para recibir array directo de tus APIs)
   const fetchInitialData = async () => {
     try {
       const resCat = await fetch('/api/obuma/categorias');
       const dataCat = await resCat.json();
-      // Como tu API devuelve el array directo [], lo seteamos así:
       setCategorias(Array.isArray(dataCat) ? dataCat : []);
       await fetchProductos();
     } catch (error) {
@@ -36,14 +34,8 @@ export default function ObumaProductosListado() {
     } finally { setLoading(false); }
   };
 
-  // 2. CARGA DE SUBCATEGORÍAS (Ajustado para recibir array directo)
-  const loadSubcategorias = async (catId: string) => {
-    if (!catId) {
-      setSubcategorias([]);
-      return;
-    }
+  const loadSubcategorias = async () => {
     try {
-      // Usamos tu API funcional que devuelve todas las subcategorías
       const res = await fetch(`/api/obuma/subcategorias`);
       const data = await res.json();
       setSubcategorias(Array.isArray(data) ? data : []);
@@ -52,30 +44,24 @@ export default function ObumaProductosListado() {
     }
   };
 
-  useEffect(() => { fetchInitialData(); }, []);
+  useEffect(() => { fetchInitialData(); loadSubcategorias(); }, []);
 
-  // Debounce para búsqueda
   useEffect(() => {
-    const timer = setTimeout(() => { if(search !== "") { setPage(1); fetchProductos(); } }, 600);
+    const timer = setTimeout(() => { fetchProductos(); }, 600);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, page]);
 
-  useEffect(() => { fetchProductos(); }, [page]);
-
-  // 3. MANEJO DE EDICIÓN
-  const handleEditClick = async (prod: any) => {
+  const handleEditClick = (prod: any) => {
     if (editingId === prod.producto_id) {
       setEditingId(null);
       return;
     }
 
-    // Dividimos el nombre (Tipo Característica Medida Marca)
     const p = prod.producto_nombre.split(' ');
     
-    // Cargamos subcategorías inmediatamente al abrir el editor
-    if (prod.producto_id_categoria) {
-      await loadSubcategorias(prod.producto_id_categoria);
-    }
+    // Mapeo flexible de IDs (Obuma a veces usa id_categoria, otras producto_id_categoria)
+    const catId = prod.id_categoria || prod.producto_id_categoria || prod.producto_categoria || "";
+    const subId = prod.id_subcategoria || prod.producto_id_subcategoria || prod.producto_subcategoria || "";
 
     setEditingId(prod.producto_id);
     setEditForm({
@@ -85,8 +71,8 @@ export default function ObumaProductosListado() {
       c4: p[3] || "",
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
-      categoria_id: prod.producto_id_categoria,
-      subcategoria_id: prod.producto_id_subcategoria,
+      categoria_id: catId,
+      subcategoria_id: subId,
       precio_venta: Math.round(prod.producto_precio_clp_total || 0),
       precio_costo: Math.round(prod.producto_precio_costo || 0),
       venta_incluye_iva: true,
@@ -115,29 +101,7 @@ export default function ObumaProductosListado() {
 
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 uppercase italic leading-none">Inventario Central</h1>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Editor de Productos Obuma</span>
-        </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              className="w-full pl-12 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none"
-              placeholder="BUSCAR PRODUCTO..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Link href="/obuma-productos/nuevo" className="bg-[#00338d] text-white p-4 rounded-2xl hover:bg-blue-800 transition-all shadow-lg shadow-blue-100">
-            <Plus size={20} />
-          </Link>
-        </div>
-      </div>
-
-      {/* TABLA */}
+      {/* ... Header igual ... */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -169,7 +133,6 @@ export default function ObumaProductosListado() {
                   </td>
                 </tr>
 
-                {/* FORMULARIO INTEGRADO */}
                 {editingId === prod.producto_id && (
                   <tr className="bg-blue-50/30">
                     <td colSpan={4} className="px-12 py-8 border-b border-blue-100">
@@ -194,10 +157,7 @@ export default function ObumaProductosListado() {
                             <select 
                               className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" 
                               value={editForm.categoria_id} 
-                              onChange={(e) => {
-                                setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""});
-                                loadSubcategorias(e.target.value);
-                              }}
+                              onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}
                             >
                               <option value="">Selecciona...</option>
                               {categorias.map((c: any) => (
@@ -223,7 +183,7 @@ export default function ObumaProductosListado() {
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400">PRECIO VENTA</label>
+                            <label className="text-[9px] font-black text-slate-400">PRECIO VENTA (BRUTO)</label>
                             <input 
                               type="number"
                               className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold"

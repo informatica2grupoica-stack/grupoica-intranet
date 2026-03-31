@@ -8,7 +8,7 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // 1. LÓGICA DE PRECIOS (Igual a tu POST)
+    // 1. LÓGICA DE PRECIOS
     const pVentaBruto = Number(body.precio_venta) || 0;
     const pCostoBruto = Number(body.precio_costo) || 0;
 
@@ -22,36 +22,33 @@ export async function PUT(
 
     const ivaVenta = pVentaBruto - pVentaNeto;
 
-    // 2. CONSTRUCCIÓN DEL PAYLOAD (Alineado con lo que Obuma espera en UPDATE)
+    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
     const obumaPayload: any = {
       producto_id: id,
       producto_nombre: body.nombre_completo.toUpperCase().trim(),
       
-      // Clasificación (Usando los nombres que vienen de tu formulario de creación)
+      // Aseguramos que los IDs de categoría se envíen correctamente
       producto_id_categoria: body.categoria_id?.toString(),
       producto_id_subcategoria: body.subcategoria_id?.toString(),
       
-      // Precios
+      // Precios (Obuma suele preferir strings en su API JSON)
       producto_precio_costo: pCostoNeto.toString(),
       producto_precio_clp_neto: pVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: pVentaBruto.toString(),
       
-      // Flags de Estado
+      // Flags (1 o 0 como strings)
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Tipo de Producto (1: Producto, 2: Servicio)
+      // Tipo (1: Producto, 2: Servicio)
       producto_tipo: body.tipo === "Servicio" ? "2" : "1",
-      
-      // Sucursal para asegurar visibilidad
       sucursal_id: "1"
     };
 
-    // 3. Envío a la API de Obuma (Endpoint de Update)
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.update.json`, {
-      method: 'POST', // Obuma usa POST incluso para actualizar
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'access-token': process.env.OBUMA_API_TOKEN || '',
