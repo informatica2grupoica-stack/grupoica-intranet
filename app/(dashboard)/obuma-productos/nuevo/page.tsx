@@ -84,16 +84,12 @@ export default function NuevoProductoForm() {
     }
   }, [form.categoria_id, allSubcategorias]);
 
-  // MODIFICACIÓN FINAL: 60 SI ES MERCADO PÚBLICO, 50 SI ES MAYORISTA
   const sugerirSkuCorrelativo = async (subId: string) => {
     if (!subId || !form.categoria_id) return;
     setGeneratingSku(true);
     
     try {
-      // Determinar prefijo según categoría (Sin el 99 anterior)
       let prefijo = "";
-      
-      // Busca el nombre o ID de la categoría seleccionada para decidir el canal
       const catSeleccionada = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const nombreCat = catSeleccionada?.producto_categoria_nombre?.toUpperCase() || "";
 
@@ -102,19 +98,16 @@ export default function NuevoProductoForm() {
       } else if (nombreCat.includes("MAYORISTA")) {
         prefijo = "50";
       } else {
-        prefijo = "99"; // Fallback para otras categorías si fuera necesario
+        prefijo = "99";
       }
 
       const prefijoSub = `${prefijo}${subId}`;
-
-      // Llamamos al backend para que busque en Obuma el siguiente número libre
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijoSub}`);
       const data = await res.json();
       
       if (data.sku) {
         setForm(prev => ({ ...prev, sku: String(data.sku), subcategoria_id: subId }));
       } else {
-        // Fallback si la API falla
         setForm(prev => ({ ...prev, sku: `${prefijoSub}001`, subcategoria_id: subId }));
       }
     } catch (err) {
@@ -216,7 +209,15 @@ export default function NuevoProductoForm() {
             <div className="flex gap-1">
               <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-[#00338d]" placeholder="3,66" value={piezas.valorMedida} onChange={(e) => setPiezas({...piezas, valorMedida: e.target.value})} />
               <select className="p-3 bg-white border border-slate-200 rounded-xl font-black text-[10px]" value={piezas.unidadMedida} onChange={(e) => setPiezas({...piezas, unidadMedida: e.target.value})}>
-                <option value="MT">MT</option><option value="CM">CM</option><option value="MM">MM</option><option value='"'>"</option>
+                <option value="MT">MT</option>
+                <option value="CM">CM</option>
+                <option value="MM">MM</option>
+                <option value="KG">KG</option>
+                <option value="L">L</option>
+                <option value="GL">GL</option>
+                <option value="UN">UN</option>
+                <option value="SET">SET</option>
+                <option value='"'>"</option>
               </select>
             </div>
           </div>
@@ -275,7 +276,7 @@ export default function NuevoProductoForm() {
                 <div className="relative mt-1">
                   <span className="absolute left-4 top-3.5 text-slate-400 font-bold">$</span>
                   <input type="number" required className="w-full p-3 pl-8 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none" 
-                    value={form.precio_costo === 0 ? "" : form.precio_costo} 
+                    value={form.precio_costo} 
                     onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})} 
                   />
                 </div>
@@ -294,7 +295,7 @@ export default function NuevoProductoForm() {
                 <div className="relative mt-1">
                   <span className="absolute left-4 top-3.5 text-slate-400 font-bold">$</span>
                   <input type="number" required className="w-full p-3 pl-8 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none" 
-                    value={form.precio_venta === 0 ? "" : form.precio_venta} 
+                    value={form.precio_venta} 
                     onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})} 
                   />
                 </div>
