@@ -1,27 +1,36 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const API_URL = process.env.OBUMA_API_URL;
+  // Usamos el token de tu variable, pero escribimos la URL a mano para mayor seguridad
   const API_TOKEN = process.env.OBUMA_API_TOKEN;
+  const FULL_URL = "https://api.obuma.cl/v1.0/comprasOc.list.json";
 
   try {
-    const response = await fetch(`${API_URL}/comprasOc.list.json`, {
+    const response = await fetch(FULL_URL, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'access-token': API_TOKEN || '',
       },
-      next: { revalidate: 0 } 
+      // Esto obliga a Vercel a buscar datos frescos y no usar caché viejo
+      cache: 'no-store' 
     });
 
     const result = await response.json();
     
-    // Si el JSON es { ok: true, data: [...] }, enviamos solo el array de data
-    const dataFinal = result.data || result;
-
-    return NextResponse.json(dataFinal);
+    // Verificamos si la respuesta tiene la estructura { ok: true, data: [...] }
+    if (result && result.data) {
+      return NextResponse.json(result.data);
+    }
     
+    // Si por alguna razón devuelve el array directo
+    if (Array.isArray(result)) {
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json([]);
   } catch (error) {
-    return NextResponse.json({ error: 'Fallo de conexión' }, { status: 500 });
+    console.error("Error capturado:", error);
+    return NextResponse.json({ error: 'Error de conexión con Obuma' }, { status: 500 });
   }
 }
