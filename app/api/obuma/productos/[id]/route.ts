@@ -22,22 +22,24 @@ export async function PUT(
 
     const ivaVenta = pVentaBruto - pVentaNeto;
 
-    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
+    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA (CORREGIDO)
     const obumaPayload: any = {
       producto_id: id,
       producto_nombre: body.nombre_completo.toUpperCase().trim(),
       
-      // Aseguramos que los IDs de categoría se envíen correctamente
-      producto_id_categoria: body.categoria_id?.toString(),
-      producto_id_subcategoria: body.subcategoria_id?.toString(),
+      // CLAVE: Según documentación, debe ser producto_categoria (sin _id_)
+      producto_categoria: body.categoria_id?.toString(),
+      producto_subcategoria: body.subcategoria_id?.toString(),
       
-      // Precios (Obuma suele preferir strings en su API JSON)
+      producto_codigo_comercial: body.sku,
+      
+      // Precios (Enviados como strings para evitar problemas de formato en la API)
       producto_precio_costo: pCostoNeto.toString(),
       producto_precio_clp_neto: pVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: pVentaBruto.toString(),
       
-      // Flags (1 o 0 como strings)
+      // Flags de estado
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",

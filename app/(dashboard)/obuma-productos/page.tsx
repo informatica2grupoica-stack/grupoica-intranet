@@ -59,9 +59,9 @@ export default function ObumaProductosListado() {
 
     const p = prod.producto_nombre.split(' ');
     
-    // Mapeo flexible de IDs (Obuma a veces usa id_categoria, otras producto_id_categoria)
-    const catId = prod.id_categoria || prod.producto_id_categoria || prod.producto_categoria || "";
-    const subId = prod.id_subcategoria || prod.producto_id_subcategoria || prod.producto_subcategoria || "";
+    // MEJORA: Normalización de IDs a String para match perfecto en los <select>
+    const catId = String(prod.id_categoria || prod.producto_id_categoria || prod.producto_categoria || "");
+    const subId = String(prod.id_subcategoria || prod.producto_id_subcategoria || prod.producto_subcategoria || "");
 
     setEditingId(prod.producto_id);
     setEditForm({
@@ -101,7 +101,6 @@ export default function ObumaProductosListado() {
 
   return (
     <div className="space-y-6">
-      {/* ... Header igual ... */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -161,7 +160,7 @@ export default function ObumaProductosListado() {
                             >
                               <option value="">Selecciona...</option>
                               {categorias.map((c: any) => (
-                                <option key={c.categoria_id} value={c.categoria_id}>{c.categoria_nombre}</option>
+                                <option key={c.categoria_id} value={String(c.categoria_id)}>{c.categoria_nombre}</option>
                               ))}
                             </select>
                           </div>
@@ -175,9 +174,10 @@ export default function ObumaProductosListado() {
                             >
                               <option value="">Selecciona...</option>
                               {subcategorias
-                                .filter((s: any) => s.id_categoria === editForm.categoria_id)
+                                // MEJORA: Filtro robusto con conversión de tipos para evitar que la lista salga vacía
+                                .filter((s: any) => String(s.id_categoria) === String(editForm.categoria_id))
                                 .map((s: any) => (
-                                  <option key={s.subcategoria_id} value={s.subcategoria_id}>{s.subcategoria_nombre}</option>
+                                  <option key={s.subcategoria_id} value={String(s.subcategoria_id)}>{s.subcategoria_nombre}</option>
                                 ))}
                             </select>
                           </div>
