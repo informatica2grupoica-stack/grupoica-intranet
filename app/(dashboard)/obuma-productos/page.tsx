@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, List as ListIcon, Plus } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus } from "lucide-react";
 import Link from "next/link";
 
-// --- FORMULARIO SIMPLIFICADO CON UN SOLO INPUT DE NOMBRE ---
+// --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
 const RenderForm = ({ 
   id, 
   editForm, 
@@ -16,16 +16,25 @@ const RenderForm = ({
   setEditingId 
 }: any) => (
   <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto my-4">
-    
-    {/* CABECERA DE EDICIÓN CON EL INPUT ÚNICO */}
-    <div className="p-6 bg-[#00338d] rounded-2xl text-white shadow-md space-y-2">
-      <label className="text-[10px] font-black uppercase opacity-70 tracking-widest italic">Nombre Completo del Producto (Obuma)</label>
-      <input 
-        className="w-full bg-white/10 border-2 border-white/20 p-4 rounded-xl text-xl font-black uppercase italic outline-none focus:bg-white focus:text-[#00338d] focus:border-white transition-all placeholder:text-white/30"
-        placeholder="INGRESE NOMBRE, MEDIDA Y MARCA AQUÍ..."
-        value={editForm.nombre_completo || ""}
-        onChange={(e) => setEditForm({...editForm, nombre_completo: e.target.value.toUpperCase()})}
-      />
+    <div className="p-4 bg-[#00338d] rounded-2xl text-white shadow-md flex justify-between items-center">
+      <div>
+        <label className="text-[8px] font-black uppercase opacity-60 tracking-widest">Previsualización Nombre Obuma</label>
+        <div className="text-lg font-black uppercase italic tracking-tight">{editForm.nombre_completo || "ESPERANDO DATOS..."}</div>
+      </div>
+      <div className="bg-blue-400/20 px-4 py-2 rounded-full text-[10px] font-black italic">MODO EDICIÓN RÁPIDA</div>
+    </div>
+
+    <div className="grid grid-cols-4 gap-4">
+      {[{ k: 'c1', l: '1. TIPO' }, { k: 'c2', l: '2. ATRIBUTO' }, { k: 'c3', l: '3. MEDIDA' }, { k: 'c4', l: '4. MARCA' }].map((item) => (
+        <div key={item.k} className="flex flex-col gap-1">
+          <label className="text-[9px] font-black text-slate-400 uppercase">{item.l}</label>
+          <input 
+            className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d] transition-colors"
+            value={editForm[item.k] || ""}
+            onChange={(e) => setEditForm({...editForm, [item.k]: e.target.value})}
+          />
+        </div>
+      ))}
     </div>
 
     <div className="grid grid-cols-3 gap-6">
@@ -82,11 +91,15 @@ const RenderForm = ({
 );
 
 export default function ObumaProductosListado() {
+  const router = useRouter();
+
+  // --- ESTADOS DE DATOS ---
   const [productos, setProductos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
   const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
   
+  // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -95,6 +108,7 @@ export default function ObumaProductosListado() {
   const [editingId, setEditingId] = useState<string | null>(null); 
   const [editForm, setEditForm] = useState<any>({});
 
+  // --- CARGA INICIAL ---
   const fetchProductos = async () => {
     setLoading(true);
     try {
@@ -127,6 +141,7 @@ export default function ObumaProductosListado() {
     loadInitialData();
   }, []);
 
+  // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
   const filteredProducts = useMemo(() => {
     const term = search.toLowerCase();
     return productos.filter(p => 
@@ -142,6 +157,25 @@ export default function ObumaProductosListado() {
     return filteredProducts.slice(firstIndex, lastIndex);
   }, [filteredProducts, currentPage, itemsPerPage]);
 
+  useEffect(() => { setCurrentPage(1); }, [search, itemsPerPage]);
+
+  // --- NORMALIZACIÓN DE NOMBRE PARA EDICIÓN ---
+  useEffect(() => {
+    if (editingId && editForm.c1 !== undefined) {
+      const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const nombreConstruido = [
+        limpiar(editForm.c1),
+        limpiar(editForm.c2),
+        editForm.c3 ? `${limpiar(editForm.c3)} MT` : "", 
+        limpiar(editForm.c4)
+      ].filter(Boolean).join(" ");
+      
+      if (nombreConstruido !== editForm.nombre_completo) {
+        setEditForm((prev: any) => ({ ...prev, nombre_completo: nombreConstruido }));
+      }
+    }
+  }, [editForm?.c1, editForm?.c2, editForm?.c3, editForm?.c4, editingId]);
+
   useEffect(() => {
     if (editForm?.categoria_id) {
       const filtradas = allSubcategorias.filter(
@@ -151,14 +185,20 @@ export default function ObumaProductosListado() {
     }
   }, [editForm?.categoria_id, allSubcategorias]);
 
+  // --- MANEJADORES ---
   const handleEditClick = (prod: any) => {
     if (editingId === prod.producto_id) {
       setEditingId(null);
       setEditForm({});
       return;
     }
+    const partes = prod.producto_nombre.split(' ');
     setEditingId(prod.producto_id);
     setEditForm({
+      c1: partes[0] || "", 
+      c2: partes[1] || "", 
+      c3: partes[2]?.replace("MT", "").trim() || "", 
+      c4: partes.slice(3).join(" ") || "",
       nombre_completo: prod.producto_nombre,
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
@@ -192,8 +232,9 @@ export default function ObumaProductosListado() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
-      {/* HEADER DE CONTROL */}
+      {/* --- HEADER DE CONTROL --- */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
+        
         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -205,7 +246,11 @@ export default function ObumaProductosListado() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Link href="/obuma-productos/nuevo" className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center">
+
+          <Link 
+            href="/obuma-productos/nuevo" 
+            className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
+          >
             <Plus size={24} />
           </Link>
         </div>
@@ -213,7 +258,11 @@ export default function ObumaProductosListado() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <ListIcon size={16} className="text-slate-400" />
-            <select className="bg-slate-50 border-none text-[11px] font-black uppercase text-slate-500 rounded-xl px-3 py-2 outline-none cursor-pointer" value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
+            <select 
+              className="bg-slate-50 border-none text-[11px] font-black uppercase text-slate-500 rounded-xl px-3 py-2 outline-none cursor-pointer"
+              value={itemsPerPage}
+              onChange={(e) => setItemsPerPage(Number(e.target.value))}
+            >
               <option value={30}>30 Filas</option>
               <option value={50}>50 Filas</option>
               <option value={100}>100 Filas</option>
@@ -228,7 +277,7 @@ export default function ObumaProductosListado() {
         </div>
       </div>
 
-      {/* TABLA DE PRODUCTOS */}
+      {/* --- TABLA DE PRODUCTOS --- */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -278,6 +327,7 @@ export default function ObumaProductosListado() {
                 {editingId === prod.producto_id && (
                   <tr className="bg-slate-50/50">
                     <td colSpan={7} className="px-2 py-4">
+                      {/* PASAMOS LAS PROPS AL COMPONENTE EXTERNO */}
                       <RenderForm 
                         id={prod.producto_id} 
                         editForm={editForm}

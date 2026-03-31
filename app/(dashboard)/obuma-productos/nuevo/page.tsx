@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Save, Loader2, CheckCircle2, AlertCircle, Hash, RefreshCcw, Copy } from "lucide-react";
+import { Save, Loader2, CheckCircle2, AlertCircle, RefreshCcw, Copy } from "lucide-react";
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
@@ -11,15 +11,6 @@ export default function NuevoProductoForm() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
   const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
-
-  // 1. CAMPOS PARA CONSTRUCCIÓN AUTOMÁTICA
-  const [piezas, setPiezas] = useState({
-    tipo: "",
-    caracteristica: "",
-    valorMedida: "",
-    unidadMedida: "MT",
-    marca: ""
-  });
 
   const [form, setForm] = useState({
     nombre: "",
@@ -35,21 +26,6 @@ export default function NuevoProductoForm() {
     se_puede_comprar: true,
     se_mantiene_stock: true,
   });
-
-  // 2. LÓGICA DE GENERACIÓN AUTOMÁTICA DE NOMBRE
-  useEffect(() => {
-    const limpiar = (t: string) => 
-      t.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    
-    const nombreConstruido = [
-      limpiar(piezas.tipo),
-      limpiar(piezas.caracteristica),
-      piezas.valorMedida ? `${limpiar(piezas.valorMedida)} ${piezas.unidadMedida}` : "",
-      limpiar(piezas.marca)
-    ].filter(Boolean).join(" ");
-
-    setForm(prev => ({ ...prev, nombre: nombreConstruido }));
-  }, [piezas]);
 
   // 3. CARGA INICIAL DE DATOS
   useEffect(() => {
@@ -151,7 +127,6 @@ export default function NuevoProductoForm() {
           incluye_iva_costo: false,
           incluye_iva_venta: false
         }));
-        setPiezas({ tipo: "", caracteristica: "", valorMedida: "", unidadMedida: "MT", marca: "" });
       } else {
         if (result.error?.includes("duplicado") || result.code === "sku_exists") {
             setStatus({ type: 'error', msg: "SKU DUPLICADO, REINTENTANDO CORRELATIVO..." });
@@ -180,11 +155,16 @@ export default function NuevoProductoForm() {
         </div>
       </div>
 
-      <div className="mb-8 p-6 bg-[#00338d] rounded-[1.5rem] text-white shadow-lg border-b-4 border-[#00266b]">
-        <label className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em]">Previsualización Nombre Obuma</label>
-        <div className="text-xl font-black uppercase italic tracking-tight mt-1">
-          {form.nombre || "ESPERANDO DATOS DE CONSTRUCCIÓN..."}
-        </div>
+      {/* INPUT ÚNICO DE NOMBRE */}
+      <div className="mb-8 p-8 bg-[#00338d] rounded-[2rem] text-white shadow-xl border-b-8 border-[#00266b] transition-all">
+        <label className="text-[10px] font-black uppercase opacity-60 tracking-[0.3em] italic mb-3 block">Nombre Completo del Producto (Obuma)</label>
+        <input 
+          required
+          className="w-full bg-white/10 border-2 border-white/20 p-5 rounded-2xl text-2xl font-black uppercase italic outline-none focus:bg-white focus:text-[#00338d] focus:border-white transition-all placeholder:text-white/20 shadow-inner"
+          placeholder="INGRESE TIPO, CARACTERÍSTICA, MEDIDA Y MARCA..."
+          value={form.nombre}
+          onChange={(e) => setForm({...form, nombre: e.target.value.toUpperCase()})}
+        />
       </div>
       
       {status && (
@@ -195,39 +175,7 @@ export default function NuevoProductoForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400">1. Tipo Producto</label>
-            <input required className="p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d]" placeholder="EJ: ZINC" value={piezas.tipo} onChange={(e) => setPiezas({...piezas, tipo: e.target.value})} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400">2. Característica</label>
-            <input required className="p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d]" placeholder="EJ: ACANALADO" value={piezas.caracteristica} onChange={(e) => setPiezas({...piezas, caracteristica: e.target.value})} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400">3. Medida</label>
-            <div className="flex gap-1">
-              <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-[#00338d]" placeholder="3,66" value={piezas.valorMedida} onChange={(e) => setPiezas({...piezas, valorMedida: e.target.value})} />
-              <select className="p-3 bg-white border border-slate-200 rounded-xl font-black text-[10px]" value={piezas.unidadMedida} onChange={(e) => setPiezas({...piezas, unidadMedida: e.target.value})}>
-                <option value="MT">MT</option>
-                <option value="CM">CM</option>
-                <option value="MM">MM</option>
-                <option value="KG">KG</option>
-                <option value="L">L</option>
-                <option value="GL">GL</option>
-                <option value="UN">UN</option>
-                <option value="SET">SET</option>
-                <option value='"'>"</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400">4. Marca / Modelo</label>
-            <input className="p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d]" placeholder="EJ: POLPAICO" value={piezas.marca} onChange={(e) => setPiezas({...piezas, marca: e.target.value})} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-slate-400 italic">Tipo *</label>
             <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" value={form.tipo} onChange={(e) => setForm({...form, tipo: e.target.value})}>
