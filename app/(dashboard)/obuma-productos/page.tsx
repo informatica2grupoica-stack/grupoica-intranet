@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, List as ListIcon, Plus } from "lucide-react";
 import Link from "next/link";
 
-// --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
+// --- FORMULARIO DE EDICIÓN RÁPIDA ---
 const RenderForm = ({ 
   id, 
   editForm, 
@@ -16,27 +16,22 @@ const RenderForm = ({
   setEditingId 
 }: any) => (
   <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto my-4">
-    <div className="p-4 bg-[#00338d] rounded-2xl text-white shadow-md flex justify-between items-center gap-4">
-      <div className="flex-1">
-        <label className="text-[8px] font-black uppercase opacity-60 tracking-widest">Nombre del Producto / Servicio (Edición Libre)</label>
-        <input 
-          className="w-full bg-transparent text-lg font-black uppercase italic tracking-tight outline-none border-b border-white/20 focus:border-white transition-all"
-          value={editForm.nombre_completo || ""}
-          onChange={(e) => setEditForm({ ...editForm, nombre_completo: e.target.value.toUpperCase() })}
-        />
-      </div>
-      <div className="bg-blue-400/20 px-4 py-2 rounded-full text-[10px] font-black italic">MODO EDICIÓN RÁPIDA</div>
+    {/* CAMPO ÚNICO DE NOMBRE (EDICIÓN TOTAL) */}
+    <div className="p-5 bg-[#00338d] rounded-2xl text-white shadow-md space-y-2">
+      <label className="text-[10px] font-black uppercase opacity-60 tracking-widest">Nombre del Producto / Servicio (Edición Libre)</label>
+      <input 
+        className="w-full bg-transparent text-xl font-black uppercase italic tracking-tight outline-none border-b-2 border-white/20 focus:border-white transition-all pb-1"
+        placeholder="EJ: CEMENTO POLPAICO 25KG ESPECIAL"
+        value={editForm.nombre_completo || ""}
+        onChange={(e) => setEditForm({...editForm, nombre_completo: e.target.value.toUpperCase()})}
+      />
+      <div className="text-[9px] font-bold text-blue-200 italic">Este es el nombre exacto que se guardará en Obuma.</div>
     </div>
 
-    {/* SECCIÓN DE DATOS COMPLEMENTARIOS */}
     <div className="grid grid-cols-3 gap-6">
       <div className="flex flex-col gap-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Tipo *</label>
-        <select 
-          className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" 
-          value={editForm.tipo || "Producto"} 
-          onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
-        >
+        <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.tipo} onChange={(e) => setEditForm({...editForm, tipo: e.target.value})}>
           <option value="Producto">Producto</option>
           <option value="Servicio">Servicio</option>
         </select>
@@ -47,17 +42,9 @@ const RenderForm = ({
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Categoría *</label>
-        <select 
-          className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer" 
-          value={editForm.categoria_id || ""} 
-          onChange={(e) => setEditForm({ ...editForm, categoria_id: e.target.value, subcategoria_id: "" })}
-        >
+        <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none cursor-pointer" value={editForm.categoria_id} onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}>
           <option value="">Seleccionar...</option>
-          {categorias.map((cat: any) => (
-            <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>
-              {cat.producto_categoria_nombre}
-            </option>
-          ))}
+          {categorias.map((cat: any) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
         </select>
       </div>
     </div>
@@ -65,37 +52,18 @@ const RenderForm = ({
     <div className="grid grid-cols-3 gap-6 items-end">
       <div className="flex flex-col gap-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Subcategoria *</label>
-        <select 
-          className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50" 
-          disabled={!editForm.categoria_id} 
-          value={editForm.subcategoria_id || ""} 
-          onChange={(e) => setEditForm({ ...editForm, subcategoria_id: e.target.value })}
-        >
+        <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
           <option value="">Seleccionar...</option>
-          {filteredSubcategorias.map((sub: any) => (
-            <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>
-              {sub.producto_subcategoria_nombre}
-            </option>
-          ))}
+          {filteredSubcategorias.map((sub: any) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
         </select>
       </div>
       <div className="flex-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Costo</label>
-        <input 
-          type="number" 
-          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" 
-          value={editForm.precio_costo || 0} 
-          onChange={(e) => setEditForm({ ...editForm, precio_costo: e.target.value })} 
-        />
+        <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.precio_costo || 0} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
       </div>
       <div className="flex-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Venta Total</label>
-        <input 
-          type="number" 
-          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#00338d]" 
-          value={editForm.precio_venta || 0} 
-          onChange={(e) => setEditForm({ ...editForm, precio_venta: e.target.value })} 
-        />
+        <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#00338d]" value={editForm.precio_venta || 0} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
       </div>
     </div>
 
@@ -178,14 +146,13 @@ export default function ObumaProductosListado() {
 
   useEffect(() => { setCurrentPage(1); }, [search, itemsPerPage]);
 
+  // Filtrado dinámico de subcategorías basado en la categoría seleccionada
   useEffect(() => {
     if (editForm?.categoria_id) {
       const filtradas = allSubcategorias.filter(
         sub => String(sub.rel_producto_categoria_id) === String(editForm.categoria_id)
       );
       setFilteredSubcategorias(filtradas);
-    } else {
-      setFilteredSubcategorias([]);
     }
   }, [editForm?.categoria_id, allSubcategorias]);
 
@@ -197,7 +164,7 @@ export default function ObumaProductosListado() {
     }
     setEditingId(prod.producto_id);
     setEditForm({
-      nombre_completo: prod.producto_nombre,
+      nombre_completo: prod.producto_nombre, // Se carga el nombre completo original para edición libre
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
       categoria_id: String(prod.id_categoria || ""),
@@ -224,15 +191,12 @@ export default function ObumaProductosListado() {
         setEditingId(null); 
         fetchProductos(); 
       }
-    } catch (err) {
-      console.error("Error al guardar");
-    } finally { 
-      setSaving(null); 
-    }
+    } finally { setSaving(null); }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
+      {/* HEADER Y TABLA SE MANTIENEN IGUAL... */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
           <div className="relative flex-1">
@@ -245,22 +209,14 @@ export default function ObumaProductosListado() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Link 
-            href="/obuma-productos/nuevo" 
-            className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
-          >
+          <Link href="/obuma-productos/nuevo" className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center">
             <Plus size={24} />
           </Link>
         </div>
-
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <ListIcon size={16} className="text-slate-400" />
-            <select 
-              className="bg-slate-50 border-none text-[11px] font-black uppercase text-slate-500 rounded-xl px-3 py-2 outline-none cursor-pointer"
-              value={itemsPerPage}
-              onChange={(e) => setItemsPerPage(Number(e.target.value))}
-            >
+            <select className="bg-slate-50 border-none text-[11px] font-black uppercase text-slate-500 rounded-xl px-3 py-2 outline-none cursor-pointer" value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
               <option value={30}>30 Filas</option>
               <option value={50}>50 Filas</option>
               <option value={100}>100 Filas</option>
