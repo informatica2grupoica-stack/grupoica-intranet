@@ -71,7 +71,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     {
       title: "Recursos Humanos",
-      items: [{ name: "Genera (RRHH)", icon: Briefcase, path: "/rrhh", external: true }]
+      items: [
+        { 
+          name: "Genera (RRHH)", 
+          icon: Briefcase, 
+          path: "https://portal360middleware.genera.cl/Account/Login?ReturnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dconsole%26scope%3Dopenid%2520email%2520console-api%26response_type%3Dcode%26acr_values%3Dtenant%253A93053F8F-8ACE-4ED3-881A-E348545F22B6%26redirect_uri%3Dhttps%253A%252F%252Fportal360comunicacion.genera.cl%252Fcallback%26state%3D6c3033c802788bfbb99af54c1e5b40d7154cf64e20201ca287043edc6589c297%26response_mode%3Dfragment", 
+          external: true 
+        }
+      ]
     },
     {
       title: "OBUMA",
@@ -114,25 +121,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {section.title}
               </h3>
               <div className="space-y-1">
-                {section.items.map((item) => (
-                  <Link 
-                    key={item.path} 
-                    href={item.path}
-                    className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      pathname === item.path 
-                      ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50' 
-                      : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className={`w-4 h-4 ${pathname === item.path ? 'text-blue-600' : 'text-slate-400'}`} />
-                      {item.name}
-                    </div>
-                    {/* USO DE ENCADENAMIENTO OPCIONAL PARA EVITAR ERROR DE BUILD */}
-                    {(item as any).external && <ExternalLink className="w-3 h-3 text-slate-300" />}
-                    {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-300" />}
-                  </Link>
-                ))}
+                {section.items.map((item) => {
+                  const isActive = pathname === item.path;
+                  const commonClasses = `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isActive 
+                    ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50' 
+                    : 'text-slate-600 hover:bg-slate-50'
+                  }`;
+
+                  const content = (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <item.icon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                        {item.name}
+                      </div>
+                      {(item as any).external && <ExternalLink className="w-3 h-3 text-slate-300" />}
+                      {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-300" />}
+                    </>
+                  );
+
+                  // Si es externo, usamos <a>, si es interno usamos Link de Next.js
+                  return (item as any).external ? (
+                    <a 
+                      key={item.path} 
+                      href={item.path} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className={commonClasses}
+                    >
+                      {content}
+                    </a>
+                  ) : (
+                    <Link key={item.path} href={item.path} className={commonClasses}>
+                      {content}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           ))}
