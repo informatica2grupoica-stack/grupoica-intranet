@@ -84,21 +84,25 @@ export default function NuevoProductoForm() {
     }
   }, [form.categoria_id, allSubcategorias]);
 
-  // MODIFICACIÓN: LÓGICA DE SKU CON PREFIJOS Y CORRELATIVO REAL
+  // MODIFICACIÓN FINAL: 60 SI ES MERCADO PÚBLICO, 50 SI ES MAYORISTA
   const sugerirSkuCorrelativo = async (subId: string) => {
     if (!subId || !form.categoria_id) return;
     setGeneratingSku(true);
     
     try {
-      // Determinar prefijo según categoría
-      // REEMPLAZA "ID_..." con los números que correspondan a tu sistema
+      // Determinar prefijo según categoría (Sin el 99 anterior)
       let prefijo = "";
-      if (form.categoria_id === "ID_MERCADO_PUBLICO") {
+      
+      // Busca el nombre o ID de la categoría seleccionada para decidir el canal
+      const catSeleccionada = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
+      const nombreCat = catSeleccionada?.producto_categoria_nombre?.toUpperCase() || "";
+
+      if (nombreCat.includes("MERCADO PUBLICO")) {
         prefijo = "60";
-      } else if (form.categoria_id === "ID_MAYORISTA") {
+      } else if (nombreCat.includes("MAYORISTA")) {
         prefijo = "50";
       } else {
-        prefijo = "99"; // Fallback por si es otra categoría
+        prefijo = "99"; // Fallback para otras categorías si fuera necesario
       }
 
       const prefijoSub = `${prefijo}${subId}`;
@@ -145,7 +149,6 @@ export default function NuevoProductoForm() {
           msg: `PRODUCTO CREADO EXITOSAMENTE: ${form.sku}` 
         });
 
-        // RESET TRAS ÉXITO
         setForm(prev => ({ 
           ...prev, 
           nombre: "", 
@@ -184,7 +187,6 @@ export default function NuevoProductoForm() {
         </div>
       </div>
 
-      {/* VISOR DE NOMBRE AUTOMÁTICO */}
       <div className="mb-8 p-6 bg-[#00338d] rounded-[1.5rem] text-white shadow-lg border-b-4 border-[#00266b]">
         <label className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em]">Previsualización Nombre Obuma</label>
         <div className="text-xl font-black uppercase italic tracking-tight mt-1">
@@ -200,8 +202,6 @@ export default function NuevoProductoForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {/* SECCIÓN 1: PIEZAS (NOMBRE) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-slate-400">1. Tipo Producto</label>
@@ -226,7 +226,6 @@ export default function NuevoProductoForm() {
           </div>
         </div>
 
-        {/* SECCIÓN 2: TIPO, SKU Y CATEGORIZACIÓN */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-slate-400 italic">Tipo *</label>
@@ -268,7 +267,6 @@ export default function NuevoProductoForm() {
           </div>
         </div>
 
-        {/* SECCIÓN 3: PRECIOS E IVA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
@@ -309,7 +307,6 @@ export default function NuevoProductoForm() {
           </div>
         </div>
 
-        {/* SECCIÓN 4: ESTADOS */}
         <div className="flex flex-wrap gap-8 p-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" checked={form.se_puede_vender} onChange={(e) => setForm({...form, se_puede_vender: e.target.checked})} />
@@ -325,7 +322,6 @@ export default function NuevoProductoForm() {
           </label>
         </div>
 
-        {/* BOTÓN FINAL */}
         <div className="flex justify-end pt-4">
           <button 
             type="submit" 
