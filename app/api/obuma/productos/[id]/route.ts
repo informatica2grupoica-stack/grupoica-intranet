@@ -8,44 +8,43 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // 1. LÓGICA DE PRECIOS
-    const pVentaBruto = Number(body.precio_venta) || 0;
-    const pCostoBruto = Number(body.precio_costo) || 0;
+    // 1. LÓGICA DE IMPUESTOS (Igual a tu creación)
+    const precioVentaBruto = Number(body.precio_venta) || 0;
+    const precioCostoBruto = Number(body.precio_costo) || 0;
 
-    const pVentaNeto = body.venta_incluye_iva 
-      ? Math.round(pVentaBruto / 1.19) 
-      : pVentaBruto;
+    const precioVentaNeto = body.venta_incluye_iva 
+      ? Math.round(precioVentaBruto / 1.19) 
+      : precioVentaBruto;
 
-    const pCostoNeto = body.costo_incluye_iva 
-      ? Math.round(pCostoBruto / 1.19) 
-      : pCostoBruto;
+    const precioCostoNeto = body.costo_incluye_iva 
+      ? Math.round(precioCostoBruto / 1.19) 
+      : precioCostoBruto;
 
-    const ivaVenta = pVentaBruto - pVentaNeto;
+    const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA (CORREGIDO)
+    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA UPDATE
+    // Nota: Obuma para actualizar usa producto_categoria y producto_subcategoria
     const obumaPayload: any = {
       producto_id: id,
       producto_nombre: body.nombre_completo.toUpperCase().trim(),
+      producto_tipo: body.tipo === "Servicio" ? "2" : "1",
       
-      // CLAVE: Según documentación, debe ser producto_categoria (sin _id_)
-      producto_categoria: body.categoria_id?.toString(),
-      producto_subcategoria: body.subcategoria_id?.toString(),
+      // Clasificación
+      producto_categoria: body.categoria_id.toString(),
+      producto_subcategoria: body.subcategoria_id.toString(),
       
-      producto_codigo_comercial: body.sku,
-      
-      // Precios (Enviados como strings para evitar problemas de formato en la API)
-      producto_precio_costo: pCostoNeto.toString(),
-      producto_precio_clp_neto: pVentaNeto.toString(),
+      // Precios y Costos
+      producto_costo_clp_neto: precioCostoNeto.toString(),
+      producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
-      producto_precio_clp_total: pVentaBruto.toString(),
+      producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de estado
+      // Flags de Estado
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Tipo (1: Producto, 2: Servicio)
-      producto_tipo: body.tipo === "Servicio" ? "2" : "1",
+      producto_codigo_comercial: body.sku,
       sucursal_id: "1"
     };
 
@@ -69,7 +68,7 @@ export async function PUT(
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Error API Update:", error);
-    return NextResponse.json({ error: 'Error crítico al actualizar' }, { status: 500 });
+    console.error("Error en Update:", error);
+    return NextResponse.json({ error: 'Error crítico de servidor' }, { status: 500 });
   }
 }
