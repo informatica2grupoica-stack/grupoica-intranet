@@ -1,47 +1,34 @@
 import { NextResponse, NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  
-  // Parámetros opcionales según documentación (folio, fecha, etc.)
-  const folio = searchParams.get('folio') || '';
-  const proveedor = searchParams.get('proveedor') || '';
-
-  // Construcción de URL usando la variable de entorno que ya tienes
-  const obumaUrl = new URL(`${process.env.OBUMA_API_URL}/comprasOc.list.json`);
-  
-  if (folio) obumaUrl.searchParams.append('folio_dcto', folio);
-  if (proveedor) obumaUrl.searchParams.append('proveedor', proveedor);
+  // Usamos las mismas variables que usas en productos
+  const urlBase = process.env.OBUMA_API_URL;
+  const token = process.env.OBUMA_API_TOKEN;
 
   try {
-    const response = await fetch(obumaUrl.toString(), {
+    // Endpoint oficial según la documentación que enviaste
+    const finalUrl = `${urlBase}/comprasOc.list.json`;
+
+    const response = await fetch(finalUrl, {
       method: 'GET',
       headers: {
-        'access-token': process.env.OBUMA_API_TOKEN || '',
+        'access-token': token || '',
         'Content-Type': 'application/json'
       },
-      next: { revalidate: 0 } // Sin caché para ver las OCs nuevas de inmediato
+      next: { revalidate: 0 }
     });
 
-    if (!response.ok) {
-      throw new Error(`Error Obuma: ${response.status}`);
-    }
+    const res = await response.json();
 
-    const resData = await response.json();
-
-    // NORMALIZACIÓN: Igual que en productos
-    // Obuma entrega la lista en 'data' según tu JSON anterior
+    // Normalizamos igual que en tu código de productos para que sea consistente
     return NextResponse.json({
       success: true,
-      data: resData.data || resData.compras || [],
-      pagination: resData.pagination || null
+      data: res.data || res.compras || [],
+      pagination: res.pagination || null
     });
 
   } catch (error: any) {
-    console.error("Error en Listado OC:", error.message);
-    return NextResponse.json(
-      { success: false, error: 'Error al conectar con Obuma', details: error.message }, 
-      { status: 500 }
-    );
+    console.error("Error Obuma OC:", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
