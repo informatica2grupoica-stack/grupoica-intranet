@@ -43,6 +43,6 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error("Error en API SKU:", error);
-    return NextResponse.json({ sku: `${prefijoSub}001` }); // Fallback por defecto
+    return NextResponse.json({ sku: `${prefijoSub}004` }); // Fallback por defecto
   }
 }
