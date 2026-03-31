@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, Plus, Loader2, ChevronLeft, ChevronRight, Edit3, Save, X, Box, Tag, DollarSign, Layers } from "lucide-react";
 import Link from "next/link";
 
@@ -66,6 +66,7 @@ export default function ObumaProductosListado() {
       return;
     }
 
+    // Dividir el nombre para los 4 campos (Tipo, Característica, Medida, Marca)
     const p = prod.producto_nombre.split(' ');
     
     // Cargamos subcategorías de la categoría actual antes de mostrar el formulario
@@ -81,10 +82,12 @@ export default function ObumaProductosListado() {
       c4: p[3] || "",
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
-      categoria: prod.producto_id_categoria,
-      subcategoria: prod.producto_id_subcategoria,
+      categoria_id: prod.producto_id_categoria, // Alineado con el Backend
+      subcategoria_id: prod.producto_id_subcategoria, // Alineado con el Backend
       precio_venta: Math.round(prod.producto_precio_clp_total || 0),
+      precio_costo: Math.round(prod.producto_precio_costo || 0),
       venta_incluye_iva: true,
+      costo_incluye_iva: false,
       se_puede_vender: prod.producto_para_venta === "1",
       se_puede_comprar: prod.producto_para_compra === "1",
       se_mantiene_stock: prod.producto_inventariable === "1",
@@ -214,9 +217,9 @@ export default function ObumaProductosListado() {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoría *</label>
                             <select 
                               className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" 
-                              value={editForm.categoria} 
+                              value={editForm.categoria_id} 
                               onChange={(e) => {
-                                setEditForm({...editForm, categoria: e.target.value, subcategoria: ""});
+                                setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""});
                                 loadSubcategorias(e.target.value);
                               }}
                             >
@@ -226,13 +229,13 @@ export default function ObumaProductosListado() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                            <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Subcategoría *</label>
                               <select 
                                 className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                                value={editForm.subcategoria}
-                                onChange={(e) => setEditForm({...editForm, subcategoria: e.target.value})}
+                                value={editForm.subcategoria_id}
+                                onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}
                               >
                                 <option value="">Selecciona subcategoría</option>
                                 {subcategorias.map(s => <option key={s.subcategoria_id} value={s.subcategoria_id}>{s.subcategoria_nombre}</option>)}
@@ -245,6 +248,17 @@ export default function ObumaProductosListado() {
                                 <input type="number" className="flex-1 p-2 bg-transparent outline-none font-black text-lg text-slate-700" value={editForm.precio_venta} onChange={(e)=>setEditForm({...editForm, precio_venta: e.target.value})} />
                                 <div className="flex items-center gap-2 border-l pl-4 pr-2 border-slate-200">
                                   <input type="checkbox" checked={editForm.venta_incluye_iva} onChange={(e)=>setEditForm({...editForm, venta_incluye_iva: e.target.checked})} className="w-4 h-4 accent-[#00338d]" />
+                                  <label className="text-[9px] font-black text-slate-400 uppercase">¿IVA?</label>
+                                </div>
+                              </div>
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Costo Bruto</label>
+                              <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-200">
+                                <span className="pl-2 font-bold text-slate-300">$</span>
+                                <input type="number" className="flex-1 p-2 bg-transparent outline-none font-black text-lg text-slate-700" value={editForm.precio_costo} onChange={(e)=>setEditForm({...editForm, precio_costo: e.target.value})} />
+                                <div className="flex items-center gap-2 border-l pl-4 pr-2 border-slate-200">
+                                  <input type="checkbox" checked={editForm.costo_incluye_iva} onChange={(e)=>setEditForm({...editForm, costo_incluye_iva: e.target.checked})} className="w-4 h-4 accent-slate-400" />
                                   <label className="text-[9px] font-black text-slate-400 uppercase">¿IVA?</label>
                                 </div>
                               </div>
@@ -282,6 +296,3 @@ export default function ObumaProductosListado() {
     </div>
   );
 }
-
-// Nota: He usado React.Fragment para que la fila del formulario no rompa la estructura de la tabla.
-import React from "react";
