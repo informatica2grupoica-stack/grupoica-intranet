@@ -1,8 +1,11 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, Loader2, Edit3, Save, X, Copy, ChevronLeft, ChevronRight, ListIcon, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus } from "lucide-react";
 
 export default function ObumaProductosListado() {
+  const router = useRouter();
+
   // --- ESTADOS DE DATOS ---
   const [productos, setProductos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
@@ -15,7 +18,7 @@ export default function ObumaProductosListado() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(30);
-  const [editingId, setEditingId] = useState<string | null>(null); // "nuevo" para creación
+  const [editingId, setEditingId] = useState<string | null>(null); 
   const [editForm, setEditForm] = useState<any>({});
 
   // --- CARGA INICIAL ---
@@ -69,7 +72,7 @@ export default function ObumaProductosListado() {
 
   useEffect(() => { setCurrentPage(1); }, [search, itemsPerPage]);
 
-  // --- LÓGICA DE LAS 4 PIEZAS (NORMALIZACIÓN) ---
+  // --- NORMALIZACIÓN DE NOMBRE PARA EDICIÓN ---
   useEffect(() => {
     if (editingId && editForm.c1 !== undefined) {
       const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -97,23 +100,8 @@ export default function ObumaProductosListado() {
 
   // --- MANEJADORES ---
   const handleCreateNew = () => {
-    setEditingId("nuevo");
-    setEditForm({
-      c1: "", c2: "", c3: "", c4: "",
-      nombre_completo: "",
-      sku: "",
-      tipo: "Producto",
-      categoria_id: "",
-      subcategoria_id: "",
-      precio_venta: 0,
-      precio_costo: 0,
-      venta_incluye_iva: true,
-      costo_incluye_iva: true,
-      se_puede_vender: true,
-      se_puede_comprar: true,
-      se_mantiene_stock: true,
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Redirige directamente a tu formulario funcional
+    router.push("/obuma/productos/nuevo");
   };
 
   const handleEditClick = (prod: any) => {
@@ -146,12 +134,9 @@ export default function ObumaProductosListado() {
 
   const handleSave = async (id: string) => {
     setSaving(id);
-    const method = id === "nuevo" ? 'POST' : 'PUT';
-    const url = id === "nuevo" ? '/api/obuma/productos' : `/api/obuma/productos/${id}`;
-    
     try {
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(`/api/obuma/productos/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       });
@@ -162,7 +147,7 @@ export default function ObumaProductosListado() {
     } finally { setSaving(null); }
   };
 
-  // Componente del Formulario para evitar duplicidad
+  // Componente de Formulario de Edición (Solo para productos existentes)
   const RenderForm = ({ id }: { id: string }) => (
     <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto my-4">
       <div className="p-4 bg-[#00338d] rounded-2xl text-white shadow-md flex justify-between items-center">
@@ -170,7 +155,7 @@ export default function ObumaProductosListado() {
           <label className="text-[8px] font-black uppercase opacity-60 tracking-widest">Previsualización Nombre Obuma</label>
           <div className="text-lg font-black uppercase italic tracking-tight">{editForm.nombre_completo || "ESPERANDO DATOS..."}</div>
         </div>
-        {id === "nuevo" && <div className="bg-amber-400 text-[#00338d] px-4 py-1 rounded-full text-[10px] font-black italic">NUEVO REGISTRO</div>}
+        <div className="bg-blue-400/20 px-4 py-2 rounded-full text-[10px] font-black italic">MODO EDICIÓN RÁPIDA</div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -181,7 +166,6 @@ export default function ObumaProductosListado() {
               className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d] transition-colors"
               value={editForm[item.k] || ""}
               onChange={(e) => setEditForm({...editForm, [item.k]: e.target.value})}
-              placeholder="Ej: CANAL"
             />
           </div>
         ))}
@@ -196,14 +180,8 @@ export default function ObumaProductosListado() {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-black text-[#00338d] uppercase italic">SKU / Código Comercial *</label>
-          <input 
-            readOnly={id !== "nuevo"}
-            className={`w-full p-3 border border-slate-200 rounded-xl text-xs font-bold italic outline-none ${id !== "nuevo" ? 'bg-slate-100 text-slate-500' : 'bg-white border-[#00338d]'}`} 
-            value={editForm.sku || ""} 
-            onChange={(e) => setEditForm({...editForm, sku: e.target.value})}
-            placeholder="Ej: SKU-001"
-          />
+          <label className="text-[9px] font-black text-[#00338d] uppercase italic">SKU / Código Comercial</label>
+          <input readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold italic text-slate-500 outline-none" value={editForm.sku || ""} />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-[9px] font-black text-slate-400 uppercase italic">Categoría *</label>
@@ -217,40 +195,19 @@ export default function ObumaProductosListado() {
       <div className="grid grid-cols-3 gap-6 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[9px] font-black text-slate-400 uppercase italic">Subcategoria *</label>
-          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50 cursor-pointer" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
+          <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
             <option value="">Seleccionar...</option>
             {filteredSubcategorias.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
           </select>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Costo *</label>
-            <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.precio_costo || 0} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
-          </div>
-          <label className="flex items-center gap-1 cursor-pointer pt-4">
-            <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#00338d]" checked={editForm.costo_incluye_iva} onChange={(e) => setEditForm({...editForm, costo_incluye_iva: e.target.checked})} />
-            <span className="text-[8px] font-black text-slate-500 uppercase">¿IVA?</span>
-          </label>
+        <div className="flex-1">
+          <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Costo</label>
+          <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.precio_costo || 0} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Venta *</label>
-            <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#00338d]" value={editForm.precio_venta || 0} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
-          </div>
-          <label className="flex items-center gap-1 cursor-pointer pt-4">
-            <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#00338d]" checked={editForm.venta_incluye_iva} onChange={(e) => setEditForm({...editForm, venta_incluye_iva: e.target.checked})} />
-            <span className="text-[8px] font-black text-slate-500 uppercase">¿IVA?</span>
-          </label>
+        <div className="flex-1">
+          <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Venta Total</label>
+          <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#00338d]" value={editForm.precio_venta || 0} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
         </div>
-      </div>
-
-      <div className="flex gap-6 pt-2">
-        {[{ k: 'se_puede_vender', l: 'VENTA WEB' }, { k: 'se_puede_comprar', l: 'COMPRA' }, { k: 'se_mantiene_stock', l: 'STOCK' }].map((item) => (
-          <label key={item.k} className="flex items-center gap-2 cursor-pointer group">
-            <input type="checkbox" className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" checked={editForm[item.k] || false} onChange={(e) => setEditForm({...editForm, [item.k]: e.target.checked})} />
-            <span className="text-[10px] font-black text-slate-700 uppercase group-hover:text-[#00338d] transition-colors">{item.l}</span>
-          </label>
-        ))}
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -261,7 +218,7 @@ export default function ObumaProductosListado() {
           className="flex items-center gap-3 bg-[#00338d] text-white px-12 py-4 rounded-2xl text-xs font-black uppercase shadow-xl hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50"
         >
           {saving === id ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-          {id === "nuevo" ? "Crear Producto en Obuma" : "Guardar Cambios"}
+          Guardar Cambios
         </button>
       </div>
     </div>
@@ -315,9 +272,6 @@ export default function ObumaProductosListado() {
           </div>
         </div>
       </div>
-
-      {/* --- FORMULARIO PARA NUEVO PRODUCTO (SI ESTÁ ACTIVO) --- */}
-      {editingId === "nuevo" && <RenderForm id="nuevo" />}
 
       {/* --- TABLA DE PRODUCTOS --- */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
