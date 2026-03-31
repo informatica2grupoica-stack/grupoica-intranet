@@ -23,16 +23,15 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // AQUÍ ESTÁ EL TRUCO: 
-    // Normalizamos igual que en productos. 
-    // Obuma para OC suele mandar los datos en 'data'.
+    // Normalizamos igual que en productos para que el frontend no se confunda
     return NextResponse.json({
       success: true,
-      data: data.data || data.compras || data || []
+      data: data.data || data.compras || [],
+      pagination: data.pagination || null
     });
 
   } catch (error: any) {
-    console.error("Error en Compras Obuma:", error.message);
+    console.error("Error en API Compras:", error.message);
     return NextResponse.json(
       { success: false, error: 'Error al conectar con la API', details: error.message }, 
       { status: 500 }

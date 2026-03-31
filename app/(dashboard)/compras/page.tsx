@@ -12,14 +12,14 @@ export default function ComprasPage() {
       const res = await fetch('/api/obuma/oc');
       const json = await res.json();
       
-      // IMPORTANTE: Ahora entramos a json.data porque el backend lo normalizó así
+      // Entramos a json.data porque el backend lo normalizó así (igual que productos)
       if (json.success && Array.isArray(json.data)) {
         setOrdenes(json.data);
       } else {
         setOrdenes([]);
       }
     } catch (err) {
-      console.error("Error cargando OC:", err);
+      console.error("Error frontend:", err);
       setOrdenes([]);
     } finally {
       setLoading(false);
@@ -50,9 +50,9 @@ export default function ComprasPage() {
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-400">Sincronizando...</td></tr>
+              <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-400">Cargando...</td></tr>
             ) : ordenes.length === 0 ? (
-              <tr><td colSpan={5} className="p-20 text-center text-slate-400">No hay datos disponibles</td></tr>
+              <tr><td colSpan={5} className="p-20 text-center text-slate-400">No se encontraron datos de compras</td></tr>
             ) : ordenes.map((oc: any) => (
               <tr key={oc.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-6 py-4 font-bold text-slate-700">{oc.ocNumber}</td>
