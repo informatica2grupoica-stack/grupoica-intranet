@@ -84,22 +84,37 @@ export default function NuevoProductoForm() {
     }
   }, [form.categoria_id, allSubcategorias]);
 
+  // MODIFICACIÓN: LÓGICA DE SKU CON PREFIJOS Y CORRELATIVO REAL
   const sugerirSkuCorrelativo = async (subId: string) => {
-    if (!subId) return;
+    if (!subId || !form.categoria_id) return;
     setGeneratingSku(true);
+    
     try {
-      const res = await fetch(`/api/obuma/siguiente-sku?subcategoria_id=${subId}`);
+      // Determinar prefijo según categoría
+      // REEMPLAZA "ID_..." con los números que correspondan a tu sistema
+      let prefijo = "";
+      if (form.categoria_id === "ID_MERCADO_PUBLICO") {
+        prefijo = "60";
+      } else if (form.categoria_id === "ID_MAYORISTA") {
+        prefijo = "50";
+      } else {
+        prefijo = "99"; // Fallback por si es otra categoría
+      }
+
+      const prefijoSub = `${prefijo}${subId}`;
+
+      // Llamamos al backend para que busque en Obuma el siguiente número libre
+      const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijoSub}`);
       const data = await res.json();
       
       if (data.sku) {
         setForm(prev => ({ ...prev, sku: String(data.sku), subcategoria_id: subId }));
       } else {
-        const nuevoSku = `${subId}0001`;
-        setForm(prev => ({ ...prev, sku: nuevoSku, subcategoria_id: subId }));
+        // Fallback si la API falla
+        setForm(prev => ({ ...prev, sku: `${prefijoSub}001`, subcategoria_id: subId }));
       }
     } catch (err) {
-      const emergencySku = `${subId}${Math.floor(Math.random() * 9000) + 1000}`;
-      setForm(prev => ({ ...prev, sku: emergencySku, subcategoria_id: subId }));
+      console.error("Error generando SKU correlativo:", err);
     } finally {
       setGeneratingSku(false);
     }
@@ -225,13 +240,13 @@ export default function NuevoProductoForm() {
           
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase text-[#00338d] italic flex justify-between items-center">
-              SKU:
+              SKU (Auto-generado):
               <button type="button" onClick={() => sugerirSkuCorrelativo(form.subcategoria_id)}>
                 <RefreshCcw size={14} className={generatingSku ? "animate-spin text-slate-400" : "text-slate-400"} />
               </button>
             </label>
             <div className="relative">
-              <input readOnly className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500 outline-none" value={form.sku} placeholder="Autogenerado..." />
+              <input readOnly className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500 outline-none" value={form.sku} placeholder="Selecciona subcategoría..." />
               <Copy className="absolute right-4 top-4 text-slate-300" size={18} />
             </div>
           </div>
@@ -253,7 +268,7 @@ export default function NuevoProductoForm() {
           </div>
         </div>
 
-        {/* SECCIÓN 3: PRECIOS E IVA (CRUCIAL PARA EL NUEVO API) */}
+        {/* SECCIÓN 3: PRECIOS E IVA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
