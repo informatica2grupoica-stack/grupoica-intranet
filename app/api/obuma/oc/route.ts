@@ -16,12 +16,13 @@ export async function GET() {
 
     const result = await response.json();
 
-    // Validamos la estructura del JSON que me pasaste { ok: true, data: [...] }
-    const dataFinal = result.data || result.docs || (Array.isArray(result) ? result : []);
+    // Validamos la estructura del JSON { ok: true, data: [...] }
+    // Si 'data' existe, enviamos eso, si no, intentamos con el objeto raíz
+    const dataFinal = result.data || result;
 
     return NextResponse.json(dataFinal);
     
   } catch (error) {
-    return NextResponse.json({ error: 'Error de red' }, { status: 500 });
+    return NextResponse.json({ error: 'Error de conexión' }, { status: 500 });
   }
 }
