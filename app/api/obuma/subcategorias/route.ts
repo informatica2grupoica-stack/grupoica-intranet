@@ -1,17 +1,11 @@
-import { NextResponse, NextRequest } from 'next/server';
+// ARCHIVO: subcategorias/route.ts
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
-  // Capturamos el ID de la categoría desde la URL (?categoria_id=...)
-  const { searchParams } = new URL(request.url);
-  const categoriaId = searchParams.get('categoria_id');
-
-  // Si no hay ID, devolvemos vacío para evitar errores
-  if (!categoriaId) return NextResponse.json({ data: [] });
+export async function GET() {
+  // CORRECCIÓN: URL exacta según manual de Obuma
+  const url = `${process.env.OBUMA_API_URL}/productosSubCategorias.list.json`;
 
   try {
-    // Obuma permite filtrar agregando el ID a la URL del endpoint
-    const url = `${process.env.OBUMA_API_URL}/productosSubCategorias.list.json?id_categoria=${categoriaId}`;
-
     const response = await fetch(url, {
       headers: {
         'access-token': process.env.OBUMA_API_TOKEN || '',
@@ -19,10 +13,10 @@ export async function GET(request: NextRequest) {
       },
     });
     
-    const result = await response.json();
+    const data = await response.json();
     
-    // Igual que en categorías, devolvemos { data: ... }
-    return NextResponse.json({ data: result.data || [] }); 
+    // Obuma entrega la lista dentro de data.data
+    return NextResponse.json(data.data || []); 
   } catch (error) {
     return NextResponse.json({ error: 'Error al conectar con Obuma' }, { status: 500 });
   }
