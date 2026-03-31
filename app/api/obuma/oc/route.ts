@@ -16,13 +16,12 @@ export async function GET() {
 
     const result = await response.json();
 
-    // Según tu JSON, los datos vienen en result.data
+    // Validamos la estructura del JSON que me pasaste { ok: true, data: [...] }
     const dataFinal = result.data || result.docs || (Array.isArray(result) ? result : []);
 
     return NextResponse.json(dataFinal);
     
   } catch (error) {
-    console.error("Error Obuma OC:", error);
-    return NextResponse.json({ error: 'Error de conexión' }, { status: 500 });
+    return NextResponse.json({ error: 'Error de red' }, { status: 500 });
   }
 }
