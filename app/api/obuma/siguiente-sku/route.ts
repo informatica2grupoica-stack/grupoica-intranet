@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error("Error en API SKU:", error);
-    // En caso de error de red, devolvemos el 004 como seguridad
+    // En caso de error de red, devolvemos el 004 como segurida
     return NextResponse.json({ sku: `${prefijoSub}005` });
   }
 }
