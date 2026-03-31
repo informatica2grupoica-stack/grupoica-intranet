@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   const API_URL = process.env.OBUMA_API_URL;
   const API_TOKEN = process.env.OBUMA_API_TOKEN;
 
-  // Construimos la URL igual que en productos
+  // Construimos la URL apuntando a comprasOc
   const obumaUrl = new URL(`${API_URL}/comprasOc.list.json`);
 
   try {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Normalizamos igual que en productos para que el frontend no se confunda
+    // Normalizamos igual que en tu código de productos
     return NextResponse.json({
       success: true,
       data: data.data || data.compras || [],

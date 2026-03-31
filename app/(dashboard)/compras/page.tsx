@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { RefreshCcw } from "lucide-react";
+import { RefreshCcw, Search } from "lucide-react";
 
 export default function ComprasPage() {
   const [ordenes, setOrdenes] = useState<any[]>([]);
@@ -12,14 +12,14 @@ export default function ComprasPage() {
       const res = await fetch('/api/obuma/oc');
       const json = await res.json();
       
-      // Entramos a json.data porque el backend lo normalizó así (igual que productos)
+      // Si el backend responde success, guardamos el array de data
       if (json.success && Array.isArray(json.data)) {
         setOrdenes(json.data);
       } else {
         setOrdenes([]);
       }
     } catch (err) {
-      console.error("Error frontend:", err);
+      console.error("Error cargando compras:", err);
       setOrdenes([]);
     } finally {
       setLoading(false);
@@ -31,9 +31,9 @@ export default function ComprasPage() {
   return (
     <div className="p-8 space-y-6">
       <div className="flex justify-between items-center bg-white p-6 rounded-[30px] border border-slate-100 shadow-sm">
-        <h1 className="text-xl font-bold text-slate-800">Órdenes de Compra</h1>
+        <h1 className="text-xl font-bold text-slate-800">Ordenes de Compras</h1>
         <button onClick={loadOC} className="p-2 hover:bg-slate-50 rounded-full">
-          <RefreshCcw className={`w-5 h-5 text-blue-500 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCcw className={`w-5 h-5 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
@@ -52,17 +52,21 @@ export default function ComprasPage() {
             {loading ? (
               <tr><td colSpan={5} className="p-20 text-center animate-pulse text-slate-400">Cargando...</td></tr>
             ) : ordenes.length === 0 ? (
-              <tr><td colSpan={5} className="p-20 text-center text-slate-400">No se encontraron datos de compras</td></tr>
+              <tr><td colSpan={5} className="p-20 text-center text-slate-400">No se encontraron órdenes de compra</td></tr>
             ) : ordenes.map((oc: any) => (
               <tr key={oc.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-6 py-4 font-bold text-slate-700">{oc.ocNumber}</td>
-                <td className="px-6 py-4 text-slate-500">{oc.fecha?.split('T')[0]}</td>
+                <td className="px-6 py-4 text-slate-500">
+                  {oc.fecha ? oc.fecha.split('T')[0].split('-').reverse().join('-') : '-'}
+                </td>
                 <td className="px-6 py-4 text-slate-600">{oc.proveedorId}</td>
                 <td className="px-6 py-4 text-right font-bold text-slate-900">
                   ${Number(oc.total || 0).toLocaleString('es-CL')}
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold border border-emerald-100 uppercase">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase ${
+                    oc.estado === 'EMITIDA' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                  }`}>
                     {oc.estado}
                   </span>
                 </td>
