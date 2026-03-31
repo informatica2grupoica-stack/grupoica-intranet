@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, List as ListIcon, Plus } from "lucide-react";
 import Link from "next/link";
 
-// --- FORMULARIO CON UN SOLO INPUT PARA EL NOMBRE ---
+// --- FORMULARIO SIMPLIFICADO CON UN SOLO INPUT DE NOMBRE ---
 const RenderForm = ({ 
   id, 
   editForm, 
@@ -17,18 +17,15 @@ const RenderForm = ({
 }: any) => (
   <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto my-4">
     
-    {/* ÚNICO INPUT PARA TODO EL NOMBRE/MARCA/MEDIDA */}
-    <div className="flex flex-col gap-2 p-6 bg-slate-50 rounded-2xl border border-slate-200">
-      <label className="text-[10px] font-black text-[#00338d] uppercase tracking-widest italic">
-        Descripción Completa del Producto (Nombre, Medida, Marca, etc.)
-      </label>
+    {/* CABECERA DE EDICIÓN CON EL INPUT ÚNICO */}
+    <div className="p-6 bg-[#00338d] rounded-2xl text-white shadow-md space-y-2">
+      <label className="text-[10px] font-black uppercase opacity-70 tracking-widest italic">Nombre Completo del Producto (Obuma)</label>
       <input 
-        className="w-full p-4 bg-white border-2 border-slate-200 rounded-xl text-lg font-black uppercase outline-none focus:border-[#00338d] transition-all italic"
-        placeholder="Ej: CEMENTO POLPAICO 25KG ESPECIAL"
+        className="w-full bg-white/10 border-2 border-white/20 p-4 rounded-xl text-xl font-black uppercase italic outline-none focus:bg-white focus:text-[#00338d] focus:border-white transition-all placeholder:text-white/30"
+        placeholder="INGRESE NOMBRE, MEDIDA Y MARCA AQUÍ..."
         value={editForm.nombre_completo || ""}
         onChange={(e) => setEditForm({...editForm, nombre_completo: e.target.value.toUpperCase()})}
       />
-      <span className="text-[9px] text-slate-400 font-bold uppercase italic">Este nombre se sincronizará directamente con Obuma.</span>
     </div>
 
     <div className="grid grid-cols-3 gap-6">
@@ -195,7 +192,7 @@ export default function ObumaProductosListado() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
-      {/* HEADER */}
+      {/* HEADER DE CONTROL */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
           <div className="relative flex-1">
@@ -231,7 +228,7 @@ export default function ObumaProductosListado() {
         </div>
       </div>
 
-      {/* TABLA */}
+      {/* TABLA DE PRODUCTOS */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
