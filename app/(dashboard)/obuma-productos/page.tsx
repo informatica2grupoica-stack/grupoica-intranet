@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Search, Loader2, Edit3, Save, X, Box } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, Copy, RefreshCcw } from "lucide-react";
 
 export default function ObumaProductosListado() {
   const [productos, setProductos] = useState<any[]>([]);
@@ -44,7 +44,7 @@ export default function ObumaProductosListado() {
     } finally { setLoading(false); }
   };
 
-  // 2. LÓGICA DE FILTRADO DE SUBCATEGORÍAS (SINCRONIZADA CON TU CREACIÓN)
+  // 2. LÓGICA DE FILTRADO DE SUBCATEGORÍAS
   useEffect(() => {
     if (editForm?.categoria_id) {
       const filtradas = allSubcategorias.filter(
@@ -56,6 +56,21 @@ export default function ObumaProductosListado() {
     }
   }, [editForm?.categoria_id, allSubcategorias]);
 
+  // 3. GENERACIÓN AUTOMÁTICA DEL NOMBRE DURANTE EDICIÓN
+  useEffect(() => {
+    if (editForm && editingId) {
+      const limpiar = (t: string) => t.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const nombreConstruido = [
+        limpiar(editForm.c1),
+        limpiar(editForm.c2),
+        editForm.c3 ? `${limpiar(editForm.c3)} MT` : "", // Ajustado a MT según tu captura
+        limpiar(editForm.c4)
+      ].filter(Boolean).join(" ");
+      
+      setEditForm(prev => ({ ...prev, nombre_completo: nombreConstruido }));
+    }
+  }, [editForm?.c1, editForm?.c2, editForm?.c3, editForm?.c4]);
+
   const handleEditClick = (prod: any) => {
     if (editingId === prod.producto_id) {
       setEditingId(null);
@@ -64,24 +79,21 @@ export default function ObumaProductosListado() {
 
     const p = prod.producto_nombre.split(' ');
     
-    // Mapeo de IDs desde la respuesta del listado de Obuma
-    const catId = prod.id_categoria || prod.producto_id_categoria || "";
-    const subId = prod.id_subcategoria || prod.producto_id_subcategoria || "";
-
     setEditingId(prod.producto_id);
     setEditForm({
       c1: p[0] || "", 
       c2: p[1] || "", 
       c3: p[2] || "", 
       c4: p[3] || "",
+      nombre_completo: prod.producto_nombre,
       sku: prod.producto_codigo_comercial,
       tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
-      categoria_id: String(catId),
-      subcategoria_id: String(subId),
+      categoria_id: String(prod.id_categoria || ""),
+      subcategoria_id: String(prod.id_subcategoria || ""),
       precio_venta: Math.round(prod.producto_precio_clp_total || 0),
       precio_costo: Math.round(prod.producto_precio_costo || 0),
       venta_incluye_iva: true,
-      costo_incluye_iva: false,
+      costo_incluye_iva: true, // Por defecto como en tu captura
       se_puede_vender: prod.producto_para_venta === "1",
       se_puede_comprar: prod.producto_para_compra === "1",
       se_mantiene_stock: prod.producto_inventariable === "1",
@@ -90,12 +102,11 @@ export default function ObumaProductosListado() {
 
   const handleSave = async (id: string) => {
     setSaving(id);
-    const nombre_completo = `${editForm.c1} ${editForm.c2} ${editForm.c3} ${editForm.c4}`.trim();
     try {
       const res = await fetch(`/api/obuma/productos/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editForm, nombre_completo }),
+        body: JSON.stringify(editForm),
       });
       if (res.ok) { 
         setEditingId(null); 
@@ -105,9 +116,8 @@ export default function ObumaProductosListado() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* ... (Buscador y Header igual) ... */}
-      
+    <div className="space-y-6 max-w-7xl mx-auto p-4">
+      {/* ... Listado de productos ... */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -128,7 +138,7 @@ export default function ObumaProductosListado() {
                     <div className="text-sm font-black text-slate-700 uppercase italic">{prod.producto_nombre}</div>
                     <div className="text-[9px] font-black text-blue-500 uppercase">{prod.categoria_nombre || 'General'}</div>
                   </td>
-                  <td className="px-6 py-5 text-center font-mono text-xs">{prod.producto_codigo_comercial}</td>
+                  <td className="px-6 py-5 text-center font-mono text-xs font-bold text-slate-500">{prod.producto_codigo_comercial}</td>
                   <td className="px-6 py-5 text-right font-black text-[#00338d]">
                     ${Math.round(prod.producto_precio_clp_total || 0).toLocaleString('es-CL')}
                   </td>
@@ -139,77 +149,118 @@ export default function ObumaProductosListado() {
                   </td>
                 </tr>
 
+                {/* FORMULARIO DE EDICIÓN EXPANDIDO (ESTILO TU CAPTURA) */}
                 {editingId === prod.producto_id && (
-                  <tr className="bg-blue-50/30">
-                    <td colSpan={4} className="px-12 py-8 border-b border-blue-100">
-                      <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-blue-100 space-y-6">
+                  <tr className="bg-slate-50/50">
+                    <td colSpan={4} className="px-6 py-8">
+                      <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto">
                         
+                        {/* 1. VISOR DE NOMBRE AUTOMÁTICO */}
+                        <div className="p-4 bg-[#00338d] rounded-2xl text-white shadow-md">
+                          <label className="text-[8px] font-black uppercase opacity-60 tracking-widest">Previsualización Nombre Obuma</label>
+                          <div className="text-lg font-black uppercase italic tracking-tight">{editForm.nombre_completo}</div>
+                        </div>
+
+                        {/* 2. PIEZAS DEL NOMBRE */}
                         <div className="grid grid-cols-4 gap-4">
-                          {["TIPO", "CARACT.", "MEDIDA", "MARCA"].map((label, i) => (
-                            <div key={i} className="space-y-1">
-                              <label className="text-[9px] font-black text-slate-400">{label}</label>
+                          {["TIPO PRODUCTO", "CARACTERÍSTICA", "MEDIDA", "MARCA / MODELO"].map((label, i) => (
+                            <div key={i} className="flex flex-col gap-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase">{i+1}. {label}</label>
                               <input 
-                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold uppercase"
+                                className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#00338d]"
                                 value={editForm[`c${i+1}`]}
-                                onChange={(e) => setEditForm({...editForm, [`c${i+1}`]: e.target.value.toUpperCase()})}
+                                onChange={(e) => setEditForm({...editForm, [`c${i+1}`]: e.target.value})}
                               />
                             </div>
                           ))}
                         </div>
 
+                        {/* 3. TIPO, SKU Y CATEGORÍAS */}
                         <div className="grid grid-cols-3 gap-6">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400">CATEGORÍA</label>
-                            <select 
-                              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" 
-                              value={editForm.categoria_id} 
-                              onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}
-                            >
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase italic">Tipo *</label>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.tipo} onChange={(e) => setEditForm({...editForm, tipo: e.target.value})}>
+                              <option value="Producto">Producto</option>
+                              <option value="Servicio">Servicio</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-[#00338d] uppercase italic">SKU (Fijo):</label>
+                            <div className="relative">
+                              <input readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500" value={editForm.sku} />
+                              <Copy size={14} className="absolute right-3 top-3 text-slate-300" />
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase italic">Categoría *</label>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={editForm.categoria_id} onChange={(e) => setEditForm({...editForm, categoria_id: e.target.value, subcategoria_id: ""})}>
                               <option value="">Selecciona una categoria</option>
-                              {categorias.map((cat) => (
-                                <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>
-                                  {cat.producto_categoria_nombre}
-                                </option>
-                              ))}
+                              {categorias.map((cat) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
                             </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400">SUBCATEGORIA</label>
-                            <select 
-                              disabled={!editForm.categoria_id}
-                              className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none disabled:opacity-50"
-                              value={editForm.subcategoria_id}
-                              onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}
-                            >
-                              <option value="">Selecciona una subcategoria</option>
-                              {filteredSubcategorias.map((sub) => (
-                                <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>
-                                  {sub.producto_subcategoria_nombre}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black text-slate-400">PRECIO VENTA (BRUTO)</label>
-                            <input 
-                              type="number"
-                              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold"
-                              value={editForm.precio_venta}
-                              onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})}
-                            />
                           </div>
                         </div>
 
+                        <div className="grid grid-cols-3 gap-6 items-end">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase italic">Subcategoria *</label>
+                            <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none disabled:opacity-50" disabled={!editForm.categoria_id} value={editForm.subcategoria_id} onChange={(e) => setEditForm({...editForm, subcategoria_id: e.target.value})}>
+                              <option value="">Selecciona una subcategoria</option>
+                              {filteredSubcategorias.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 4. PRECIOS CON IVA CHECKBOXES */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Costo *</label>
+                              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" value={editForm.precio_costo} onChange={(e) => setEditForm({...editForm, precio_costo: e.target.value})} />
+                            </div>
+                            <label className="flex items-center gap-1 cursor-pointer pt-4">
+                              <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={editForm.costo_incluye_iva} onChange={(e) => setEditForm({...editForm, costo_incluye_iva: e.target.checked})} />
+                              <span className="text-[8px] font-black text-slate-500 uppercase">¿IVA?</span>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Venta *</label>
+                              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#00338d]" value={editForm.precio_venta} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
+                            </div>
+                            <label className="flex items-center gap-1 cursor-pointer pt-4">
+                              <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={editForm.venta_incluye_iva} onChange={(e) => setEditForm({...editForm, venta_incluye_iva: e.target.checked})} />
+                              <span className="text-[8px] font-black text-slate-500 uppercase">¿IVA?</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* 5. ESTADOS (CHECKBOXES AZULES) */}
+                        <div className="flex gap-6 pt-2">
+                          {[
+                            { key: 'se_puede_vender', label: '¿SE PUEDE VENDER?' },
+                            { key: 'se_puede_comprar', label: '¿SE PUEDE COMPRAR?' },
+                            { key: 'se_mantiene_stock', label: '¿SE MANTIENE STOCK?' }
+                          ].map((item) => (
+                            <label key={item.key} className="flex items-center gap-2 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="w-5 h-5 rounded text-[#00338d] focus:ring-[#00338d]" 
+                                checked={editForm[item.key]} 
+                                onChange={(e) => setEditForm({...editForm, [item.key]: e.target.checked})} 
+                              />
+                              <span className="text-[10px] font-black text-slate-700 uppercase">{item.label}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        {/* BOTÓN ACTUALIZAR */}
                         <div className="flex justify-end pt-4">
                           <button 
                             disabled={saving === prod.producto_id}
                             onClick={() => handleSave(prod.producto_id)}
-                            className="flex items-center gap-3 bg-[#00338d] text-white px-10 py-4 rounded-[1.2rem] text-xs font-black uppercase shadow-xl hover:bg-blue-800 disabled:opacity-50"
+                            className="flex items-center gap-3 bg-[#00338d] text-white px-12 py-4 rounded-2xl text-xs font-black uppercase shadow-xl hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50"
                           >
                             {saving === prod.producto_id ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                            Actualizar en Obuma
+                            Guardar Cambios en Obuma
                           </button>
                         </div>
                       </div>
