@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Save, Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign } from "lucide-react";
+import { Save, Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Layers, Tag, BarChart3, Info } from "lucide-react";
 
 interface Categoria {
   producto_categoria_id: string | number;
@@ -74,7 +74,7 @@ export default function NuevoProductoForm() {
     setForm(prev => ({ ...prev, nombre_completo: parts.join(" ") }));
   }, [nameParts]);
 
-  // 3. Filtrado de Subcategorías (MEJORADO)
+  // 3. Filtrado de Subcategorías
   const subCategoriasFiltradas = useMemo(() => {
     if (!form.categoria_id) return [];
     return allSubcategorias.filter(s => 
@@ -82,7 +82,7 @@ export default function NuevoProductoForm() {
     );
   }, [allSubcategorias, form.categoria_id]);
 
-  // 4. Generador de SKU (MEJORADO)
+  // 4. Generador de SKU
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId || subId === "") {
         setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
@@ -90,7 +90,7 @@ export default function NuevoProductoForm() {
     }
 
     setGeneratingSku(true);
-    setForm(prev => ({ ...prev, subcategoria_id: subId })); // Guardar la subcat inmediatamente
+    setForm(prev => ({ ...prev, subcategoria_id: subId }));
 
     try {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
@@ -140,15 +140,9 @@ export default function NuevoProductoForm() {
 
       if (res.ok) {
         setStatus({ type: 'success', msg: `Producto ${form.sku} creado exitosamente` });
-        
-        // Mantener la categoría y subcategoría para el siguiente producto
         const currentSub = form.subcategoria_id;
-        
-        // Limpiar solo los campos de identidad y precios
         setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
         setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
-        
-        // Pedir un nuevo SKU para la misma subcategoría
         await solicitarNuevoSku(currentSub);
       } else {
         setStatus({ type: 'error', msg: responseData.error || "Error al guardar en Obuma" });
@@ -161,156 +155,187 @@ export default function NuevoProductoForm() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 bg-[#f8fafc] min-h-screen text-slate-800">
-      <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 overflow-hidden">
-        <div className="p-6 md:p-10 space-y-10">
+    <div className="min-h-screen bg-[#f1f5f9] p-6 lg:p-12 text-slate-800 font-sans">
+      <div className="max-w-[1400px] mx-auto space-y-8">
+        
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-8">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+              <PackagePlus className="text-blue-600" size={36} />
+              Maestro de Productos
+            </h1>
+            <p className="text-slate-500 font-medium mt-1 uppercase text-xs tracking-widest">Sincronización directa Obuma ERP</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200">
+            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Servidor Activo</span>
+          </div>
+        </div>
+
+        {/* CONTENEDOR PRINCIPAL */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* SECCIÓN 1: NOMBRE */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2">
-                <div className="w-1.5 h-5 bg-blue-600 rounded-full"></div>
-                <h2 className="text-xs font-black text-blue-600 uppercase tracking-widest">1. Definición del Producto</h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <input placeholder="TIPO" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold uppercase text-sm outline-none focus:ring-2 ring-blue-100 transition-all" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
-              <input placeholder="ATRIBUTO" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold uppercase text-sm outline-none focus:ring-2 ring-blue-100 transition-all" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
-              <div className="flex gap-2 col-span-2">
-                <input placeholder="MEDIDA" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
-                <select className="p-4 bg-slate-100 border border-slate-200 rounded-2xl font-bold text-xs outline-none cursor-pointer" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
-                  <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
-                </select>
-                <input placeholder="MARCA/COLOR" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
-              </div>
-            </div>
-            <div className="p-5 bg-slate-900 rounded-[1.5rem] border-b-4 border-blue-500 shadow-inner">
-               <p className="text-blue-400 text-[9px] font-black uppercase mb-1 tracking-widest">Vista previa en sistema:</p>
-               <p className="text-white font-bold text-xl uppercase tracking-tight truncate">
-                 {form.nombre_completo || "ESPERANDO DATOS..."}
-               </p>
-            </div>
-          </section>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            {/* SECCIÓN 2: CATEGORÍAS */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-5 bg-blue-600 rounded-full"></div>
-                <h2 className="text-xs font-black text-blue-600 uppercase">2. Categorización</h2>
-              </div>
-              <div className="space-y-3">
-                <select 
-                  required 
-                  className="w-full p-4 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 transition-all" 
-                  value={form.categoria_id} 
-                  onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
-                >
-                  <option value="">-- Seleccionar Categoría --</option>
-                  {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
-                </select>
-
-                <select 
-                  required 
-                  disabled={!form.categoria_id} 
-                  className="w-full p-4 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 disabled:opacity-50 transition-all" 
-                  value={form.subcategoria_id} 
-                  onChange={e => solicitarNuevoSku(e.target.value)}
-                >
-                  <option value="">-- Seleccionar Subcategoría --</option>
-                  {subCategoriasFiltradas.map(s => (
-                    <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>
-                        {s.producto_subcategoria_nombre}
-                    </option>
-                  ))}
-                </select>
-                {form.categoria_id && subCategoriasFiltradas.length === 0 && (
-                    <p className="text-[10px] text-rose-500 font-bold px-2">Esta categoría no tiene subcategorías asociadas.</p>
-                )}
-              </div>
-
-              <div className="mt-4 p-8 bg-gradient-to-br from-blue-50 to-white rounded-[2rem] border-2 border-dashed border-blue-200 flex flex-col items-center group">
-                <span className="text-[10px] font-black text-blue-500 uppercase mb-2 tracking-tighter">SKU Autogenerado</span>
-                <div className="flex items-center gap-5">
-                  <span className="text-5xl font-black text-slate-900 tracking-tighter">
-                    {generatingSku ? "..." : (form.sku || "---")}
-                  </span>
-                  <button 
-                    type="button" 
-                    onClick={() => solicitarNuevoSku(form.subcategoria_id)}
-                    className="p-3 bg-white rounded-full shadow-lg hover:shadow-blue-200 text-blue-600 transition-all active:scale-90 disabled:opacity-50"
-                    disabled={!form.subcategoria_id || generatingSku}
-                  >
-                    <RefreshCcw size={22} className={generatingSku ? "animate-spin" : ""} />
-                  </button>
+          {/* COLUMNA IZQUIERDA: DEFINICIÓN (6 COLUMNAS) */}
+          <div className="lg:col-span-8 space-y-8">
+            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 transition-all">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                  <Tag size={22} />
                 </div>
+                <h2 className="text-lg font-bold text-slate-800">1. Identidad y Nombre</h2>
               </div>
-            </section>
 
-            {/* SECCIÓN 3: PRECIOS */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-5 bg-blue-600 rounded-full"></div>
-                <h2 className="text-xs font-black text-blue-600 uppercase">3. Valores y Estados</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input type="number" placeholder="COSTO" className="w-full pl-10 p-4 bg-white border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-slate-300" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Tipo de Producto</label>
+                  <input placeholder="TIPO" className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl font-bold uppercase text-sm outline-none focus:bg-white focus:border-blue-500 transition-all" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Atributo</label>
+                  <input placeholder="ATRIBUTO" className="w-full p-4 bg-slate-50 border border-transparent rounded-2xl font-bold uppercase text-sm outline-none focus:bg-white focus:border-blue-500 transition-all" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Medida / Marca / Color</label>
+                  <div className="flex gap-2">
+                    <input placeholder="MEDIDA" className="flex-1 p-4 bg-slate-50 border border-transparent rounded-2xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
+                    <select className="p-4 bg-slate-100 rounded-2xl font-bold text-xs outline-none cursor-pointer hover:bg-slate-200 transition-colors" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
+                      <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
+                    </select>
+                    <input placeholder="MARCA/COLOR" className="flex-1 p-4 bg-slate-50 border border-transparent rounded-2xl font-bold text-sm outline-none focus:bg-white focus:border-blue-500 transition-all" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
                   </div>
-                  <label className="flex items-center gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100 text-[10px] font-black cursor-pointer select-none">
-                    <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} /> IVA
-                  </label>
-                </div>
-
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={16} />
-                    <input type="number" placeholder="VENTA" className="w-full pl-10 p-4 bg-white border-2 border-blue-100 rounded-2xl font-black text-blue-700 outline-none focus:border-blue-500" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
-                  </div>
-                  <label className="flex items-center gap-2 p-4 bg-blue-600 rounded-2xl text-white text-[10px] font-black cursor-pointer select-none shadow-md">
-                    <input type="checkbox" className="w-4 h-4 accent-white" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} /> IVA
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2">
-                   {[
-                     {k:'se_puede_vender', l:'Permitir Venta'}, 
-                     {k:'se_puede_comprar', l:'Permitir Compra'}, 
-                     {k:'se_mantiene_stock', l:'Controlar Stock'}
-                   ].map(i => (
-                     <label key={i.k} className="flex justify-between items-center p-3.5 bg-slate-50 hover:bg-white border border-slate-100 rounded-xl transition-colors cursor-pointer group">
-                        <span className="text-[11px] font-bold uppercase text-slate-500 group-hover:text-blue-600">{i.l}</span>
-                        <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={(form as any)[i.k]} onChange={e => setForm({...form, [i.k]: e.target.checked})} />
-                     </label>
-                   ))}
                 </div>
               </div>
-            </section>
+
+              {/* VISTA PREVIA NOMBRE */}
+              <div className="mt-8 p-7 bg-slate-900 rounded-[2rem] relative overflow-hidden group border-b-8 border-blue-600 shadow-xl">
+                <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Info size={100} color="white" />
+                </div>
+                <span className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] block mb-2">Nombre Final para Facturación:</span>
+                <p className="text-white text-3xl font-black uppercase tracking-tight break-words leading-tight">
+                  {form.nombre_completo || "ESPERANDO DATOS..."}
+                </p>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: CATEGORIZACIÓN */}
+            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                  <Layers size={22} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800">2. Clasificación</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Categoría Padre</label>
+                    <select className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm outline-none focus:bg-white focus:border-indigo-500 transition-all" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
+                      <option value="">-- Seleccionar Categoría --</option>
+                      {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Subcategoría</label>
+                    <select disabled={!form.categoria_id} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm outline-none focus:bg-white focus:border-indigo-500 disabled:opacity-30 transition-all" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
+                      <option value="">-- Seleccionar Subcategoría --</option>
+                      {subCategoriasFiltradas.map(s => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* SKU CARD */}
+                <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2.5rem] p-8 text-center shadow-lg shadow-blue-200 flex flex-col items-center justify-center min-h-[220px] group transition-transform hover:scale-[1.01]">
+                  <span className="text-indigo-200 text-[10px] font-black uppercase tracking-[0.3em] mb-4">SKU Autogenerado</span>
+                  <div className="flex items-center gap-6">
+                    <span className="text-6xl font-black text-white tracking-tighter">
+                      {generatingSku ? "..." : (form.sku || "---")}
+                    </span>
+                    <button type="button" onClick={() => solicitarNuevoSku(form.subcategoria_id)} disabled={!form.subcategoria_id || generatingSku} className="p-4 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all active:scale-90 disabled:opacity-20">
+                      <RefreshCcw size={28} className={generatingSku ? "animate-spin" : ""} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* MENSAJES DE ESTADO */}
-          {status && (
-            <div className={`p-5 rounded-2xl flex items-center gap-3 border-2 animate-in fade-in slide-in-from-bottom-4 ${
-                status.type === 'success' 
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                : 'bg-rose-50 border-rose-200 text-rose-800'
-            }`}>
-              {status.type === 'success' ? <Check className="text-emerald-500" size={24}/> : <AlertCircle className="text-rose-500" size={24}/>}
-              <div className="flex flex-col">
-                  <span className="font-black text-xs uppercase tracking-widest">{status.type === 'success' ? 'Éxito' : 'Error'}</span>
-                  <p className="text-sm font-medium">{status.msg}</p>
+          {/* COLUMNA DERECHA: VALORES Y ACCIÓN (4 COLUMNAS) */}
+          <div className="lg:col-span-4 space-y-8">
+            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 sticky top-8">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                  <BarChart3 size={22} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800">3. Comercial</h2>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block">Precio de Costo</label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input type="number" className="w-full pl-10 p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-slate-300 transition-all text-lg" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
+                    </div>
+                    <label className="flex flex-col items-center justify-center px-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100">
+                      <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
+                      <span className="text-[9px] font-black mt-1">IVA</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-blue-600 uppercase ml-2 block">Precio de Venta</label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18} />
+                      <input type="number" className="w-full pl-10 p-4 bg-blue-50 text-blue-700 border-2 border-transparent rounded-2xl font-black outline-none focus:border-blue-500 transition-all text-xl" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
+                    </div>
+                    <label className="flex flex-col items-center justify-center px-4 bg-blue-600 rounded-2xl text-white cursor-pointer shadow-lg shadow-blue-100 hover:bg-blue-700 transition-colors">
+                      <input type="checkbox" className="w-5 h-5 accent-white" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
+                      <span className="text-[9px] font-black mt-1">IVA</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-4 space-y-3">
+                  {[
+                    {k:'se_puede_vender', l:'Permitir Venta'}, 
+                    {k:'se_puede_comprar', l:'Permitir Compra'}, 
+                    {k:'se_mantiene_stock', l:'Controlar Stock'}
+                  ].map(i => (
+                    <label key={i.k} className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl transition-all cursor-pointer group">
+                      <span className="text-[11px] font-black uppercase text-slate-500 group-hover:text-blue-600">{i.l}</span>
+                      <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={(form as any)[i.k]} onChange={e => setForm({...form, [i.k as any]: e.target.checked})} />
+                    </label>
+                  ))}
+                </div>
+
+                {/* STATUS MESSAGES */}
+                {status && (
+                  <div className={`p-5 rounded-3xl flex items-center gap-4 border-2 animate-in fade-in slide-in-from-top-4 ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
+                    {status.type === 'success' ? <Check className="text-emerald-500" size={24}/> : <AlertCircle className="text-rose-500" size={24}/>}
+                    <p className="text-xs font-black uppercase tracking-tight">{status.msg}</p>
+                  </div>
+                )}
+
+                {/* SUBMIT BUTTON */}
+                <button 
+                  onClick={handleSubmit}
+                  disabled={loading || !form.sku || !form.nombre_completo || !form.categoria_id || !form.subcategoria_id}
+                  className="w-full bg-[#00338d] hover:bg-blue-900 disabled:bg-slate-200 disabled:text-slate-400 text-white py-7 rounded-[2.5rem] font-black uppercase tracking-[0.3em] shadow-2xl shadow-blue-200 flex items-center justify-center gap-4 transition-all active:scale-[0.97] group overflow-hidden relative"
+                >
+                  <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+                  {loading ? <Loader2 className="animate-spin" size={24} /> : <PackagePlus size={24} />}
+                  <span className="relative z-10 text-sm">Crear Producto</span>
+                </button>
               </div>
             </div>
-          )}
+          </div>
 
-          <button 
-            onClick={handleSubmit}
-            disabled={loading || !form.sku || !form.nombre_completo || !form.categoria_id || !form.subcategoria_id}
-            className="w-full bg-[#00338d] hover:bg-blue-900 disabled:bg-slate-200 disabled:text-slate-500 text-white py-7 rounded-[2.5rem] font-black uppercase tracking-[0.3em] shadow-2xl flex items-center justify-center gap-4 transition-all active:scale-[0.98]"
-          >
-            {loading ? <Loader2 className="animate-spin" size={28} /> : <PackagePlus size={28} />}
-            FINALIZAR Y CREAR EN OBUMA
-          </button>
         </div>
       </div>
     </div>
