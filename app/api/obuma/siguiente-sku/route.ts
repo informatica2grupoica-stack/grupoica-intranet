@@ -1,76 +1,67 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const prefijoSub = searchParams.get('prefijoSub'); // Ejemplo: 6026423
-
-  if (!prefijoSub) return NextResponse.json({ error: 'Falta prefijo' }, { status: 400 });
-
-  const headers = {
-    'access-token': process.env.OBUMA_API_TOKEN || '',
-    'Content-Type': 'application/json'
-  };
-
+export async function POST(request: Request) {
   try {
-    // 1. Obtener la lista completa para ver qué números ya existen
-    const res = await fetch(`${process.env.OBUMA_API_URL}/productos.list.json`, { 
-      headers, 
-      cache: 'no-store' 
-    });
-    
-    if (!res.ok) throw new Error("No se pudo obtener la lista de Obuma");
-    
-    const result = await res.json();
-    const productos = result.data || result.productos || [];
+    const body = await request.json();
 
-    // 2. Extraer los números correlativos que ya existen para ese prefijo
-    const numerosUsados = productos
-      .filter((p: any) => String(p.producto_codigo_comercial).startsWith(prefijoSub))
-      .map((p: any) => {
-        const skuStr = String(p.producto_codigo_comercial);
-        const sufijo = skuStr.replace(prefijoSub, ""); // Quitamos el prefijo
-        return parseInt(sufijo) || 0;
-      });
+    // --- PROTECCIÓN ANTI-CRASH ---
+    // Si body.nombre_completo es undefined, esto fallaría. 
+    // Usamos String(...) y || "" para asegurar que siempre haya un texto.
+    const nombreLimpio = String(body.nombre_completo || "").toUpperCase().trim();
+    const skuLimpio = String(body.sku || "").toUpperCase().trim();
     
-    // 3. Determinar el punto de partida (203 según tu requerimiento)
-    const maxEncontrado = numerosUsados.length > 0 ? Math.max(...numerosUsados) : 0;
-    
-    // Si el máximo es menor a 203, empezamos en 203. Si ya hay más de 203, seguimos.
-    let proximoCorrelativo = maxEncontrado < 203 ? 203 : maxEncontrado + 1;
-
-    // 4. Verificación de Seguridad "Uno a Uno" (Punch-Test)
-    // Esto asegura que el SKU realmente no exista en la base de datos profunda de Obuma
-    let skuDefinitivo = "";
-    let disponible = false;
-    let intentos = 0;
-
-    while (!disponible && intentos < 15) {
-      const candidato = `${prefijoSub}${String(proximoCorrelativo).padStart(3, '0')}`;
-      
-      const checkRes = await fetch(`${process.env.OBUMA_API_URL}/productos.get.json?codigo=${candidato}`, {
-        headers,
-        cache: 'no-store'
-      });
-      
-      const checkData = await checkRes.json();
-
-      // Si Obuma devuelve status false o no hay data, el SKU está LIBRE
-      if (checkData.status === false || !checkData.data) {
-        skuDefinitivo = candidato;
-        disponible = true;
-      } else {
-        proximoCorrelativo++;
-        intentos++;
-      }
+    // Validamos que existan los datos mínimos antes de seguir
+    if (!nombreLimpio || !skuLimpio) {
+      return NextResponse.json(
+        { error: "El nombre y el SKU son obligatorios." },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ 
-      sku: skuDefinitivo, 
-      correlativo: proximoCorrelativo 
+    const headers = {
+      'access-token': process.env.OBUMA_API_TOKEN || '',
+      'Content-Type': 'application/json'
+    };
+
+    // Mapeo de datos para la API de Obuma
+    // Nota: Revisa que los nombres de los campos (items_nombre, etc) 
+    // sean los que tu documentación de Obuma requiere.
+    const datosParaObuma = {
+      "item_nombre": nombreLimpio,
+      "item_codigo": skuLimpio,
+      "item_id_categoria": body.categoria_id,
+      "item_id_subcategoria": body.subcategoria_id,
+      "item_precio_costo": body.precio_costo || 0,
+      "item_precio_venta": body.precio_venta || 0,
+      "item_impuesto": body.venta_incluye_iva ? 1 : 0, // Ajustar según Obuma
+      "item_stock_control": body.se_mantiene_stock ? 1 : 0,
+      "item_vendible": body.se_puede_vender ? 1 : 0,
+      "item_comprable": body.se_puede_comprar ? 1 : 0
+    };
+
+    // Llamada real a la API de Obuma
+    const res = await fetch(`${process.env.OBUMA_API_URL}/productos.add.json`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(datosParaObuma),
     });
 
+    const result = await res.json();
+
+    if (!res.ok || result.status === false) {
+      return NextResponse.json({ 
+        error: result.message || "Obuma rechazó la creación" 
+      }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, data: result });
+
   } catch (error: any) {
-    console.error("Error en Generador SKU:", error.message);
-    return NextResponse.json({ error: "Error interno del servidor", details: error.message }, { status: 500 });
+    // Aquí es donde capturamos el error para que no salga el 500 genérico
+    console.error("Error Crítico en POST Productos:", error.message);
+    return NextResponse.json({ 
+      error: "Error en el servidor", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
