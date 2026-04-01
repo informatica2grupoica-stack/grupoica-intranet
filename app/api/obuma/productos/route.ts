@@ -4,64 +4,58 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. LÓGICA DE IMPUESTOS (Basada en el análisis de la intranet antigua)
+    // 1. BLINDAJE ANTI-CRASH: Evita el error .toUpperCase() de undefined
+    // Usamos body.nombre_completo que es lo que envía el frontend
+    const nombreLimpio = String(body.nombre_completo || body.nombre || "").toUpperCase().trim();
+    const skuLimpio = String(body.sku || "").toUpperCase().trim();
+
+    if (!nombreLimpio || !skuLimpio) {
+      return NextResponse.json(
+        { error: "Faltan datos críticos: Nombre o SKU vacíos." },
+        { status: 400 }
+      );
+    }
+
+    // 2. LÓGICA DE IMPUESTOS (Sincronizada con los nombres del Frontend)
     const precioVentaBruto = Number(body.precio_venta) || 0;
     const precioCostoBruto = Number(body.precio_costo) || 0;
 
-    // Cálculo de NETOS si el checkbox de IVA está marcado
-    const precioVentaNeto = body.incluye_iva_venta 
+    // Usamos los nombres exactos: venta_incluye_iva y costo_incluye_iva
+    const precioVentaNeto = body.venta_incluye_iva 
       ? Math.round(precioVentaBruto / 1.19) 
       : precioVentaBruto;
 
-    const precioCostoNeto = body.incluye_iva_costo 
+    const precioCostoNeto = body.costo_incluye_iva 
       ? Math.round(precioCostoBruto / 1.19) 
       : precioCostoBruto;
 
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // 2. CONSTRUCCIÓN DEL PAYLOAD (Mapeo Profesional)
+    // 3. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
     const obumaPayload: any = {
-      producto_nombre: body.nombre.toUpperCase().trim(),
-      producto_tipo: "0", // "0" para producto físico
+      producto_nombre: nombreLimpio,
+      producto_tipo: "0", 
       producto_activo: "1",
-      producto_id: "", 
+      producto_codigo_comercial: skuLimpio,
       
-      // Clasificación
-      id_categoria: body.categoria_id.toString(),
-      id_subcategoria: body.subcategoria_id.toString(),
-      producto_categoria: body.categoria_id.toString(),
-      producto_subcategoria: body.subcategoria_id.toString(),
+      // Clasificación (Convertimos a String por seguridad)
+      id_categoria: String(body.categoria_id || ""),
+      id_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos Desglosados
+      // Precios y Costos
       producto_costo_clp_neto: precioCostoNeto.toString(),
-      producto_costo_clp_neto_estandar: precioCostoNeto.toString(),
-      
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de Estado (Sincronización con la UI)
+      // Flags de Estado
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Campos de compatibilidad (Los "temp" que usa Obuma internamente)
-      temp_can_sell: body.se_puede_vender,
-      temp_can_buy: body.se_puede_comprar,
-      temp_can_keep_stock: body.se_mantiene_stock,
-      temp_cost_price: precioCostoBruto,
-      temp_selling_price: precioVentaBruto,
-      temp_selling_taxes: body.incluye_iva_venta,
-      temp_cost_taxes: body.incluye_iva_costo,
-      
-      // Sucursal por defecto (asegura visibilidad)
+      // Sucursal por defecto
       sucursal_id: "1" 
     };
-
-    // 3. Código Comercial (SKU)
-    if (body.sku && body.sku.toString().trim() !== "") {
-      obumaPayload.producto_codigo_comercial = body.sku.toString().trim();
-    }
 
     // 4. Envío a la API de Obuma
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.create.json`, {
@@ -75,20 +69,22 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
+    // 5. Manejo de Respuesta
     if (result.success === false || result.status === false) {
-      console.error("Error Obuma:", result);
+      console.error("❌ Error de Obuma:", result);
       return NextResponse.json({ 
-        error: result.message || 'Error al crear en Obuma',
+        error: result.message || 'Obuma rechazó los datos',
         details: result 
       }, { status: 400 });
     }
 
+    console.log("✅ Producto creado exitosamente:", skuLimpio);
     return NextResponse.json(result);
 
-  } catch (error) {
-    console.error("Error Crítico:", error);
+  } catch (error: any) {
+    console.error("🔥 Error Crítico en POST:", error);
     return NextResponse.json(
-      { error: 'Fallo en la comunicación con el servidor' }, 
+      { error: 'Error interno en el servidor', details: error.message }, 
       { status: 500 }
     );
   }
