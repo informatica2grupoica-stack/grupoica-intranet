@@ -1,67 +1,55 @@
 import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+// DEBE SER "export async function GET" para que no dé error 405
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const prefijoSub = searchParams.get('prefijoSub'); // Ej: 6026424
+
+  if (!prefijoSub) {
+    return NextResponse.json({ error: 'Falta el prefijoSub' }, { status: 400 });
+  }
+
+  const headers = {
+    'access-token': process.env.OBUMA_API_TOKEN || '',
+    'Content-Type': 'application/json'
+  };
+
   try {
-    const body = await request.json();
-
-    // --- PROTECCIÓN ANTI-CRASH ---
-    // Si body.nombre_completo es undefined, esto fallaría. 
-    // Usamos String(...) y || "" para asegurar que siempre haya un texto.
-    const nombreLimpio = String(body.nombre_completo || "").toUpperCase().trim();
-    const skuLimpio = String(body.sku || "").toUpperCase().trim();
+    // 1. Consultar lista de productos
+    const res = await fetch(`${process.env.OBUMA_API_URL}/productos.list.json`, { 
+      headers, 
+      cache: 'no-store' 
+    });
     
-    // Validamos que existan los datos mínimos antes de seguir
-    if (!nombreLimpio || !skuLimpio) {
-      return NextResponse.json(
-        { error: "El nombre y el SKU son obligatorios." },
-        { status: 400 }
-      );
-    }
+    if (!res.ok) throw new Error("Error conectando con Obuma");
+    
+    const result = await res.json();
+    const productos = result.data || [];
 
-    const headers = {
-      'access-token': process.env.OBUMA_API_TOKEN || '',
-      'Content-Type': 'application/json'
-    };
+    // 2. Buscar el correlativo más alto para ese prefijo
+    const numerosUsados = productos
+      .filter((p: any) => String(p.producto_codigo_comercial).startsWith(prefijoSub))
+      .map((p: any) => {
+        const skuStr = String(p.producto_codigo_comercial);
+        const sufijo = skuStr.replace(prefijoSub, "");
+        return parseInt(sufijo) || 0;
+      });
+    
+    const maxEncontrado = numerosUsados.length > 0 ? Math.max(...numerosUsados) : 0;
+    
+    // Lógica: Iniciar en 203 o seguir el conteo
+    let proximoCorrelativo = maxEncontrado < 203 ? 203 : maxEncontrado + 1;
+    const skuDefinitivo = `${prefijoSub}${String(proximoCorrelativo).padStart(3, '0')}`;
 
-    // Mapeo de datos para la API de Obuma
-    // Nota: Revisa que los nombres de los campos (items_nombre, etc) 
-    // sean los que tu documentación de Obuma requiere.
-    const datosParaObuma = {
-      "item_nombre": nombreLimpio,
-      "item_codigo": skuLimpio,
-      "item_id_categoria": body.categoria_id,
-      "item_id_subcategoria": body.subcategoria_id,
-      "item_precio_costo": body.precio_costo || 0,
-      "item_precio_venta": body.precio_venta || 0,
-      "item_impuesto": body.venta_incluye_iva ? 1 : 0, // Ajustar según Obuma
-      "item_stock_control": body.se_mantiene_stock ? 1 : 0,
-      "item_vendible": body.se_puede_vender ? 1 : 0,
-      "item_comprable": body.se_puede_comprar ? 1 : 0
-    };
+    console.log(`✅ SKU Generado: ${skuDefinitivo}`);
 
-    // Llamada real a la API de Obuma
-    const res = await fetch(`${process.env.OBUMA_API_URL}/productos.add.json`, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(datosParaObuma),
+    return NextResponse.json({ 
+      sku: skuDefinitivo, 
+      correlativo: proximoCorrelativo 
     });
 
-    const result = await res.json();
-
-    if (!res.ok || result.status === false) {
-      return NextResponse.json({ 
-        error: result.message || "Obuma rechazó la creación" 
-      }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true, data: result });
-
   } catch (error: any) {
-    // Aquí es donde capturamos el error para que no salga el 500 genérico
-    console.error("Error Crítico en POST Productos:", error.message);
-    return NextResponse.json({ 
-      error: "Error en el servidor", 
-      details: error.message 
-    }, { status: 500 });
+    console.error("❌ Error en Generador SKU:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
