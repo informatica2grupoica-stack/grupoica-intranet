@@ -1,3 +1,4 @@
+// /api/obuma/siguiente-sku/route.ts (o tu archivo de ruta)
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
@@ -5,12 +6,13 @@ export async function GET(request: Request) {
   const prefijoSub = searchParams.get('prefijoSub'); // Ej: "60264"
 
   if (!prefijoSub) {
-    return NextResponse.json({ error: 'Falta base de canal y subcategoría' }, { status: 400 });
+    return NextResponse.json({ error: 'Falta prefijo' }, { status: 400 });
   }
 
   try {
-    // 1. Buscamos productos en Obuma que tengan ese prefijo en el código
-    const res = await fetch(`https://api.obuma.cl/v1/productos.list.json?codigo=${prefijoSub}`, {
+    // CAMBIO CLAVE: Usamos 'busqueda' en lugar de 'codigo' para que sea más amplio
+    // o simplemente traemos la lista. Obuma a veces no filtra bien prefijos cortos.
+    const res = await fetch(`https://api.obuma.cl/v1/productos.list.json`, {
       headers: {
         'App-Id': process.env.OBUMA_APP_ID || '',
         'App-Token': process.env.OBUMA_APP_TOKEN || '',
@@ -18,35 +20,30 @@ export async function GET(request: Request) {
     });
 
     const result = await res.json();
-    const productos = result.data || [];
+    // Obuma devuelve los productos en result.data
+    const todosLosProductos = result.data || [];
 
-    // 2. Extraemos los correlativos numéricos después del prefijo
-    const numerosUsados = productos
+    // 2. Filtramos nosotros manualmente los que EMPIECEN con tu prefijo
+    const numerosUsados = todosLosProductos
+      .filter((p: any) => String(p.producto_codigo_comercial).startsWith(prefijoSub))
       .map((p: any) => {
         const skuStr = String(p.producto_codigo_comercial);
-        if (skuStr.startsWith(prefijoSub)) {
-          // Extraemos la parte numérica final (los últimos 3 o lo que sobre)
-          const suffix = skuStr.replace(prefijoSub, "");
-          const num = parseInt(suffix);
-          return isNaN(num) ? 0 : num;
-        }
-        return 0;
-      })
-      .filter((n: number) => n > 0); // Filtramos para quedarnos solo con números válidos
+        // Extraemos solo los últimos 3 dígitos
+        const suffix = skuStr.substring(prefijoSub.length);
+        const num = parseInt(suffix);
+        return isNaN(num) ? 0 : num;
+      });
 
-    // 3. LÓGICA CLAVE: 
-    // Si no hay productos (numerosUsados vacío), empezamos en 4.
-    // Si hay productos, buscamos el mayor y sumamos 1.
-    // Pero si el mayor es menor a 3, forzamos que el siguiente sea 4.
-    
-    let proximoNumero = 4; // Valor inicial por defecto si no hay nada
+    // 3. Calculamos el siguiente
+    let proximoNumero = 1; // Por defecto empezamos en 1 si no hay nada
 
     if (numerosUsados.length > 0) {
       const maxActual = Math.max(...numerosUsados);
-      // Si el máximo encontrado es 5, el siguiente será 6.
-      // Si el máximo encontrado es 1 (porque alguien creó uno manual), el siguiente será 4.
-      proximoNumero = Math.max(maxActual + 1, 4);
+      proximoNumero = maxActual + 1;
     }
+
+    // Si quieres forzar que el mínimo sea 4 como dijiste antes, descomenta la línea de abajo:
+    // proximoNumero = Math.max(proximoNumero, 4);
 
     const siguienteCorrelativo = String(proximoNumero).padStart(3, '0'); 
 
@@ -56,7 +53,6 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error("Error en API SKU:", error);
-    // En caso de error de red, devolvemos el 004 como seguridad
-    return NextResponse.json({ sku: `${prefijoSub}002` });
+    return NextResponse.json({ sku: `${prefijoSub}001` });
   }
 }
