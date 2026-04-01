@@ -39,6 +39,6 @@ export async function GET(request: Request) {
 
   } catch (error) {
     // Si falla la API, por seguridad damos el 001 del prefijo
-    return NextResponse.json({ sku: `${prefijoSub}001` });
+    return NextResponse.json({ sku: `${prefijoSub}002` });
   }
 }
