@@ -2,65 +2,60 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const prefijoSub = searchParams.get('prefijoSub'); 
-  const inicioManual = searchParams.get('inicio'); 
+  const prefijoSub = searchParams.get('prefijoSub'); // Ejemplo: 6026423
 
   if (!prefijoSub) return NextResponse.json({ error: 'Falta prefijo' }, { status: 400 });
 
   const headers = {
-    'App-Id': process.env.OBUMA_APP_ID || '',
-    'App-Token': process.env.OBUMA_APP_TOKEN || ''
+    'access-token': process.env.OBUMA_API_TOKEN || '',
+    'Content-Type': 'application/json'
   };
 
   try {
-    // 1. Obtener lista para base inicial
-    const res = await fetch(`https://api.obuma.cl/v1/productos.list.json`, { 
+    // 1. Obtener la lista completa para ver qué números ya existen
+    const res = await fetch(`${process.env.OBUMA_API_URL}/productos.list.json`, { 
       headers, 
       cache: 'no-store' 
     });
-
-    if (!res.ok) throw new Error('Fallo al conectar con lista de Obuma');
-
+    
+    if (!res.ok) throw new Error("No se pudo obtener la lista de Obuma");
+    
     const result = await res.json();
-    const productos = result.data || [];
+    const productos = result.data || result.productos || [];
 
-    // 2. Determinar correlativo inicial
-    let proximoCorrelativo = 1;
+    // 2. Extraer los números correlativos que ya existen para ese prefijo
+    const numerosUsados = productos
+      .filter((p: any) => String(p.producto_codigo_comercial).startsWith(prefijoSub))
+      .map((p: any) => {
+        const skuStr = String(p.producto_codigo_comercial);
+        const sufijo = skuStr.replace(prefijoSub, ""); // Quitamos el prefijo
+        return parseInt(sufijo) || 0;
+      });
+    
+    // 3. Determinar el punto de partida (203 según tu requerimiento)
+    const maxEncontrado = numerosUsados.length > 0 ? Math.max(...numerosUsados) : 0;
+    
+    // Si el máximo es menor a 203, empezamos en 203. Si ya hay más de 203, seguimos.
+    let proximoCorrelativo = maxEncontrado < 203 ? 203 : maxEncontrado + 1;
 
-    if (inicioManual) {
-      proximoCorrelativo = parseInt(inicioManual);
-    } else {
-      const numerosUsados = productos
-        .filter((p: any) => String(p.producto_codigo_comercial).startsWith(prefijoSub))
-        .map((p: any) => {
-          const skuStr = String(p.producto_codigo_comercial);
-          const sufijo = skuStr.replace(prefijoSub, "");
-          const num = parseInt(sufijo);
-          return isNaN(num) ? 0 : num;
-        });
-      
-      const maxEncontrado = numerosUsados.length > 0 ? Math.max(...numerosUsados) : 0;
-      // Si no hay productos, empezamos en 203 por estándar de Grupo ICA, si no, max + 1
-      proximoCorrelativo = maxEncontrado > 0 ? maxEncontrado + 1 : 203;
-    }
-
-    // 3. Verificación de Disponibilidad Real (Punch-Test)
+    // 4. Verificación de Seguridad "Uno a Uno" (Punch-Test)
+    // Esto asegura que el SKU realmente no exista en la base de datos profunda de Obuma
     let skuDefinitivo = "";
     let disponible = false;
     let intentos = 0;
 
-    while (!disponible && intentos < 10) {
+    while (!disponible && intentos < 15) {
       const candidato = `${prefijoSub}${String(proximoCorrelativo).padStart(3, '0')}`;
       
-      const checkRes = await fetch(`https://api.obuma.cl/v1/productos.get.json?codigo=${candidato}`, {
+      const checkRes = await fetch(`${process.env.OBUMA_API_URL}/productos.get.json?codigo=${candidato}`, {
         headers,
         cache: 'no-store'
       });
       
       const checkData = await checkRes.json();
 
-      // Si status es false, el código está disponible
-      if (checkData.status === false) {
+      // Si Obuma devuelve status false o no hay data, el SKU está LIBRE
+      if (checkData.status === false || !checkData.data) {
         skuDefinitivo = candidato;
         disponible = true;
       } else {
@@ -71,12 +66,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ 
       sku: skuDefinitivo, 
-      correlativo: proximoCorrelativo,
-      check: "verificado_en_obuma" 
+      correlativo: proximoCorrelativo 
     });
 
   } catch (error: any) {
     console.error("Error en Generador SKU:", error.message);
-    return NextResponse.json({ error: "Error interno del servidor Obuma" }, { status: 500 });
+    return NextResponse.json({ error: "Error interno del servidor", details: error.message }, { status: 500 });
   }
 }
