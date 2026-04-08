@@ -51,16 +51,16 @@ export async function POST(request: Request) {
       producto_activo: "1",
       producto_codigo_comercial: skuLimpio,
       
-      // Clasificación técnica
-      id_categoria: String(body.categoria_id || ""),
-      id_subcategoria: String(body.subcategoria_id || ""),
+      // Clasificación técnica (Ajustado según tu documentación API)
+      producto_categoria: String(body.categoria_id || ""),
+      producto_subcategoria: String(body.subcategoria_id || ""),
       
       // ID 1 suele ser IVA 19% en cuentas de Chile
       producto_impuesto_id: "1", 
       
-      // Precios y Costos (Enviamos todo desglosado como en la intranet vieja)
+      // Precios y Costos
       producto_costo_clp_neto: precioCostoNeto.toString(),
-      // AGREGADO: Costo Estándar (mismo que costo neto)
+      // AGREGADO: Costo Estándar (mismo que costo neto para reportes)
       producto_costo_clp_neto_estandar: precioCostoNeto.toString(),
       
       producto_precio_clp_neto: precioVentaNeto.toString(),
@@ -73,8 +73,9 @@ export async function POST(request: Request) {
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
 
       // AGREGADO: Sincronización con Dime / Web
-      // Obuma usa 'producto_web' o 'producto_vender_en_web' para activar e-commerce
-      producto_web: body.enviar_a_dime ? "1" : "0",
+      // Usamos 'producto_vender_en_web' que es el estándar para integraciones e-commerce
+      producto_vender_en_web: body.enviar_a_dime ? "1" : "0",
+      producto_web: body.enviar_a_dime ? "1" : "0", // Mantenemos ambos por compatibilidad
       
       // Sucursal principal
       sucursal_id: "1" 
