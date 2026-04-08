@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Layers, Tag, BarChart3, Camera, X } from "lucide-react";
+import { Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Layers, Tag, Camera, X, Box, Ruler } from "lucide-react";
 
 interface Categoria {
   producto_categoria_id: string | number;
@@ -25,9 +25,12 @@ export default function NuevoProductoForm() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
 
-  // Partes del nombre para el generador automático
-  const [nameParts, setNameParts] = useState({ 
-    c1: "", c2: "", c3: "", unit: "MT", c4: "" 
+  // Estado consolidado para el nombre
+  const [nameData, setNameData] = useState({ 
+    articulo: "", 
+    especificacion: "", 
+    medida: "", 
+    unidad: "MT" 
   });
 
   const [form, setForm] = useState({
@@ -46,29 +49,21 @@ export default function NuevoProductoForm() {
     imagen_nombre: ""
   });
 
-  // --- 1. LÓGICA DE IMAGEN (Optimización Base64) ---
+  // Carga de Imagen con limpieza inmediata
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Límite de 3MB para no saturar el JSON del POST
-      if (file.size > 3 * 1024 * 1024) {
-        setStatus({ type: 'error', msg: "La imagen es muy pesada (Máx 3MB)" });
+      if (file.size > 5 * 1024 * 1024) {
+        setStatus({ type: 'error', msg: "Imagen muy pesada (máx 5MB)" });
         return;
       }
-
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64Full = reader.result as string;
-        setImagePreview(base64Full);
-        
-        // Obuma requiere el base64 PURO (sin el prefijo data:image/...)
-        const base64Clean = base64Full.split(',')[1];
-        
-        setForm(prev => ({ 
-          ...prev, 
-          imagen_data: base64Clean,
-          imagen_nombre: file.name
-        }));
+        const base64String = reader.result as string;
+        setImagePreview(base64String);
+        // Enviamos el base64 sin el prefijo para no corromper la API
+        const base64Pure = base64String.split(',')[1];
+        setForm(prev => ({ ...prev, imagen_data: base64Pure, imagen_nombre: file.name }));
       };
       reader.readAsDataURL(file);
     }
@@ -80,7 +75,6 @@ export default function NuevoProductoForm() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // --- 2. CARGA DE DATOS INICIALES ---
   useEffect(() => {
     async function loadData() {
       try {
@@ -93,36 +87,32 @@ export default function NuevoProductoForm() {
         setCategorias(Array.isArray(dataCat) ? dataCat : []);
         setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
       } catch (err) { 
-        setStatus({ type: 'error', msg: "Error al conectar con la API de Categorías" });
+        setStatus({ type: 'error', msg: "Error al conectar con la API" });
       }
     }
     loadData();
   }, []);
 
-  // --- 3. CONSTRUICTOR DE NOMBRE AUTOMÁTICO ---
+  // Constructor de nombre automático
   useEffect(() => {
-    const clean = (t: any) => (t ? String(t).toUpperCase().trim() : "");
+    const clean = (t: string) => t.toUpperCase().trim();
     const parts = [
-      clean(nameParts.c1),
-      clean(nameParts.c2),
-      nameParts.c3 ? `${clean(nameParts.c3)} ${clean(nameParts.unit)}` : "",
-      clean(nameParts.c4)
-    ].filter(p => p !== "");
+      clean(nameData.articulo),
+      clean(nameData.especificacion),
+      nameData.medida ? `${clean(nameData.medida)}${nameData.unidad}` : ""
+    ].filter(Boolean);
     setForm(prev => ({ ...prev, nombre_completo: parts.join(" ") }));
-  }, [nameParts]);
+  }, [nameData]);
 
   const subCategoriasFiltradas = useMemo(() => {
     if (!form.categoria_id) return [];
-    return allSubcategorias.filter(s => 
-      String(s.rel_producto_categoria_id) === String(form.categoria_id)
-    );
+    return allSubcategorias.filter(s => String(s.rel_producto_categoria_id) === String(form.categoria_id));
   }, [allSubcategorias, form.categoria_id]);
 
-  // --- 4. GENERADOR DE SKU INTELIGENTE ---
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId) {
-        setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
-        return;
+      setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
+      return;
     }
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
@@ -130,245 +120,257 @@ export default function NuevoProductoForm() {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const nombreCat = cat?.producto_categoria_nombre?.toUpperCase() || "";
       
-      // Lógica de prefijos según tu mercado
       let prefijo = "50";
       if (nombreCat.includes("MERCADO PUBLICO")) prefijo = "60";
-      if (nombreCat.includes("MAYORISTA")) prefijo = "70";
+      if (nombreCat.includes("MAYORISTA CONSTRUCTOR B2B")) prefijo = "70";
 
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
       if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
     } catch (err) { 
-      setStatus({ type: 'error', msg: "Error generando SKU" });
+      setStatus({ type: 'error', msg: "No se pudo generar SKU" });
     } finally { 
       setGeneratingSku(false); 
     }
   };
 
-  // --- 5. ENVÍO FINAL ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombre_completo || !form.sku || !form.categoria_id || !form.subcategoria_id) {
-      setStatus({ type: 'error', msg: "Faltan campos obligatorios (Nombre, SKU, Categoría)" });
-      return;
-    }
-    
     setLoading(true);
     setStatus(null);
-
     try {
       const res = await fetch('/api/obuma/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-
-      const result = await res.json();
-
+      const data = await res.json();
+      
       if (res.ok) {
-        setStatus({ type: 'success', msg: `Producto ${form.sku} creado con éxito` });
-        
-        // Reset parcial: Limpiamos nombre y foto, pero mantenemos categoría para el siguiente producto
-        setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
+        setStatus({ type: 'success', msg: `Producto ${form.sku} creado exitosamente` });
+        setNameData({ articulo: "", especificacion: "", medida: "", unidad: "MT" });
         removeImage();
-        setForm(prev => ({ 
-            ...prev, 
-            precio_costo: 0, 
-            precio_venta: 0, 
-            imagen_data: "", 
-            imagen_nombre: "" 
-        }));
-        
-        // Pedimos el siguiente SKU de la misma subcategoría de inmediato
+        setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
         await solicitarNuevoSku(form.subcategoria_id);
       } else {
-        setStatus({ type: 'error', msg: result.error || "Error en el servidor" });
+        setStatus({ type: 'error', msg: data.error || "Error al crear" });
       }
     } catch (error) { 
-      setStatus({ type: 'error', msg: "Error crítico de conexión" }); 
+      setStatus({ type: 'error', msg: "Error de red" }); 
     } finally { 
       setLoading(false); 
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] p-4 lg:p-8">
-      <div className="max-w-[1100px] mx-auto">
+    <div className="min-h-screen bg-[#F4F7FA] p-4 lg:p-12 text-slate-800 font-sans">
+      <div className="max-w-5xl mx-auto">
         
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        {/* Header Minimalista */}
+        <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-              <PackagePlus size={32} className="text-blue-600" /> 
-              MAESTRO DE PRODUCTOS
-            </h1>
-            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">Panel de Control Mayorista Constructor</p>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                <PackagePlus size={18} />
+              </div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">Nuevo Producto</h1>
+            </div>
+            <p className="text-slate-500 font-medium text-sm">Maestro de Inventario • Mayorista Constructor</p>
           </div>
-          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
-             <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse ml-2"></div>
-             <span className="text-[10px] font-black text-slate-600 uppercase pr-2">Obuma Cloud Sync</span>
+          <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-3">
+             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Obuma Cloud Sync</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* COLUMNA IZQUIERDA: CONFIGURACIÓN */}
-          <div className="lg:col-span-7 space-y-6">
+          {/* Columna Izquierda: Datos */}
+          <div className="lg:col-span-2 space-y-6">
             
-            {/* SECCIÓN 1: NOMBRE */}
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="bg-blue-600 p-2 rounded-lg text-white"><Tag size={20}/></div>
-                <h2 className="font-black text-slate-800 uppercase text-sm tracking-tight">1. Construcción de Identidad</h2>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Tipo</label>
-                  <input placeholder="Ej: TUBO" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold uppercase text-xs focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Atributo</label>
-                  <input placeholder="Ej: PVC" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold uppercase text-xs focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Medida</label>
-                  <input placeholder="Ej: 110" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Unidad</label>
-                  <select className="p-4 bg-slate-100 rounded-2xl font-black text-xs outline-none cursor-pointer" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
-                    <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
-                  </select>
-                </div>
-                <div className="col-span-2 md:col-span-4 flex flex-col gap-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Marca o Detalle Adicional</label>
-                  <input placeholder="Ej: TIGRE CLASE 10" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
-                </div>
+            {/* 1. Nombre y Medidas */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-6">
+                <Tag className="text-blue-600" size={18} />
+                <h2 className="font-bold text-xs uppercase tracking-widest text-slate-400">Identificación</h2>
               </div>
 
-              <div className="mt-8 p-6 bg-slate-900 rounded-[2rem] border-b-8 border-blue-600 shadow-xl">
-                <span className="text-blue-400 text-[10px] font-black uppercase tracking-widest block mb-2">Vista Previa Nombre:</span>
-                <p className="text-white font-black text-xl uppercase leading-none break-words">
-                  {form.nombre_completo || "SIN NOMBRE"}
-                </p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase ml-1 text-slate-400">Artículo Principal</label>
+                    <input 
+                      placeholder="Ej: TUBO PVC, CEMENTO, MALLA" 
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase text-sm outline-none focus:ring-2 ring-blue-500/10 transition-all"
+                      value={nameData.articulo} 
+                      onChange={e => setNameData({...nameData, articulo: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase ml-1 text-slate-400">Dimensión / Peso</label>
+                    <div className="flex gap-2">
+                      <input 
+                        placeholder="Ej: 110, 25, 3/4" 
+                        className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm outline-none"
+                        value={nameData.medida} 
+                        onChange={e => setNameData({...nameData, medida: e.target.value})} 
+                      />
+                      <select 
+                        className="w-24 p-4 bg-slate-100 rounded-2xl font-bold text-xs outline-none cursor-pointer"
+                        value={nameData.unidad} 
+                        onChange={e => setNameData({...nameData, unidad: e.target.value})}
+                      >
+                        <option value="MT">MT</option>
+                        <option value="KG">KG</option>
+                        <option value="GL">GL</option>
+                        <option value="MM">MM</option>
+                        <option value='"'>" (PULG)</option>
+                        <option value="L">LTS</option>
+                        <option value="UN">UN</option>
+                        <option value="ROL">ROL</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase ml-1 text-slate-400">Especificaciones Técnicas (Texto Libre)</label>
+                  <input 
+                    placeholder="Ej: CLASE 10 HIDRÁULICO C/CAMPANA GRIS" 
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase text-sm outline-none focus:ring-2 ring-blue-500/10"
+                    value={nameData.especificacion} 
+                    onChange={e => setNameData({...nameData, especificacion: e.target.value})} 
+                  />
+                </div>
+
+                <div className="mt-4 p-5 bg-slate-900 rounded-2xl">
+                  <span className="text-blue-400 text-[9px] font-black uppercase block mb-1">Preview en Obuma:</span>
+                  <p className="text-white font-bold text-lg leading-tight uppercase">
+                    {form.nombre_completo || "SIN NOMBRE..."}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* SECCIÓN 2: CATEGORIZACIÓN */}
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="bg-indigo-600 p-2 rounded-lg text-white"><Layers size={20}/></div>
-                <h2 className="font-black text-slate-800 uppercase text-sm tracking-tight">2. Ubicación en Catálogo</h2>
+            {/* 2. Categoría y SKU */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-6">
+                <Layers className="text-blue-600" size={18} />
+                <h2 className="font-bold text-xs uppercase tracking-widest text-slate-400">Categorización</h2>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-indigo-500" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
+                  <select 
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500"
+                    value={form.categoria_id} 
+                    onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
+                  >
                     <option value="">Categoría Principal...</option>
                     {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
                   </select>
                   
-                  <select disabled={!form.categoria_id} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none disabled:opacity-50 focus:border-indigo-500" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
+                  <select 
+                    disabled={!form.categoria_id} 
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none disabled:opacity-30"
+                    value={form.subcategoria_id} 
+                    onChange={e => solicitarNuevoSku(e.target.value)}
+                  >
                     <option value="">Subcategoría...</option>
                     {subCategoriasFiltradas.map(s => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
                   </select>
                 </div>
-                
-                <div className="bg-indigo-50 rounded-3xl p-6 border-2 border-indigo-100 flex flex-col items-center justify-center relative overflow-hidden">
-                   <div className="absolute top-0 right-0 p-2 opacity-10 text-indigo-600"><Tag size={60}/></div>
-                   <span className="text-[10px] font-black text-indigo-400 uppercase mb-1 z-10">SKU Sugerido</span>
-                   <div className="flex items-center gap-4 z-10">
-                      <span className="text-4xl font-black text-indigo-900 tracking-tighter">
-                        {generatingSku ? <Loader2 className="animate-spin text-indigo-400"/> : (form.sku || "---")}
-                      </span>
-                      {form.subcategoria_id && (
-                        <button onClick={() => solicitarNuevoSku(form.subcategoria_id)} className="p-2 bg-indigo-600 text-white rounded-full hover:rotate-180 transition-all duration-500">
-                          <RefreshCcw size={14} />
-                        </button>
-                      )}
-                   </div>
+
+                <div className="bg-blue-50 rounded-2xl p-6 flex flex-col items-center justify-center border border-blue-100">
+                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Código SKU</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl font-black text-blue-900 tracking-tighter">
+                      {generatingSku ? <Loader2 className="animate-spin" /> : (form.sku || "---")}
+                    </span>
+                    <button 
+                      onClick={() => solicitarNuevoSku(form.subcategoria_id)}
+                      disabled={!form.subcategoria_id}
+                      className="p-2 bg-white rounded-full text-blue-600 shadow-sm hover:shadow-md transition-all active:scale-90"
+                    >
+                      <RefreshCcw size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: MULTIMEDIA Y PRECIOS */}
-          <div className="lg:col-span-5 space-y-6">
+          {/* Columna Derecha: Foto y Acción */}
+          <div className="space-y-6">
             
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 sticky top-8">
-              
-              {/* IMAGEN PRODUCTO */}
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Camera className="text-blue-600" size={18} />
-                  <h2 className="font-black text-xs uppercase text-slate-500">Imagen del Producto</h2>
-                </div>
-
-                <div 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`relative group cursor-pointer border-4 border-dashed rounded-[2rem] h-64 flex flex-col items-center justify-center transition-all ${imagePreview ? 'border-transparent bg-slate-100' : 'border-slate-100 hover:border-blue-400 hover:bg-blue-50/50'}`}
-                >
-                  {imagePreview ? (
-                    <>
-                      <img src={imagePreview} alt="Preview" className="w-full h-full object-contain p-4 drop-shadow-md" />
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeImage(); }}
-                        className="absolute top-4 right-4 bg-rose-500 p-3 rounded-2xl text-white shadow-lg hover:scale-110 transition-transform"
-                      >
-                        <X size={20} />
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-center">
-                      <div className="bg-white shadow-xl text-blue-600 p-6 rounded-3xl inline-block mb-4 group-hover:scale-110 transition-transform">
-                        <Camera size={32} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click para cargar</p>
-                    </div>
-                  )}
-                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
-                </div>
+            {/* Foto del Producto */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+               <div className="flex items-center gap-2 mb-4">
+                <Camera className="text-blue-600" size={16} />
+                <h2 className="font-bold text-xs uppercase tracking-widest text-slate-400">Multimedia</h2>
               </div>
 
-              {/* PRECIO Y ACCIÓN */}
-              <div className="space-y-6 pt-6 border-t border-slate-100">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-2">
-                    <BarChart3 size={14}/> Precio de Venta (Con IVA)
-                  </label>
-                  <div className="relative group">
-                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-600 font-bold text-xl">$</div>
-                    <input 
-                      type="number" 
-                      placeholder="0" 
-                      className="w-full pl-12 p-5 bg-emerald-50 text-emerald-700 border-2 border-transparent rounded-3xl font-black text-2xl outline-none focus:border-emerald-500 transition-all" 
-                      value={form.precio_venta} 
-                      onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} 
-                    />
-                  </div>
-                </div>
-
-                {status && (
-                  <div className={`p-5 rounded-3xl flex items-start gap-3 border-2 animate-in fade-in slide-in-from-top-4 ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
-                    {status.type === 'success' ? <Check className="mt-1" size={20}/> : <AlertCircle className="mt-1" size={20}/>}
-                    <p className="text-xs font-black uppercase leading-tight">{status.msg}</p>
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden ${imagePreview ? 'border-transparent bg-slate-50' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer'}`}
+              >
+                {imagePreview ? (
+                  <>
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-contain p-2" />
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeImage(); }}
+                      className="absolute top-2 right-2 bg-white/90 p-2 rounded-full text-red-500 shadow-md hover:bg-red-50"
+                    >
+                      <X size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center p-4">
+                    <Camera size={32} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Subir Foto</p>
                   </div>
                 )}
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
+              </div>
+            </div>
 
-                <button 
-                  onClick={handleSubmit}
-                  disabled={loading || !form.sku || !form.nombre_completo}
-                  className="w-full bg-[#00338d] hover:bg-blue-800 disabled:bg-slate-200 disabled:text-slate-400 text-white py-6 rounded-3xl font-black uppercase tracking-[0.2em] flex items-center justify-center gap-4 shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all"
-                >
-                  {loading ? <Loader2 className="animate-spin" size={24} /> : <PackagePlus size={24} />}
-                  <span className="text-sm">Sincronizar con Obuma</span>
-                </button>
+            {/* Precios y Envío */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-4">
+                <DollarSign className="text-emerald-600" size={16} />
+                <h2 className="font-bold text-xs uppercase tracking-widest text-slate-400">Precio</h2>
+              </div>
+              
+              <div className="relative mb-6">
+                <input 
+                  type="number" 
+                  placeholder="0" 
+                  className="w-full p-4 pl-10 bg-slate-900 text-white rounded-2xl font-black text-xl outline-none"
+                  value={form.precio_venta} 
+                  onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} 
+                />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-bold">$</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Venta Neto</span>
               </div>
 
-            </div>
-          </div>
+              {status && (
+                <div className={`mb-4 p-4 rounded-xl flex items-center gap-2 border ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                  {status.type === 'success' ? <Check size={16}/> : <AlertCircle size={16}/>}
+                  <span className="text-[10px] font-black uppercase leading-tight">{status.msg}</span>
+                </div>
+              )}
 
+              <button 
+                onClick={handleSubmit}
+                disabled={loading || !form.sku || !form.nombre_completo}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[2px] shadow-lg shadow-blue-500/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+              >
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
+                Sincronizar Maestro
+              </button>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>

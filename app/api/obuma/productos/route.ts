@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// 1. CONFIGURACIÓN DE TAMAÑO (Crucial para imágenes)
+// Mantenemos el límite de tamaño para que Next.js no bloquee fotos pesadas
 export const config = {
   api: {
     bodyParser: {
@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 2. BLINDAJE Y LIMPIEZA DE DATOS
-    const nombreLimpio = String(body.nombre_completo || "").toUpperCase().trim();
+    // 1. BLINDAJE ANTI-CRASH (Tus originales)
+    const nombreLimpio = String(body.nombre_completo || body.nombre || "").toUpperCase().trim();
     const skuLimpio = String(body.sku || "").toUpperCase().trim();
 
     if (!nombreLimpio || !skuLimpio) {
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. LÓGICA DE IMPUESTOS (Cálculo de Neto/IVA)
+    // 2. LÓGICA DE IMPUESTOS (Tu lógica intacta)
     const precioVentaBruto = Number(body.precio_venta) || 0;
     const precioCostoBruto = Number(body.precio_costo) || 0;
 
@@ -38,19 +38,20 @@ export async function POST(request: Request) {
 
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // 4. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
-    // Nota: Usamos campos que Obuma acepta según su documentación de integración
+    // 3. CONSTRUCCIÓN DEL PAYLOAD (Mejorado con datos de tu log)
     const obumaPayload: any = {
       producto_nombre: nombreLimpio,
-      producto_tipo: "1", // 1=Producto, 2=Servicio
+      producto_tipo: "0", // Mantenemos 0 según tu intranet antigua
       producto_activo: "1",
       producto_codigo_comercial: skuLimpio,
       
-      // Clasificación
+      // Clasificación (Duplicamos campos para asegurar compatibilidad con Obuma)
       id_categoria: String(body.categoria_id || ""),
       id_subcategoria: String(body.subcategoria_id || ""),
+      producto_categoria: String(body.categoria_id || ""),
+      producto_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos
+      // Precios y Costos (Tus campos originales)
       producto_costo_clp_neto: precioCostoNeto.toString(),
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
@@ -64,21 +65,22 @@ export async function POST(request: Request) {
       sucursal_id: "1" 
     };
 
-    // --- MANEJO DE IMAGEN (El campo correcto en Obuma suele ser base64_foto) ---
+    // --- MEJORA: AGREGAR IMAGEN CON LIMPIEZA DE DATA-URL ---
     if (body.imagen_data) {
-      // Obuma recibe el base64 SIN el prefijo "data:image/jpeg;base64,"
-      // El front ya lo limpia, pero aquí lo enviamos en los campos probables
-      obumaPayload.base64_foto = body.imagen_data; 
+      // Importante: Eliminamos el prefijo "data:image/..." si es que viene del front
+      const base64Limpio = body.imagen_data.replace(/^data:image\/\w+;base64,/, "");
+      
+      // Enviamos en los campos que Obuma reconoce para carga directa
+      obumaPayload.base64_foto = base64Limpio; 
       obumaPayload.nombre_foto = body.imagen_nombre || `${skuLimpio}.jpg`;
       
-      // Compatibilidad adicional por si tu versión de API usa campos alternativos
-      obumaPayload.imagen_base64 = body.imagen_data; 
+      // Mantenemos tus campos originales por si tu versión de API los pide así
+      obumaPayload.imagen_base64 = base64Limpio; 
       obumaPayload.imagen_nombre = body.imagen_nombre || `${skuLimpio}.jpg`;
     }
 
-    // 5. ENVÍO A OBUMA (productos.add.json es el estándar para creación)
-    // Probamos con productos.create.json o productos.add.json según tu endpoint
-    const response = await fetch(`${process.env.OBUMA_API_URL}/productos.add.json`, {
+    // 4. Envío a la API de Obuma
+    const response = await fetch(`${process.env.OBUMA_API_URL}/productos.create.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -89,8 +91,8 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
-    // 6. MANEJO DE RESPUESTA
-    if (result.status === 'error' || result.success === false) {
+    // 5. Manejo de Respuesta
+    if (result.success === false || result.status === "error" || result.status === false) {
       console.error("❌ Error de Obuma:", result);
       return NextResponse.json({ 
         error: result.message || 'Obuma rechazó los datos',
@@ -98,11 +100,11 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    console.log("✅ Producto sincronizado exitosamente:", skuLimpio);
-    return NextResponse.json({ success: true, data: result });
+    console.log("✅ Producto sincronizado correctamente:", skuLimpio);
+    return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error("🔥 Error Crítico en Backend:", error);
+    console.error("🔥 Error Crítico en POST:", error);
     return NextResponse.json(
       { error: 'Error interno en el servidor', details: error.message }, 
       { status: 500 }
