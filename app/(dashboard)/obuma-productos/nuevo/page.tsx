@@ -1,49 +1,35 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { 
-  Loader2, PackagePlus, RefreshCcw, Check, AlertCircle, 
-  Tag, Layers, DollarSign, BarChart3, ChevronRight 
-} from "lucide-react";
-
-interface Categoria {
-  producto_categoria_id: string | number;
-  producto_categoria_nombre: string;
-}
-
-interface Subcategoria {
-  producto_subcategoria_id: string | number;
-  producto_subcategoria_nombre: string;
-  rel_producto_categoria_id: string | number;
-}
+import { Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Layers, Tag, BarChart3 } from "lucide-react";
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
   const [generatingSku, setGeneratingSku] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
+  
+  const [categorias, setCategorias] = useState([]);
+  const [allSubcategorias, setAllSubcategorias] = useState([]);
 
-  // Piezas para armar el nombre
   const [nameParts, setNameParts] = useState({ 
     c1: "", c2: "", c3: "", unit: "MT", c4: "" 
   });
 
   const [form, setForm] = useState({
     nombre_completo: "",
-    sku: "",
+    sku: "", 
     categoria_id: "",
     subcategoria_id: "",
     precio_costo: 0,
-    costo_incluye_iva: true,
     precio_venta: 0,
     venta_incluye_iva: true,
+    costo_incluye_iva: true,
     se_puede_vender: true,
     se_puede_comprar: true,
     se_mantiene_stock: true,
   });
 
-  // Carga de categorías y subcategorías
+  // Carga de datos inicial
   useEffect(() => {
     async function loadData() {
       try {
@@ -51,16 +37,18 @@ export default function NuevoProductoForm() {
           fetch('/api/obuma/categorias'),
           fetch('/api/obuma/subcategorias')
         ]);
-        setCategorias(await resCat.json());
-        setAllSubcategorias(await resSub.json());
-      } catch (err) {
-        setStatus({ type: 'error', msg: "Error de conexión con Obuma" });
+        const dataCat = await resCat.json();
+        const dataSub = await resSub.json();
+        setCategorias(Array.isArray(dataCat) ? dataCat : []);
+        setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
+      } catch (err) { 
+        setStatus({ type: 'error', msg: "Error de conexión con la base de datos" });
       }
     }
     loadData();
   }, []);
 
-  // Construcción automática del nombre
+  // Construcción del nombre
   useEffect(() => {
     const clean = (t: any) => (t ? String(t).toUpperCase().trim() : "");
     const parts = [
@@ -73,221 +61,198 @@ export default function NuevoProductoForm() {
   }, [nameParts]);
 
   const subCategoriasFiltradas = useMemo(() => {
+    if (!form.categoria_id) return [];
     return allSubcategorias.filter(s => String(s.rel_producto_categoria_id) === String(form.categoria_id));
   }, [allSubcategorias, form.categoria_id]);
 
   const solicitarNuevoSku = async (subId: string) => {
-    setForm(prev => ({ ...prev, subcategoria_id: subId }));
-    if (!subId) return;
-    
+    if (!subId) {
+        setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
+        return;
+    }
     setGeneratingSku(true);
+    setForm(prev => ({ ...prev, subcategoria_id: subId }));
     try {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const prefijo = cat?.producto_categoria_nombre?.toUpperCase().includes("MERCADO PUBLICO") ? "60" : "50";
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
       if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
-    } catch (err) {
-      setStatus({ type: 'error', msg: "No se pudo generar el SKU" });
-    } finally {
-      setGeneratingSku(false);
+    } catch (err) { 
+      setStatus({ type: 'error', msg: "Error al generar SKU" });
+    } finally { 
+      setGeneratingSku(false); 
     }
   };
 
-  const handleSubmit = async () => {
-    if (!form.nombre_completo || !form.sku || !form.categoria_id) {
-      setStatus({ type: 'error', msg: "Nombre, SKU y Categoría son obligatorios" });
-      return;
-    }
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setStatus(null);
     try {
       const res = await fetch('/api/obuma/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, nombre_completo: form.nombre_completo.toUpperCase() }),
       });
-
       if (res.ok) {
-        setStatus({ type: 'success', msg: `Producto ${form.sku} creado exitosamente` });
-        // Limpiar solo lo necesario para el siguiente producto
+        setStatus({ type: 'success', msg: "Producto registrado exitosamente" });
         setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
         setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
-        await solicitarNuevoSku(form.subcategoria_id);
       } else {
-        const err = await res.json();
-        setStatus({ type: 'error', msg: err.error || "Error al crear producto" });
+        setStatus({ type: 'error', msg: "Obuma rechazó los datos. Verifique campos." });
       }
-    } catch (error) {
-      setStatus({ type: 'error', msg: "Error crítico de servidor" });
-    } finally {
-      setLoading(false);
+    } catch (error) { 
+      setStatus({ type: 'error', msg: "Error de servidor" }); 
+    } finally { 
+      setLoading(false); 
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F1F5F9] p-4 lg:p-10 font-sans text-slate-900">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[#f1f5f9] p-6 lg:p-12 text-slate-700">
+      <div className="max-w-4xl mx-auto">
         
-        {/* Header Minimalista */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
-                <PackagePlus className="text-white" size={24} />
-              </div>
-              REGISTRO DE PRODUCTOS
-            </h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-2 ml-14">Chile Marketplace Sync</p>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-2xl border border-slate-200 shadow-sm">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black uppercase text-slate-600">Conexión Activa</span>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-800">Nuevo producto</h1>
+          <p className="text-slate-500 text-sm">Registro centralizado para Obuma Cloud</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Columna Izquierda: Identidad */}
-          <div className="lg:col-span-2 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-8 space-y-8">
             
-            {/* Bloque de Nombre */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-2 mb-6 text-slate-400">
-                <Tag size={16} />
-                <h2 className="text-[10px] font-black uppercase tracking-widest">Identidad del Producto</h2>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <input placeholder="TIPO" className="input-minimal" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
-                <input placeholder="ATRIBUTO" className="input-minimal" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
-                <input placeholder="MEDIDA" className="input-minimal" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
-                <select className="input-minimal bg-slate-100 border-none" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
-                  {["MT", "KG", "UN", "MM", "CC", "LT"].map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-                <input placeholder="MARCA / COLOR / DETALLE EXTRA" className="col-span-2 md:col-span-4 input-minimal" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
-              </div>
-
-              <div className="bg-slate-900 rounded-3xl p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <PackagePlus size={80} className="text-white" />
+            {/* 1. SECCIÓN NOMBRE */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+              <label className="text-sm font-semibold pt-2">Nombre <span className="text-red-500">*</span></label>
+              <div className="md:col-span-3 space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <input placeholder="TIPO" className="f-input" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
+                  <input placeholder="ATRIBUTO" className="f-input" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
+                  <input placeholder="MEDIDA" className="f-input" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
+                  <select className="f-input bg-slate-50" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
+                    <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
+                  </select>
                 </div>
-                <span className="text-blue-400 text-[9px] font-black uppercase tracking-widest block mb-2">Resultado Final</span>
-                <p className="text-white text-xl font-bold uppercase leading-snug break-words">
-                  {form.nombre_completo || "Esperando datos..."}
-                </p>
+                <input placeholder="MARCA / COLOR" className="f-input w-full" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
+                <div className="p-3 bg-slate-900 rounded text-white text-xs font-mono uppercase tracking-wider">
+                  <span className="text-slate-500 mr-2">PREVIEW:</span>
+                  {form.nombre_completo || "---"}
+                </div>
               </div>
             </div>
 
-            {/* Bloque de Categoría */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-2 mb-6 text-slate-400">
-                <Layers size={16} />
-                <h2 className="text-[10px] font-black uppercase tracking-widest">Clasificación Técnica</h2>
+            <hr className="border-slate-100" />
+
+            {/* 2. CLASIFICACIÓN Y SKU */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-4 md:col-span-2">
+                <div className="grid grid-cols-1 gap-4">
+                  <label className="text-sm font-semibold">Categoría <span className="text-red-500">*</span></label>
+                  <select className="f-input" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
+                    <option value="">Selecciona una categoría</option>
+                    {categorias.map((c:any) => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <select className="select-minimal" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
-                  <option value="">Categoría Principal</option>
-                  {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
-                </select>
-                <select disabled={!form.categoria_id} className="select-minimal disabled:opacity-30" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
-                  <option value="">Subcategoría</option>
-                  {subCategoriasFiltradas.map(s => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
-                </select>
+              <div className="space-y-4 md:col-span-2">
+                <div className="grid grid-cols-1 gap-4">
+                  <label className="text-sm font-semibold">Subcategoría <span className="text-red-500">*</span></label>
+                  <select disabled={!form.categoria_id} className="f-input" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
+                    <option value="">Selecciona una subcategoria</option>
+                    {subCategoriasFiltradas.map((s:any) => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <label className="text-sm font-semibold pt-2">SKU</label>
+              <div className="md:col-span-3">
+                <div className="relative max-w-xs">
+                  <input readOnly value={form.sku} placeholder="Auto-generado" className="f-input w-full pr-10 bg-slate-50 font-mono text-blue-700" />
+                  <button type="button" onClick={() => solicitarNuevoSku(form.subcategoria_id)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
+                    <RefreshCcw size={16} className={generatingSku ? "animate-spin" : ""} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* 3. PRECIOS */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-semibold">Precio Costo <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                    <input type="number" className="f-input w-full pl-7" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                    <input type="checkbox" className="rounded border-slate-300 text-blue-600" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
+                    ¿Incluye IVA?
+                  </label>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-semibold text-blue-700">Precio Venta <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400">$</span>
+                    <input type="number" className="f-input w-full pl-7 border-blue-200 bg-blue-50/30" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                    <input type="checkbox" className="rounded border-slate-300 text-blue-600" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
+                    ¿Incluye IVA?
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. CONFIGURACIÓN */}
+            <div className="flex flex-wrap gap-6 py-2">
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_puede_vender} onChange={e => setForm({...form, se_puede_vender: e.target.checked})} />
+                ¿Se puede vender?
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_puede_comprar} onChange={e => setForm({...form, se_puede_comprar: e.target.checked})} />
+                ¿Se puede comprar?
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_mantiene_stock} onChange={e => setForm({...form, se_mantiene_stock: e.target.checked})} />
+                ¿Se mantiene stock?
+              </label>
+            </div>
+
           </div>
 
-          {/* Columna Derecha: Precios y Acción */}
-          <div className="space-y-6">
-            
-            {/* Bloque SKU */}
-            <div className="bg-blue-600 rounded-[2.5rem] p-8 text-white shadow-xl shadow-blue-200 flex flex-col items-center text-center">
-              <span className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-3">SKU Sincronizado</span>
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-black tabular-nums">{generatingSku ? "..." : (form.sku || "----")}</span>
-                <button onClick={() => solicitarNuevoSku(form.subcategoria_id)} disabled={!form.subcategoria_id} className="p-2 bg-white/20 rounded-full hover:bg-white/40 transition-all">
-                  <RefreshCcw size={20} className={generatingSku ? "animate-spin" : ""} />
-                </button>
-              </div>
-            </div>
-
-            {/* Bloque Comercial */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm space-y-6">
-              <div className="flex items-center gap-2 mb-2 text-slate-400">
-                <BarChart3 size={16} />
-                <h2 className="text-[10px] font-black uppercase tracking-widest">Precios e IVA</h2>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="price-input-group">
-                  <span className="text-[10px] font-black text-slate-400 block mb-2 uppercase">Costo Unitario</span>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                      <input type="number" className="w-full pl-10 pr-4 py-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-blue-500/10" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
-                    </div>
-                    <label className="checkbox-iva">
-                      <input type="checkbox" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
-                      <span>IVA</span>
-                    </label>
-                  </div>
+          {/* FOOTER CON ACCIONES */}
+          <div className="bg-slate-50 px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-slate-200">
+            <div className="flex-1">
+              {status && (
+                <div className={`flex items-center gap-2 text-sm font-bold ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {status.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                  {status.msg}
                 </div>
-
-                <div className="price-input-group">
-                  <span className="text-[10px] font-black text-blue-600 block mb-2 uppercase">Precio de Venta</span>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={14} />
-                      <input type="number" className="w-full pl-10 pr-4 py-4 bg-blue-50 border border-blue-100 rounded-2xl font-black text-blue-700 text-lg outline-none" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
-                    </div>
-                    <label className="checkbox-iva bg-blue-600 text-white border-blue-600">
-                      <input type="checkbox" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
-                      <span>IVA</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Botón de Acción */}
-              <div className="pt-4 space-y-4">
-                {status && (
-                  <div className={`p-4 rounded-2xl flex items-center gap-3 border ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                    {status.type === 'success' ? <Check size={16}/> : <AlertCircle size={16}/>}
-                    <p className="text-[10px] font-black uppercase leading-tight">{status.msg}</p>
-                  </div>
-                )}
-
-                <button 
-                  onClick={handleSubmit}
-                  disabled={loading || !form.sku || !form.nombre_completo}
-                  className="group w-full bg-slate-900 hover:bg-black disabled:bg-slate-200 disabled:text-slate-400 text-white py-6 rounded-3xl font-black text-[11px] uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
-                >
-                  {loading ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-                  REGISTRAR PRODUCTO
-                </button>
-              </div>
+              )}
             </div>
+            <button 
+              type="submit"
+              disabled={loading || !form.sku || !form.nombre_completo}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-10 py-2.5 rounded-md font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="animate-spin" size={18} /> : null}
+              {loading ? 'Procesando...' : 'Guardar'}
+            </button>
           </div>
-        </div>
+        </form>
       </div>
 
       <style jsx>{`
-        .input-minimal {
-          @apply p-4 bg-slate-50 border border-transparent rounded-2xl font-bold text-xs outline-none focus:bg-white focus:border-blue-500 transition-all uppercase;
-        }
-        .select-minimal {
-          @apply p-4 bg-slate-50 border border-transparent rounded-2xl font-bold text-xs outline-none focus:bg-white focus:border-blue-500 transition-all;
-        }
-        .checkbox-iva {
-          @apply flex flex-col items-center justify-center p-2 min-w-[50px] border border-slate-200 rounded-2xl cursor-pointer transition-all hover:bg-slate-100;
-        }
-        .checkbox-iva span {
-          @apply text-[9px] font-black mt-1;
-        }
-        .checkbox-iva input {
-          @apply w-4 h-4 accent-blue-600;
+        .f-input {
+          @apply border border-slate-300 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-slate-300;
         }
       `}</style>
     </div>

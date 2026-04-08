@@ -4,8 +4,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. BLINDAJE Y LIMPIEZA DE DATOS
-    // Aseguramos que el nombre vaya en mayúsculas y el SKU esté limpio
+    // 1. LIMPIEZA DE DATOS (Mantenemos tu lógica original)
     const nombreLimpio = String(body.nombre_completo || body.nombre || "").toUpperCase().trim();
     const skuLimpio = String(body.sku || "").toUpperCase().trim();
 
@@ -16,30 +15,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. LÓGICA DE IMPUESTOS (Basado en el 19% de Chile)
-    // El objetivo es que Obuma reciba: Neto, IVA y Total por separado.
-    const precioVentaBruto = Number(body.precio_venta) || 0;
-    const precioCostoBruto = Number(body.precio_costo) || 0;
+    // 2. LÓGICA DE IMPUESTOS (Ajustada a lo que me pediste)
+    const precioVentaInput = Number(body.precio_venta) || 0;
+    const precioCostoInput = Number(body.precio_costo) || 0;
 
-    // Cálculo para Venta
-    const precioVentaNeto = body.venta_incluye_iva 
-      ? Math.round(precioVentaBruto / 1.19) 
-      : precioVentaBruto;
-    
-    // Si el usuario marcó que incluye IVA, el total es el ingresado. 
-    // Si marcó que NO incluye IVA, el total es el ingresado * 1.19.
-    const precioVentaTotal = body.venta_incluye_iva 
-      ? precioVentaBruto 
-      : Math.round(precioVentaBruto * 1.19);
+    let precioVentaNeto: number;
+    let precioVentaBruto: number;
 
-    const ivaVenta = precioVentaTotal - precioVentaNeto;
+    if (body.venta_incluye_iva) {
+      // Si el precio ya incluye IVA, lo desglosamos
+      precioVentaBruto = precioVentaInput;
+      precioVentaNeto = Math.round(precioVentaBruto / 1.19);
+    } else {
+      // SI NO INCLUYE IVA: Lo tomamos como neto y calculamos el bruto (sumamos el 19%)
+      precioVentaNeto = precioVentaInput;
+      precioVentaBruto = Math.round(precioVentaNeto * 1.19);
+    }
 
-    // Cálculo para Costo (Neto estándar)
+    // Costo (Lógica simple)
     const precioCostoNeto = body.costo_incluye_iva 
-      ? Math.round(precioCostoBruto / 1.19) 
-      : precioCostoBruto;
+      ? Math.round(precioCostoInput / 1.19) 
+      : precioCostoInput;
 
-    // 3. CONSTRUCCIÓN DEL PAYLOAD (Estructura espejo de tu objeto validado)
+    const ivaVenta = precioVentaBruto - precioVentaNeto;
+
+    // 3. CONSTRUCCIÓN DEL PAYLOAD (Estructura idéntica a la que te funcionaba)
     const obumaPayload: any = {
       producto_nombre: nombreLimpio,
       producto_tipo: "0", 
@@ -49,24 +49,20 @@ export async function POST(request: Request) {
       // Clasificación
       id_categoria: String(body.categoria_id || ""),
       id_subcategoria: String(body.subcategoria_id || ""),
-      producto_categoria: String(body.categoria_id || ""), // Duplicamos para asegurar compatibilidad
-      producto_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos (Enviados como String según requiere la API)
+      // Precios y Costos (Enviados exactamente como tu versión exitosa)
       producto_costo_clp_neto: precioCostoNeto.toString(),
-      producto_costo_clp_neto_estandar: precioCostoNeto.toString(),
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
-      producto_precio_clp_total: precioVentaTotal.toString(),
+      producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de Estado (1 = Sí, 0 = No)
+      // Flags de Estado
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Sucursal y Datos técnicos
-      sucursal_id: "1",
-      producto_id: "" // Vacío para creación
+      // Sucursal por defecto
+      sucursal_id: "1" 
     };
 
     // 4. ENVÍO A LA API DE OBUMA
@@ -82,8 +78,8 @@ export async function POST(request: Request) {
     const result = await response.json();
 
     // 5. MANEJO DE RESPUESTA
-    // Obuma a veces responde success: false o simplemente no trae un ID
-    if (result.success === false || result.status === "error" || !result.id) {
+    // Mantenemos tu validación original que sabemos que funciona
+    if (result.success === false || result.status === false) {
       console.error("❌ Error de Obuma:", result);
       return NextResponse.json({ 
         error: result.message || 'Obuma rechazó los datos',
@@ -91,12 +87,8 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    console.log("✅ Producto creado exitosamente:", skuLimpio, "ID:", result.id);
-    return NextResponse.json({
-      success: true,
-      id: result.id,
-      sku: skuLimpio
-    });
+    console.log("✅ Producto creado exitosamente:", skuLimpio);
+    return NextResponse.json(result);
 
   } catch (error: any) {
     console.error("🔥 Error Crítico en POST:", error);
