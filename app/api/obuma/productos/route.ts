@@ -4,9 +4,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. LIMPIEZA DE DATOS (Mantenemos tu lógica original)
-    const nombreLimpio = String(body.nombre_completo || body.nombre || "").toUpperCase().trim();
+    // 1. LIMPIEZA DE DATOS
+    const nombreLimpio = String(body.nombre_completo || "").toUpperCase().trim();
     const skuLimpio = String(body.sku || "").toUpperCase().trim();
+    
+    // Mapeo de tipo de producto (Obuma suele usar "0" para productos físicos)
+    // Si el front envía "Servicio", podrías cambiarlo a "1" según la API de Obuma
+    const tipoProducto = body.tipo === "Servicio" ? "1" : "0";
 
     if (!nombreLimpio || !skuLimpio) {
       return NextResponse.json(
@@ -15,7 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. LÓGICA DE IMPUESTOS (Ajustada a lo que me pediste)
+    // 2. LÓGICA DE IMPUESTOS (IVA CHILE 19%)
     const precioVentaInput = Number(body.precio_venta) || 0;
     const precioCostoInput = Number(body.precio_costo) || 0;
 
@@ -23,26 +27,29 @@ export async function POST(request: Request) {
     let precioVentaBruto: number;
 
     if (body.venta_incluye_iva) {
-      // Si el precio ya incluye IVA, lo desglosamos
+      // Si el precio ingresado en el front ya es el TOTAL (Bruto)
       precioVentaBruto = precioVentaInput;
+      // Calculamos el neto: Total / 1.19
       precioVentaNeto = Math.round(precioVentaBruto / 1.19);
     } else {
-      // SI NO INCLUYE IVA: Lo tomamos como neto y calculamos el bruto (sumamos el 19%)
+      // Si el precio ingresado es NETO
       precioVentaNeto = precioVentaInput;
+      // Calculamos el bruto: Neto * 1.19
       precioVentaBruto = Math.round(precioVentaNeto * 1.19);
     }
 
-    // Costo (Lógica simple)
+    // Cálculo del IVA para el payload
+    const ivaVenta = precioVentaBruto - precioVentaNeto;
+
+    // Costo (Obuma siempre pide el costo neto)
     const precioCostoNeto = body.costo_incluye_iva 
       ? Math.round(precioCostoInput / 1.19) 
       : precioCostoInput;
 
-    const ivaVenta = precioVentaBruto - precioVentaNeto;
-
-    // 3. CONSTRUCCIÓN DEL PAYLOAD (Estructura idéntica a la que te funcionaba)
-    const obumaPayload: any = {
+    // 3. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
+    const obumaPayload = {
       producto_nombre: nombreLimpio,
-      producto_tipo: "0", 
+      producto_tipo: tipoProducto, 
       producto_activo: "1",
       producto_codigo_comercial: skuLimpio,
       
@@ -50,7 +57,7 @@ export async function POST(request: Request) {
       id_categoria: String(body.categoria_id || ""),
       id_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos (Enviados exactamente como tu versión exitosa)
+      // Precios y Costos (Strings para evitar problemas de precisión)
       producto_costo_clp_neto: precioCostoNeto.toString(),
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
@@ -61,7 +68,7 @@ export async function POST(request: Request) {
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Sucursal por defecto
+      // Configuración local
       sucursal_id: "1" 
     };
 
@@ -78,9 +85,8 @@ export async function POST(request: Request) {
     const result = await response.json();
 
     // 5. MANEJO DE RESPUESTA
-    // Mantenemos tu validación original que sabemos que funciona
     if (result.success === false || result.status === false) {
-      console.error("❌ Error de Obuma:", result);
+      console.error("❌ Error devuelto por Obuma:", result);
       return NextResponse.json({ 
         error: result.message || 'Obuma rechazó los datos',
         details: result 
@@ -91,7 +97,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error("🔥 Error Crítico en POST:", error);
+    console.error("🔥 Error Crítico en el Servidor:", error);
     return NextResponse.json(
       { error: 'Error interno en el servidor', details: error.message }, 
       { status: 500 }
