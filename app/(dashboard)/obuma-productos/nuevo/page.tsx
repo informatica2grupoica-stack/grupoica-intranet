@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCcw, AlertCircle, Check } from "lucide-react";
 
-// Definición de interfaces para robustez de tipos
 interface Categoria {
   producto_categoria_id: string;
   producto_categoria_nombre: string;
@@ -23,11 +22,8 @@ export default function NuevoProductoForm() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
 
-  const [nameParts, setNameParts] = useState({ 
-    c1: "", c2: "", c3: "", unit: "MT", c4: "" 
-  });
-
   const [form, setForm] = useState({
+    tipo: "Producto", // Campo rescatado según imagen
     nombre_completo: "",
     sku: "", 
     categoria_id: "",
@@ -54,31 +50,19 @@ export default function NuevoProductoForm() {
         setCategorias(Array.isArray(dataCat) ? dataCat : []);
         setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
       } catch (err) { 
-        setStatus({ type: 'error', msg: "Error de conexión con la base de datos" });
+        setStatus({ type: 'error', msg: "Error de conexión con Obuma" });
       }
     }
     loadData();
   }, []);
 
-  // 2. Construcción del nombre automático
-  useEffect(() => {
-    const clean = (t: string) => (t ? String(t).toUpperCase().trim() : "");
-    const parts = [
-      clean(nameParts.c1),
-      clean(nameParts.c2),
-      nameParts.c3 ? `${clean(nameParts.c3)} ${clean(nameParts.unit)}` : "",
-      clean(nameParts.c4)
-    ].filter(p => p !== "");
-    setForm(prev => ({ ...prev, nombre_completo: parts.join(" ") }));
-  }, [nameParts]);
-
-  // 3. Filtrado de subcategorías
+  // 2. Filtrado de subcategorías
   const subCategoriasFiltradas = useMemo(() => {
     if (!form.categoria_id) return [];
     return allSubcategorias.filter(s => String(s.rel_producto_categoria_id) === String(form.categoria_id));
   }, [allSubcategorias, form.categoria_id]);
 
-  // 4. Lógica de SKU
+  // 3. Lógica de SKU
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId) {
         setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
@@ -99,7 +83,7 @@ export default function NuevoProductoForm() {
     }
   };
 
-  // 5. Envío del formulario
+  // 4. Envío del formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -115,9 +99,13 @@ export default function NuevoProductoForm() {
 
       if (res.ok) {
         setStatus({ type: 'success', msg: "Producto registrado exitosamente" });
-        // Limpiar campos de nombre y precios
-        setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
-        setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
+        setForm({
+          ...form,
+          nombre_completo: "",
+          sku: "",
+          precio_costo: 0,
+          precio_venta: 0
+        });
       } else {
         setStatus({ type: 'error', msg: result.error || "Obuma rechazó los datos" });
       }
@@ -134,49 +122,88 @@ export default function NuevoProductoForm() {
         
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Nuevo producto</h1>
-          <p className="text-slate-500 text-sm">Registro de existencias - Grupo ICA</p>
+          <p className="text-slate-500 text-sm">Registro centralizado de existencias</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-8 space-y-8">
+          <div className="p-8 space-y-6">
             
-            {/* SECCIÓN 1: IDENTIDAD */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
-              <label className="text-sm font-semibold pt-2">Nombre del Producto <span className="text-red-500">*</span></label>
-              <div className="md:col-span-3 space-y-3">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <input placeholder="TIPO" className="f-input" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
-                  <input placeholder="ATRIBUTO" className="f-input" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
-                  <input placeholder="MEDIDA" className="f-input" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
-                  <select className="f-input bg-slate-50 font-medium" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
-                    <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
-                  </select>
-                </div>
-                <input placeholder="MARCA / DETALLES ADICIONALES" className="f-input w-full" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
-                <div className="p-3 bg-slate-800 rounded flex items-center gap-3">
-                  <span className="text-slate-400 text-[10px] font-bold uppercase">Resultado:</span>
-                  <span className="text-white text-xs font-mono uppercase truncate">{form.nombre_completo || "Esperando datos..."}</span>
+            {/* FILA 1: NOMBRE (UN SOLO INPUT) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+              <label className="text-sm font-semibold">Nombre <span className="text-red-500">*</span></label>
+              <div className="md:col-span-3">
+                <input 
+                  placeholder="Ej: CORTAR CARTON PLASTICO 10" 
+                  className="f-input w-full uppercase" 
+                  value={form.nombre_completo} 
+                  onChange={e => setForm({...form, nombre_completo: e.target.value})} 
+                  required
+                />
+              </div>
+            </div>
+
+            {/* FILA 2: TIPO Y SKU */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">Tipo <span className="text-red-500">*</span></label>
+                <select 
+                  className="f-input w-full" 
+                  value={form.tipo} 
+                  onChange={e => setForm({...form, tipo: e.target.value})}
+                >
+                  <option value="Producto">Producto</option>
+                  <option value="Servicio">Servicio</option>
+                  <option value="Insumo">Insumo</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">SKU</label>
+                <div className="relative">
+                  <input 
+                    readOnly 
+                    value={form.sku} 
+                    placeholder="SKU" 
+                    className="f-input w-full pr-10 bg-slate-50 font-mono font-bold text-blue-600" 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => solicitarNuevoSku(form.subcategoria_id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors"
+                  >
+                    <RefreshCcw size={16} className={generatingSku ? "animate-spin" : ""} />
+                  </button>
                 </div>
               </div>
             </div>
 
-            <hr className="border-slate-100" />
-
-            {/* SECCIÓN 2: CATEGORIZACIÓN */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Categoría Principal <span className="text-red-500">*</span></label>
-                <select className="f-input w-full" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
-                  <option value="">Seleccione...</option>
+            {/* FILA 3: CATEGORÍA Y SUBCATEGORÍA */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">Categoría <span className="text-red-500">*</span></label>
+                <select 
+                  className="f-input w-full" 
+                  value={form.categoria_id} 
+                  onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
+                  required
+                >
+                  <option value="">Selecciona...</option>
                   {categorias.map((c) => (
                     <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Subcategoría <span className="text-red-500">*</span></label>
-                <select disabled={!form.categoria_id} className="f-input w-full disabled:bg-slate-50" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
-                  <option value="">Seleccione...</option>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">Subcategoria <span className="text-red-500">*</span></label>
+                <select 
+                  disabled={!form.categoria_id} 
+                  className="f-input w-full disabled:bg-slate-50" 
+                  value={form.subcategoria_id} 
+                  onChange={e => solicitarNuevoSku(e.target.value)}
+                  required
+                >
+                  <option value="">Selecciona...</option>
                   {subCategoriasFiltradas.map((s) => (
                     <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>
                   ))}
@@ -184,78 +211,71 @@ export default function NuevoProductoForm() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <label className="text-sm font-semibold pt-2">Código SKU</label>
-              <div className="md:col-span-3">
-                <div className="relative max-w-[240px]">
-                  <input readOnly value={form.sku} placeholder="Generando..." className="f-input w-full pr-10 bg-slate-50 font-mono font-bold text-blue-600" />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    {generatingSku ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <RefreshCcw size={16} className="text-slate-300" />}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <hr className="border-slate-100" />
-
-            {/* SECCIÓN 3: VALORES COMERCIALES */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-3">
-                <label className="text-sm font-semibold text-slate-600">Costo Unitario</label>
-                <div className="flex items-center gap-4">
+            {/* FILA 4: PRECIOS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">Precio Costo <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                    <input type="number" className="f-input w-full pl-7" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                    <input 
+                      type="number" 
+                      className="f-input w-full pl-7" 
+                      value={form.precio_costo} 
+                      onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} 
+                    />
                   </div>
-                  <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-blue-600" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
-                    IVA
+                  <label className="flex items-center gap-1 text-[11px] whitespace-nowrap cursor-pointer">
+                    <input type="checkbox" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
+                    ¿Incluye IVA?
                   </label>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm font-semibold text-blue-800">Precio de Venta</label>
-                <div className="flex items-center gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <label className="text-sm font-semibold">Precio Venta <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm">$</span>
-                    <input type="number" className="f-input w-full pl-7 border-blue-200 bg-blue-50/20 font-bold text-blue-900" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                    <input 
+                      type="number" 
+                      className="f-input w-full pl-7" 
+                      value={form.precio_venta} 
+                      onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} 
+                    />
                   </div>
-                  <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-blue-600" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
-                    IVA
+                  <label className="flex items-center gap-1 text-[11px] whitespace-nowrap cursor-pointer">
+                    <input type="checkbox" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
+                    ¿Incluye IVA?
                   </label>
                 </div>
               </div>
             </div>
 
-            {/* SECCIÓN 4: PARÁMETROS OPERATIVOS */}
-            <div className="flex flex-wrap gap-8 py-2 border-t border-slate-50 pt-6">
-              {[
-                { id: 'se_puede_vender', label: 'Venta Habilitada' },
-                { id: 'se_puede_comprar', label: 'Compra Habilitada' },
-                { id: 'se_mantiene_stock', label: 'Control de Inventario' }
-              ].map((item) => (
-                <label key={item.id} className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tight cursor-pointer hover:text-blue-600 transition-colors">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-slate-300 accent-blue-600" 
-                    checked={(form as any)[item.id]} 
-                    onChange={e => setForm({...form, [item.id]: e.target.checked})} 
-                  />
-                  {item.label}
-                </label>
-              ))}
+            {/* FILA 5: CHECKBOXES DE CONFIGURACIÓN */}
+            <div className="flex flex-wrap gap-6 pt-4 border-t border-slate-50">
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_puede_vender} onChange={e => setForm({...form, se_puede_vender: e.target.checked})} />
+                ¿Se puede vender?
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_puede_comprar} onChange={e => setForm({...form, se_puede_comprar: e.target.checked})} />
+                ¿Se puede comprar?
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={form.se_mantiene_stock} onChange={e => setForm({...form, se_mantiene_stock: e.target.checked})} />
+                ¿Se mantiene stock?
+              </label>
             </div>
 
           </div>
 
-          {/* BOTONERA Y ALERTAS */}
-          <div className="bg-slate-50 px-8 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-slate-200">
-            <div className="min-h-[24px]">
+          {/* FOOTER: BOTÓN Y STATUS */}
+          <div className="bg-slate-50 px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200">
+            <div className="flex-1">
               {status && (
-                <div className={`flex items-center gap-2 text-sm font-bold ${status.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {status.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
+                <div className={`flex items-center gap-2 text-sm font-bold ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {status.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
                   {status.msg}
                 </div>
               )}
@@ -263,10 +283,10 @@ export default function NuevoProductoForm() {
             <button 
               type="submit"
               disabled={loading || !form.sku || !form.nombre_completo}
-              className="bg-[#0046ad] hover:bg-[#003585] disabled:bg-slate-300 text-white px-12 py-3 rounded font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-3 uppercase tracking-wider"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-10 py-2.5 rounded-md font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2 min-w-[160px]"
             >
-              {loading && <Loader2 className="animate-spin" size={18} />}
-              {loading ? 'Guardando...' : 'Registrar Producto'}
+              {loading ? <Loader2 className="animate-spin" size={18} /> : null}
+              {loading ? 'Procesando...' : 'Guardar'}
             </button>
           </div>
         </form>
@@ -274,22 +294,7 @@ export default function NuevoProductoForm() {
 
       <style jsx global>{`
         .f-input {
-          height: 42px;
-          border: 1px solid #cbd5e1;
-          border-radius: 4px;
-          padding: 0 12px;
-          font-size: 0.875rem;
-          outline: none;
-          transition: all 0.2s ease;
-          background-color: #fff;
-        }
-        .f-input:focus {
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        .f-input::placeholder {
-          color: #94a3b8;
-          font-weight: 400;
+          @apply border border-slate-300 rounded-md px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-slate-300;
         }
       `}</style>
     </div>
