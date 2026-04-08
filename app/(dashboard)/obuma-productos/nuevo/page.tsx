@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Camera, X, Layers, ChevronRight } from "lucide-react";
+import { 
+  Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, 
+  Camera, X, Layers, ShoppingCart, Warehouse, BadgePercent 
+} from "lucide-react";
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
@@ -18,12 +21,18 @@ export default function NuevoProductoForm() {
     sku: "",
     categoria_id: "",
     subcategoria_id: "",
+    precio_costo: 0,
+    costo_incluye_iva: true,
     precio_venta: 0,
+    venta_incluye_iva: true,
+    se_puede_vender: true,
+    se_puede_comprar: true,
+    se_mantiene_stock: true,
     imagen_data: "",
     imagen_nombre: ""
   });
 
-  // Carga inicial de datos desde la API
+  // Carga de categorías
   useEffect(() => {
     async function loadData() {
       try {
@@ -31,7 +40,6 @@ export default function NuevoProductoForm() {
           fetch('/api/obuma/categorias'),
           fetch('/api/obuma/subcategorias')
         ]);
-        if (!resCat.ok || !resSub.ok) throw new Error();
         const dCat = await resCat.json();
         const dSub = await resSub.json();
         setCategorias(Array.isArray(dCat) ? dCat : []);
@@ -51,14 +59,10 @@ export default function NuevoProductoForm() {
     if (!subId) return;
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
-    
     try {
-      const cat: any = categorias.find((c: any) => String(c.producto_categoria_id) === String(form.categoria_id));
+      const cat = categorias.find((c: any) => String(c.producto_categoria_id) === String(form.categoria_id));
       const nombreCat = cat?.producto_categoria_nombre?.toUpperCase() || "";
-      
-      let prefijo = "50";
-      if (nombreCat.includes("MAYORISTA") || nombreCat.includes("B2B")) prefijo = "70";
-
+      const prefijo = nombreCat.includes("MAYORISTA") ? "70" : "50";
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
       if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
@@ -72,18 +76,15 @@ export default function NuevoProductoForm() {
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setStatus({ type: 'error', msg: "Imagen muy pesada (Máx 5MB)" });
-        return;
-      }
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
         setImagePreview(base64);
-        const base64Pure = base64.split(',')[1];
-        // Sanitizamos el nombre del archivo para evitar errores en la API
-        const cleanFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
-        setForm(prev => ({ ...prev, imagen_data: base64Pure, imagen_nombre: cleanFileName }));
+        setForm(prev => ({ 
+          ...prev, 
+          imagen_data: base64, // Enviamos con prefijo, el backend lo limpia
+          imagen_nombre: file.name 
+        }));
       };
       reader.readAsDataURL(file);
     }
@@ -91,183 +92,216 @@ export default function NuevoProductoForm() {
 
   const handleSubmit = async () => {
     if (!form.sku || !form.nombre_completo) {
-      setStatus({ type: 'error', msg: "SKU y Nombre son obligatorios" });
+      setStatus({ type: 'error', msg: "Faltan campos obligatorios" });
       return;
     }
     setLoading(true);
     setStatus(null);
-
     try {
       const res = await fetch('/api/obuma/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          nombre_completo: form.nombre_completo.toUpperCase().trim(),
-          venta_incluye_iva: true,
-          se_mantiene_stock: true,
-          se_puede_vender: true
-        }),
+        body: JSON.stringify(form),
       });
-
+      const result = await res.json();
       if (res.ok) {
-        setStatus({ type: 'success', msg: `Producto ${form.sku} sincronizado` });
-        setForm(prev => ({ ...prev, nombre_completo: "", precio_venta: 0 }));
+        setStatus({ type: 'success', msg: `Producto ${form.sku} creado con éxito` });
+        setForm(prev => ({ ...prev, nombre_completo: "", precio_venta: 0, precio_costo: 0 }));
         setImagePreview(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
         await solicitarNuevoSku(form.subcategoria_id);
       } else {
-        const errData = await res.json();
-        setStatus({ type: 'error', msg: errData.error || "Error en Obuma" });
+        setStatus({ type: 'error', msg: result.error || "Error en Obuma" });
       }
     } catch (error) { 
-      setStatus({ type: 'error', msg: "Fallo de red" }); 
+      setStatus({ type: 'error', msg: "Error de red" }); 
     } finally { 
       setLoading(false); 
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-blue-100 antialiased font-sans">
-      <div className="max-w-[900px] mx-auto p-6 md:p-12">
+    <div className="min-h-screen bg-[#F1F5F9] text-slate-900 antialiased font-sans p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* HEADER */}
-        <header className="flex justify-between items-center mb-12">
+        {/* HEADER TIPO DASHBOARD */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-[32px] shadow-sm border border-slate-200">
           <div>
-            <h1 className="text-3xl font-black tracking-tight uppercase italic flex items-center gap-3">
-              <PackagePlus className="text-blue-600" size={32} />
-              Nuevo Producto
+            <h1 className="text-2xl font-black tracking-tight flex items-center gap-3">
+              <PackagePlus className="text-blue-600" size={28} />
+              NUEVO PRODUCTO
             </h1>
-            <p className="text-slate-400 text-[10px] font-bold tracking-[3px] uppercase mt-1">Maestro de Inventario Chile</p>
+            <p className="text-slate-400 text-[10px] font-bold tracking-widest uppercase mt-1">Gestión Centralizada / Obuma ERP</p>
           </div>
-          <div className="hidden md:flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black uppercase text-slate-500">API Obuma Activa</span>
+          <div className="flex gap-2">
+             <div className="px-4 py-2 bg-blue-50 rounded-xl flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-blue-700 uppercase">Sucursal Casa Matriz</span>
+             </div>
           </div>
         </header>
 
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* SECCIÓN 1: IDENTIDAD DEL PRODUCTO */}
-          <section className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-8 md:p-10 space-y-8">
-              <div className="space-y-3">
-                <label className="text-[11px] font-black text-blue-600 uppercase tracking-widest ml-1">Nombre Completo del Producto</label>
+          {/* COLUMNA IZQUIERDA: DATOS PRINCIPALES */}
+          <div className="lg:col-span-2 space-y-6">
+            <section className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nombre del Producto *</label>
                 <input 
                   type="text"
-                  placeholder="EJ: ALICATE METÁLICO 12CM PROFESIONAL..."
-                  className="w-full text-3xl md:text-4xl font-black tracking-tighter outline-none placeholder:text-slate-200 uppercase"
+                  placeholder="Ej: ALICATE UNIVERSAL 7 PULGADAS"
+                  className="w-full bg-slate-50 p-4 rounded-2xl text-lg font-bold outline-none border border-transparent focus:bg-white focus:border-blue-200 transition-all uppercase"
                   value={form.nombre_completo}
                   onChange={(e) => setForm({...form, nombre_completo: e.target.value})}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-slate-50">
-                <div className="space-y-3">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Precio Venta (Bruto)</label>
-                  <div className="relative">
-                    <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300 text-xl">$</span>
-                    <input 
-                      type="number"
-                      className="w-full bg-slate-50 p-5 pl-12 rounded-3xl text-2xl font-black outline-none border border-transparent focus:bg-white focus:border-blue-100 transition-all"
-                      value={form.precio_venta}
-                      onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
-                    />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Categoría</label>
+                  <select 
+                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 cursor-pointer"
+                    value={form.categoria_id}
+                    onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {categorias.map((c: any) => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
+                  </select>
                 </div>
-
-                <div className="space-y-3">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU Generado</label>
-                  <div className="bg-slate-900 p-5 rounded-3xl flex items-center justify-between shadow-lg">
-                    <span className="text-2xl font-black text-blue-400 italic tracking-tighter">
-                      {generatingSku ? "..." : (form.sku || "----")}
-                    </span>
-                    <button 
-                      type="button"
-                      onClick={() => solicitarNuevoSku(form.subcategoria_id)}
-                      disabled={!form.subcategoria_id || generatingSku}
-                      className="text-white hover:rotate-180 transition-transform duration-500 disabled:opacity-20"
-                    >
-                      <RefreshCcw size={20} className={generatingSku ? "animate-spin" : ""} />
-                    </button>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Subcategoría</label>
+                  <select 
+                    disabled={!form.categoria_id}
+                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 disabled:opacity-50 cursor-pointer"
+                    value={form.subcategoria_id}
+                    onChange={(e) => solicitarNuevoSku(e.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {subCategoriasFiltradas.map((s: any) => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
+                  </select>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
 
-          {/* SECCIÓN 2: CATEGORIZACIÓN Y FOTO */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 space-y-6">
-              <div className="flex items-center gap-2 mb-2">
-                <Layers className="text-blue-500" size={18}/>
-                <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-400">Jerarquía Obuma</h2>
-              </div>
-              
+            {/* PRECIOS - ESTILO CICA */}
+            <section className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <select 
-                  className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 appearance-none cursor-pointer"
-                  value={form.categoria_id}
-                  onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
-                >
-                  <option value="">Seleccionar Categoría...</option>
-                  {categorias.map((c: any) => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
-                </select>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <BadgePercent size={14} className="text-blue-500" /> Precios de Costo
+                </label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="number"
+                    className="flex-1 bg-slate-50 p-4 rounded-2xl font-black text-xl outline-none"
+                    value={form.precio_costo}
+                    onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})}
+                  />
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" className="w-5 h-5 rounded-lg" checked={form.costo_incluye_iva} onChange={(e) => setForm({...form, costo_incluye_iva: e.target.checked})} />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">¿IVA?</span>
+                  </label>
+                </div>
+              </div>
 
-                <select 
-                  disabled={!form.categoria_id}
-                  className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 disabled:opacity-30 appearance-none cursor-pointer"
-                  value={form.subcategoria_id}
-                  onChange={(e) => solicitarNuevoSku(e.target.value)}
-                >
-                  <option value="">Seleccionar Subcategoría...</option>
-                  {subCategoriasFiltradas.map((s: any) => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
-                </select>
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-blue-600 uppercase tracking-wider flex items-center gap-2">
+                  <ShoppingCart size={14} /> Precio de Venta Público
+                </label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="number"
+                    className="flex-1 bg-blue-50 p-4 rounded-2xl font-black text-xl text-blue-700 outline-none border border-blue-100"
+                    value={form.precio_venta}
+                    onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
+                  />
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" className="w-5 h-5 rounded-lg" checked={form.venta_incluye_iva} onChange={(e) => setForm({...form, venta_incluye_iva: e.target.checked})} />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">¿IVA?</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* COLUMNA DERECHA: SKU, IMAGEN Y ESTADOS */}
+          <div className="space-y-6">
+            {/* CARD SKU */}
+            <div className="bg-slate-900 p-6 rounded-[32px] text-white space-y-4 shadow-xl shadow-slate-200">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">SKU Identificador</span>
+                <button onClick={() => solicitarNuevoSku(form.subcategoria_id)} className="text-blue-400 hover:text-blue-300">
+                  <RefreshCcw size={18} className={generatingSku ? "animate-spin" : ""} />
+                </button>
+              </div>
+              <div className="text-3xl font-black tracking-tighter text-blue-400 italic">
+                {form.sku || "--- --- ---"}
               </div>
             </div>
 
+            {/* CARD IMAGEN */}
             <div 
               onClick={() => fileInputRef.current?.click()}
-              className="group relative h-full min-h-[200px] bg-white rounded-[40px] border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all overflow-hidden"
+              className="group aspect-square bg-white rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all overflow-hidden relative"
             >
               {imagePreview ? (
                 <>
-                  <img src={imagePreview} className="w-full h-full object-contain p-6" alt="Preview" />
+                  <img src={imagePreview} className="w-full h-full object-contain p-4" alt="Preview" />
                   <button 
-                    onClick={(e) => {e.stopPropagation(); setImagePreview(null); setForm(prev=>({...prev, imagen_data: ""}));}} 
-                    className="absolute top-4 right-4 p-3 bg-red-500 text-white rounded-full shadow-lg"
+                    onClick={(e) => {e.stopPropagation(); setImagePreview(null);}} 
+                    className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-full shadow-lg"
                   >
-                    <X size={16}/>
+                    <X size={14}/>
                   </button>
                 </>
               ) : (
-                <div className="text-center space-y-2">
-                  <Camera className="text-slate-300 mx-auto" size={32}/>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Subir Imagen</p>
+                <div className="text-center">
+                  <Camera className="text-slate-300 mx-auto mb-2" size={32}/>
+                  <span className="text-[10px] font-black text-slate-400 uppercase">Añadir Foto</span>
                 </div>
               )}
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImage} />
             </div>
-          </div>
 
-          {/* BOTÓN FINAL */}
-          <div className="space-y-4">
-            <button 
-              onClick={handleSubmit}
-              disabled={loading || !form.sku || !form.nombre_completo}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white p-8 rounded-[40px] font-black text-sm uppercase tracking-[4px] shadow-xl shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-4"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : "Sincronizar con Obuma"}
-            </button>
-
-            {status && (
-              <div className={`p-6 rounded-3xl border flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-                {status.type === 'success' ? <Check size={20}/> : <AlertCircle size={20}/>}
-                <p className="text-[11px] font-black uppercase tracking-tight">{status.msg}</p>
-              </div>
-            )}
+            {/* CONFIGURACIÓN DE ESTADOS */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-200 space-y-4">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Parámetros de Sistema</label>
+              {[
+                { label: "¿Se vende?", key: "se_puede_vender" },
+                { label: "¿Se compra?", key: "se_puede_comprar" },
+                { label: "¿Control Stock?", key: "se_mantiene_stock" },
+              ].map((item) => (
+                <label key={item.key} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                  <span className="text-xs font-bold text-slate-600 uppercase">{item.label}</span>
+                  <input 
+                    type="checkbox" 
+                    className="w-5 h-5 rounded-md accent-blue-600"
+                    checked={(form as any)[item.key]} 
+                    onChange={(e) => setForm({...form, [item.key]: e.target.checked})} 
+                  />
+                </label>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* FOOTER ACCIÓN */}
+        <div className="flex flex-col gap-4">
+          <button 
+            onClick={handleSubmit}
+            disabled={loading || !form.sku}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-6 rounded-[32px] font-black text-sm uppercase tracking-[4px] shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : "REGISTRAR EN OBUMA ERP"}
+          </button>
+
+          {status && (
+            <div className={`p-5 rounded-[24px] border flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
+              {status.type === 'success' ? <Check size={18}/> : <AlertCircle size={18}/>}
+              <p className="text-xs font-black uppercase tracking-tight">{status.msg}</p>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
