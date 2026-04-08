@@ -25,21 +25,15 @@ export async function POST(request: Request) {
 
     // Lógica espejo a la intranet vieja:
     if (body.venta_incluye_iva) {
-      // Si el usuario ingresó el TOTAL (ej: 1190)
       precioVentaBruto = precioVentaInput;
-      // Calculamos el neto dividiendo por 1.19
       precioVentaNeto = Math.round(precioVentaBruto / 1.19);
     } else {
-      // Si el usuario ingresó el NETO (ej: 1000)
       precioVentaNeto = precioVentaInput;
-      // Calculamos el bruto multiplicando por 1.19
       precioVentaBruto = Math.round(precioVentaNeto * 1.19);
     }
 
-    // El IVA es siempre la diferencia entre el total y el neto
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // Costo Neto (Obuma siempre prefiere recibir el costo neto)
     const precioCostoNeto = body.costo_incluye_iva 
       ? Math.round(precioCostoInput / 1.19) 
       : precioCostoInput;
@@ -51,33 +45,28 @@ export async function POST(request: Request) {
       producto_activo: "1",
       producto_codigo_comercial: skuLimpio,
       
-      // Clasificación técnica (Ajustado según tu documentación API)
       producto_categoria: String(body.categoria_id || ""),
       producto_subcategoria: String(body.subcategoria_id || ""),
       
-      // ID 1 suele ser IVA 19% en cuentas de Chile
       producto_impuesto_id: "1", 
       
-      // Precios y Costos
       producto_costo_clp_neto: precioCostoNeto.toString(),
-      // AGREGADO: Costo Estándar (mismo que costo neto para reportes)
       producto_costo_clp_neto_estandar: precioCostoNeto.toString(),
       
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de Estado convertidos a String ("1" o "0")
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
 
-      // AGREGADO: Sincronización con Dime / Web
-      // Usamos 'producto_vender_en_web' que es el estándar para integraciones e-commerce
-      producto_vender_en_web: body.enviar_a_dime ? "1" : "0",
-      producto_web: body.enviar_a_dime ? "1" : "0", // Mantenemos ambos por compatibilidad
+      // --- CAMBIO AQUÍ PARA WEB ---
+      // Usamos 'producto_vender_en_web' que es el nombre real en la API de Obuma
+      // Recibimos 'producto_vender_en_web' desde tu formulario (el checkbox)
+      producto_vender_en_web: body.producto_vender_en_web ? "1" : "0",
+      // ----------------------------
       
-      // Sucursal principal
       sucursal_id: "1" 
     };
 

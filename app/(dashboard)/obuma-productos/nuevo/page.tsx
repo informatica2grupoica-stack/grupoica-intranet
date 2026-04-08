@@ -32,7 +32,7 @@ interface FormState {
   se_puede_vender: boolean;
   se_puede_comprar: boolean;
   se_mantiene_stock: boolean;
-  enviar_a_dime: boolean; // NUEVO: Flag para la web
+  producto_vender_en_web: boolean; // ACTUALIZADO: Nombre exacto para API Obuma
 }
 
 const initialState: FormState = {
@@ -49,7 +49,7 @@ const initialState: FormState = {
   se_puede_vender: true,
   se_puede_comprar: true,
   se_mantiene_stock: true,
-  enviar_a_dime: true, // Por defecto activado para subir a Dime
+  producto_vender_en_web: true, // Por defecto activado para el punto verde
 };
 
 export default function NuevoProductoForm() {
@@ -232,13 +232,13 @@ export default function NuevoProductoForm() {
               </label>
             ))}
 
-            {/* SELECTOR WEB DIME */}
+            {/* SELECTOR WEB OBUMA */}
             <div className="h-6 w-[1px] bg-slate-200 hidden md:block"></div>
-            <label className="flex items-center gap-3 cursor-pointer group bg-orange-50 px-4 py-2 rounded-xl border border-orange-100 hover:bg-orange-100 transition-all">
-              <input type="checkbox" className="w-5 h-5 rounded-lg border-orange-300 text-orange-600 focus:ring-0" checked={form.enviar_a_dime} onChange={e => setForm(prev => ({...prev, enviar_a_dime: e.target.checked}))} />
+            <label className="flex items-center gap-3 cursor-pointer group bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-all">
+              <input type="checkbox" className="w-5 h-5 rounded-lg border-emerald-300 text-emerald-600 focus:ring-0" checked={form.producto_vender_en_web} onChange={e => setForm(prev => ({...prev, producto_vender_en_web: e.target.checked}))} />
               <div className="flex items-center gap-2">
-                <Globe size={14} className="text-orange-600" />
-                <span className="text-[10px] font-black uppercase text-orange-700">Sincronizar con Dime (Web)</span>
+                <Globe size={14} className="text-emerald-600" />
+                <span className="text-[10px] font-black uppercase text-emerald-700">Sincronizar con Web (Punto Verde)</span>
               </div>
             </label>
           </div>
