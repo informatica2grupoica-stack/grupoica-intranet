@@ -1,10 +1,21 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus } from "lucide-react";
+import { 
+  Search, 
+  Loader2, 
+  Edit3, 
+  Save, 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  ListIcon, 
+  Plus, 
+  Camera 
+} from "lucide-react";
 import Link from "next/link";
 
-// --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
+// --- COMPONENTE DE FORMULARIO DE EDICIÓN RÁPIDA ---
 const RenderForm = ({ 
   id, 
   editForm, 
@@ -159,7 +170,7 @@ export default function ObumaProductosListado() {
 
   useEffect(() => { setCurrentPage(1); }, [search, itemsPerPage]);
 
-  // --- NORMALIZACIÓN DE NOMBRE PARA EDICIÓN ---
+  // --- NORMALIZACIÓN DE NOMBRE ---
   useEffect(() => {
     if (editingId && editForm.c1 !== undefined) {
       const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -234,7 +245,6 @@ export default function ObumaProductosListado() {
       
       {/* --- HEADER DE CONTROL --- */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
-        
         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -246,7 +256,6 @@ export default function ObumaProductosListado() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
           <Link 
             href="/obuma-productos/nuevo" 
             className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
@@ -282,7 +291,8 @@ export default function ObumaProductosListado() {
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
             <tr>
-              <th className="px-8 py-5">Producto & Categoría</th>
+              <th className="px-4 py-5 text-center w-20">Foto</th>
+              <th className="px-4 py-5">Producto & Categoría</th>
               <th className="px-4 py-5 text-center">SKU</th>
               <th className="px-4 py-5 text-center">Stock</th>
               <th className="px-4 py-5 text-right">Precio Neto</th>
@@ -293,11 +303,30 @@ export default function ObumaProductosListado() {
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
+              <tr><td colSpan={8} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
             ) : currentItems.map((prod) => (
               <React.Fragment key={prod.producto_id}>
                 <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.producto_id ? 'bg-blue-50/20' : ''}`}>
-                  <td className="px-8 py-5">
+                  
+                  {/* COLUMNA DE IMAGEN */}
+                  <td className="px-4 py-5 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center group relative mx-auto shadow-sm">
+                      {prod.producto_imagen_url ? (
+                        <img 
+                          src={prod.producto_imagen_url} 
+                          alt="Product" 
+                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://via.placeholder.com/150?text=S/F";
+                          }}
+                        />
+                      ) : (
+                        <Camera size={16} className="text-slate-300" />
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-5">
                     <div className="text-sm font-black text-slate-700 uppercase italic leading-tight">{prod.producto_nombre}</div>
                     <div className="text-[9px] font-black text-blue-500 uppercase mt-1">{prod.categoria_nombre || 'Sin Categoría'}</div>
                   </td>
@@ -324,10 +353,10 @@ export default function ObumaProductosListado() {
                     </button>
                   </td>
                 </tr>
+                
                 {editingId === prod.producto_id && (
                   <tr className="bg-slate-50/50">
-                    <td colSpan={7} className="px-2 py-4">
-                      {/* PASAMOS LAS PROPS AL COMPONENTE EXTERNO */}
+                    <td colSpan={8} className="px-2 py-4">
                       <RenderForm 
                         id={prod.producto_id} 
                         editForm={editForm}
