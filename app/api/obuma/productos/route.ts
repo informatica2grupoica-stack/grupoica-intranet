@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 
+// Mantenemos el límite de tamaño para que Next.js no bloquee fotos pesadas
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 1. BLINDAJE ANTI-CRASH: Evita el error .toUpperCase() de undefined
-    // Usamos body.nombre_completo que es lo que envía el frontend
+    // 1. BLINDAJE ANTI-CRASH (Tus originales)
     const nombreLimpio = String(body.nombre_completo || body.nombre || "").toUpperCase().trim();
     const skuLimpio = String(body.sku || "").toUpperCase().trim();
 
@@ -16,11 +24,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. LÓGICA DE IMPUESTOS (Sincronizada con los nombres del Frontend)
+    // 2. LÓGICA DE IMPUESTOS (Tu lógica intacta)
     const precioVentaBruto = Number(body.precio_venta) || 0;
     const precioCostoBruto = Number(body.precio_costo) || 0;
 
-    // Usamos los nombres exactos: venta_incluye_iva y costo_incluye_iva
     const precioVentaNeto = body.venta_incluye_iva 
       ? Math.round(precioVentaBruto / 1.19) 
       : precioVentaBruto;
@@ -31,31 +38,39 @@ export async function POST(request: Request) {
 
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // 3. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
+    // 3. CONSTRUCCIÓN DEL PAYLOAD (Recuperamos todos tus campos)
     const obumaPayload: any = {
       producto_nombre: nombreLimpio,
       producto_tipo: "0", 
       producto_activo: "1",
       producto_codigo_comercial: skuLimpio,
       
-      // Clasificación (Convertimos a String por seguridad)
+      // Clasificación
       id_categoria: String(body.categoria_id || ""),
       id_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos
+      // Precios y Costos (Tus campos originales)
       producto_costo_clp_neto: precioCostoNeto.toString(),
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de Estado
+      // Flags de Estado (Tus campos originales)
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Sucursal por defecto
       sucursal_id: "1" 
     };
+
+    // --- PARCHE DE IMAGEN (Solo añade, no quita nada) ---
+    if (body.imagen_data) {
+      // Usamos ambos nombres de campo para asegurar compatibilidad con Obuma V1/V2
+      obumaPayload.imagen_base64 = body.imagen_data; 
+      obumaPayload.referencia_imagen = body.imagen_data; 
+      obumaPayload.imagen_nombre = body.imagen_nombre || `${skuLimpio}.jpg`;
+      obumaPayload.referencia_imagen_nombre = body.imagen_nombre || `${skuLimpio}.jpg`;
+    }
 
     // 4. Envío a la API de Obuma
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.create.json`, {
@@ -69,7 +84,7 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
-    // 5. Manejo de Respuesta
+    // 5. Manejo de Respuesta (Tu lógica original)
     if (result.success === false || result.status === false) {
       console.error("❌ Error de Obuma:", result);
       return NextResponse.json({ 
@@ -78,7 +93,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    console.log("✅ Producto creado exitosamente:", skuLimpio);
+    console.log("✅ Producto sincronizado exitosamente:", skuLimpio);
     return NextResponse.json(result);
 
   } catch (error: any) {

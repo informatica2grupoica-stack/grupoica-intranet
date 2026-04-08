@@ -19,7 +19,6 @@ export default function NuevoProductoForm() {
   const [generatingSku, setGeneratingSku] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
   
-  // --- NUEVOS ESTADOS PARA IMAGEN ---
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,18 +41,34 @@ export default function NuevoProductoForm() {
     se_puede_vender: true,
     se_puede_comprar: true,
     se_mantiene_stock: true,
-    imagen_data: "" // Para enviar a la API de Obuma
+    imagen_data: "",
+    imagen_nombre: ""
   });
 
-  // --- LÓGICA DE CARGA DE ARCHIVO ---
+  // --- LÓGICA DE IMAGEN MEJORADA ---
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Limitar a 3MB para evitar que el servidor de Next.js bloquee la petición
+      if (file.size > 3 * 1024 * 1024) {
+        setStatus({ type: 'error', msg: "La imagen es demasiado pesada (Máx 3MB)" });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setImagePreview(base64String);
-        setForm(prev => ({ ...prev, imagen_data: base64String }));
+        const base64Full = reader.result as string;
+        setImagePreview(base64Full);
+        
+        // MITIGACIÓN: Obuma no acepta el prefijo "data:image/jpeg;base64,"
+        // Extraemos solo el contenido después de la coma
+        const base64Clean = base64Full.split(',')[1];
+        
+        setForm(prev => ({ 
+          ...prev, 
+          imagen_data: base64Clean,
+          imagen_nombre: file.name
+        }));
       };
       reader.readAsDataURL(file);
     }
@@ -61,7 +76,7 @@ export default function NuevoProductoForm() {
 
   const removeImage = () => {
     setImagePreview(null);
-    setForm(prev => ({ ...prev, imagen_data: "" }));
+    setForm(prev => ({ ...prev, imagen_data: "", imagen_nombre: "" }));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -101,7 +116,6 @@ export default function NuevoProductoForm() {
     );
   }, [allSubcategorias, form.categoria_id]);
 
-  // --- LÓGICA DE SKU ACTUALIZADA (70 para B2B) ---
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId) {
         setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
@@ -113,9 +127,9 @@ export default function NuevoProductoForm() {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const nombreCat = cat?.producto_categoria_nombre?.toUpperCase() || "";
       
-      let prefijo = "50"; // Por defecto
+      let prefijo = "50";
       if (nombreCat.includes("MERCADO PUBLICO")) prefijo = "60";
-      if (nombreCat.includes("MAYORISTA CONSTRUCTOR B2B")) prefijo = "70"; // Nueva regla
+      if (nombreCat.includes("MAYORISTA CONSTRUCTOR B2B")) prefijo = "70";
 
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
@@ -133,24 +147,35 @@ export default function NuevoProductoForm() {
       setStatus({ type: 'error', msg: "Faltan campos obligatorios" });
       return;
     }
+    
     setLoading(true);
     setStatus(null);
+
     try {
       const res = await fetch('/api/obuma/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, nombre_completo: form.nombre_completo.toUpperCase() }),
+        body: JSON.stringify({ 
+          ...form, 
+          nombre_completo: form.nombre_completo.toUpperCase(),
+          // Aseguramos un nombre de imagen si no viene uno
+          imagen_nombre: form.imagen_nombre || `${form.sku}.jpg`
+        }),
       });
+
+      const data = await res.json();
+
       if (res.ok) {
-        setStatus({ type: 'success', msg: `Producto ${form.sku} creado exitosamente` });
-        // Reset parcial
+        setStatus({ type: 'success', msg: `Producto ${form.sku} sincronizado correctamente` });
         setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
         removeImage();
-        setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
+        setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0, imagen_data: "", imagen_nombre: "" }));
         await solicitarNuevoSku(form.subcategoria_id);
+      } else {
+        setStatus({ type: 'error', msg: data.error || "Error al sincronizar con Obuma" });
       }
     } catch (error) { 
-      setStatus({ type: 'error', msg: "Error de servidor" }); 
+      setStatus({ type: 'error', msg: "Error de conexión con el servidor" }); 
     } finally { 
       setLoading(false); 
     }
@@ -190,7 +215,7 @@ export default function NuevoProductoForm() {
                 <select className="p-3 bg-slate-100 rounded-xl font-bold text-xs outline-none" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
                   <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
                 </select>
-                <input placeholder="MARCA O DETALLE ADICIONAL" className="col-span-2 md:col-span-4 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
+                <input placeholder="MARCA O DETALLE" className="col-span-2 md:col-span-4 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
               </div>
 
               <div className="mt-6 p-4 bg-slate-900 rounded-2xl border-l-4 border-blue-500 shadow-inner">
@@ -209,11 +234,11 @@ export default function NuevoProductoForm() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
-                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
+                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
                     <option value="">Seleccione Categoría...</option>
                     {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
                   </select>
-                  <select disabled={!form.categoria_id} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 disabled:opacity-50" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
+                  <select disabled={!form.categoria_id} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none disabled:opacity-50" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
                     <option value="">Seleccione Subcategoría...</option>
                     {subCategoriasFiltradas.map(s => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
                   </select>
@@ -235,7 +260,7 @@ export default function NuevoProductoForm() {
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 sticky top-6">
               
-              {/* SECCIÓN IMAGEN */}
+              {/* IMAGEN */}
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Camera className="text-blue-600" size={18} />
@@ -252,7 +277,7 @@ export default function NuevoProductoForm() {
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <button 
                           onClick={(e) => { e.stopPropagation(); removeImage(); }}
-                          className="bg-red-500 p-2 rounded-full text-white hover:scale-110 transition-transform"
+                          className="bg-red-500 p-2 rounded-full text-white hover:scale-110"
                         >
                           <X size={20} />
                         </button>
@@ -263,26 +288,23 @@ export default function NuevoProductoForm() {
                       <div className="bg-blue-50 text-blue-600 p-4 rounded-full inline-block mb-3">
                         <Camera size={28} />
                       </div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Click para seleccionar foto</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Click para subir foto</p>
                     </div>
                   )}
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
                 </div>
               </div>
 
-              {/* SECCIÓN PRECIOS */}
+              {/* PRECIOS */}
               <div className="space-y-4 pt-4 border-t border-slate-100">
                 <div className="flex items-center gap-2 mb-2">
                   <BarChart3 className="text-emerald-600" size={18} />
-                  <h2 className="font-bold text-sm uppercase tracking-tight">Valores Comerciales</h2>
+                  <h2 className="font-bold text-sm uppercase tracking-tight">Valores</h2>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-3">
-                    <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-600" size={14} />
-                        <input type="number" placeholder="PRECIO VENTA NETO" className="w-full pl-8 p-3 bg-blue-50 text-blue-700 border-2 border-transparent rounded-xl font-black text-sm outline-none focus:border-blue-200" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400 uppercase">Venta</span>
-                    </div>
+                <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-600" size={14} />
+                    <input type="number" placeholder="PRECIO VENTA" className="w-full pl-8 p-3 bg-blue-50 text-blue-700 border-2 border-transparent rounded-xl font-black text-sm outline-none" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
                 </div>
 
                 {status && (
@@ -295,7 +317,7 @@ export default function NuevoProductoForm() {
                 <button 
                   onClick={handleSubmit}
                   disabled={loading || !form.sku || !form.nombre_completo}
-                  className="w-full bg-[#00338d] hover:bg-blue-900 disabled:bg-slate-200 disabled:text-slate-400 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-900/10 flex items-center justify-center gap-3 transition-all active:scale-95"
+                  className="w-full bg-[#00338d] hover:bg-blue-900 disabled:bg-slate-200 disabled:text-slate-400 text-white py-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3"
                 >
                   {loading ? <Loader2 className="animate-spin" size={20} /> : <PackagePlus size={20} />}
                   <span className="text-xs">Sincronizar con Obuma</span>
