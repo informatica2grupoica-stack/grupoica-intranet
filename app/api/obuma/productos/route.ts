@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     // El IVA es siempre la diferencia entre el total y el neto
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // Costo (Obuma siempre prefiere recibir el costo neto)
+    // Costo Neto (Obuma siempre prefiere recibir el costo neto)
     const precioCostoNeto = body.costo_incluye_iva 
       ? Math.round(precioCostoInput / 1.19) 
       : precioCostoInput;
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
       
       // Precios y Costos (Enviamos todo desglosado como en la intranet vieja)
       producto_costo_clp_neto: precioCostoNeto.toString(),
+      // AGREGADO: Costo Estándar (mismo que costo neto)
+      producto_costo_clp_neto_estandar: precioCostoNeto.toString(),
+      
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: precioVentaBruto.toString(),
@@ -68,6 +71,10 @@ export async function POST(request: Request) {
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
+
+      // AGREGADO: Sincronización con Dime / Web
+      // Obuma usa 'producto_web' o 'producto_vender_en_web' para activar e-commerce
+      producto_web: body.enviar_a_dime ? "1" : "0",
       
       // Sucursal principal
       sucursal_id: "1" 

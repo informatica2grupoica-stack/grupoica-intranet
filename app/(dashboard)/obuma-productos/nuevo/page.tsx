@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save } from "lucide-react";
+import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe } from "lucide-react";
 import Link from "next/link";
 
 interface Categoria {
@@ -32,6 +32,7 @@ interface FormState {
   se_puede_vender: boolean;
   se_puede_comprar: boolean;
   se_mantiene_stock: boolean;
+  enviar_a_dime: boolean; // NUEVO: Flag para la web
 }
 
 const initialState: FormState = {
@@ -43,11 +44,12 @@ const initialState: FormState = {
   subcategoria_id: "",
   precio_costo: 0,
   precio_venta: 0,
-  venta_incluye_iva: false, // Por defecto NETO como pediste
+  venta_incluye_iva: false, 
   costo_incluye_iva: false,
   se_puede_vender: true,
   se_puede_comprar: true,
   se_mantiene_stock: true,
+  enviar_a_dime: true, // Por defecto activado para subir a Dime
 };
 
 export default function NuevoProductoForm() {
@@ -221,14 +223,24 @@ export default function NuevoProductoForm() {
             </div>
           </div>
 
-          {/* OPCIONES STOCK */}
-          <div className="flex flex-wrap gap-8 py-4 px-2 border-t border-slate-100">
+          {/* OPCIONES STOCK Y WEB */}
+          <div className="flex flex-wrap items-center gap-8 py-4 px-2 border-t border-slate-100">
             {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
               <label key={key} className="flex items-center gap-3 cursor-pointer group">
                 <input type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
                 <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">{key.replace(/_/g, ' ')}</span>
               </label>
             ))}
+
+            {/* SELECTOR WEB DIME */}
+            <div className="h-6 w-[1px] bg-slate-200 hidden md:block"></div>
+            <label className="flex items-center gap-3 cursor-pointer group bg-orange-50 px-4 py-2 rounded-xl border border-orange-100 hover:bg-orange-100 transition-all">
+              <input type="checkbox" className="w-5 h-5 rounded-lg border-orange-300 text-orange-600 focus:ring-0" checked={form.enviar_a_dime} onChange={e => setForm(prev => ({...prev, enviar_a_dime: e.target.checked}))} />
+              <div className="flex items-center gap-2">
+                <Globe size={14} className="text-orange-600" />
+                <span className="text-[10px] font-black uppercase text-orange-700">Sincronizar con Dime (Web)</span>
+              </div>
+            </label>
           </div>
 
           <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
