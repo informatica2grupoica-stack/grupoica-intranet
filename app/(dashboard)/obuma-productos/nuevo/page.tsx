@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save } from "lucide-react";
+import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Percent } from "lucide-react";
 import Link from "next/link";
 
 // --- INTERFACES ---
@@ -64,7 +64,7 @@ export default function NuevoProductoForm() {
 
   const [form, setForm] = useState<FormState>(initialState);
 
-  // 1. CARGA INICIAL DE DATOS
+  // 1. CARGA INICIAL
   useEffect(() => {
     async function loadData() {
       try {
@@ -83,10 +83,9 @@ export default function NuevoProductoForm() {
     loadData();
   }, []);
 
-  // 2. CONSTRUCCIÓN AUTOMÁTICA DEL NOMBRE
+  // 2. NOMBRE AUTOMÁTICO
   useEffect(() => {
     const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    
     const nombreConstruido = [
       limpiar(form.c1),
       limpiar(form.c2),
@@ -99,32 +98,26 @@ export default function NuevoProductoForm() {
     }
   }, [form.c1, form.c2, form.c3, form.c4, form.nombre_completo]);
 
-  // 3. FILTRADO DE SUBCATEGORÍAS
+  // 3. FILTRADO
   const subCategoriasFiltradas = useMemo(() => {
     if (!form.categoria_id) return [];
     return allSubcategorias.filter(s => String(s.rel_producto_categoria_id) === String(form.categoria_id));
   }, [allSubcategorias, form.categoria_id]);
 
-  // 4. GENERACIÓN DE SKU DINÁMICO
+  // 4. SKU
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId) {
         setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
         return;
     }
-    
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
-
     try {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const prefijo = cat?.producto_categoria_nombre?.toUpperCase().includes("MERCADO PUBLICO") ? "60" : "50";
-      
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
-      
-      if (data.sku) {
-        setForm(prev => ({ ...prev, sku: String(data.sku) }));
-      }
+      if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
     } catch (err) { 
       setStatus({ type: 'error', msg: "Error al generar SKU" });
     } finally { 
@@ -142,17 +135,10 @@ export default function NuevoProductoForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      
       const result = await res.json();
-
       if (res.ok) {
         setStatus({ type: 'success', msg: "¡Producto creado en Obuma!" });
-        // Resetea pero mantiene categorías para agilizar la carga del siguiente item
-        setForm(prev => ({ 
-            ...initialState, 
-            categoria_id: prev.categoria_id, 
-            subcategoria_id: prev.subcategoria_id 
-        }));
+        setForm(prev => ({ ...initialState, categoria_id: prev.categoria_id, subcategoria_id: prev.subcategoria_id }));
       } else {
         setStatus({ type: 'error', msg: result.error || "Error al guardar" });
       }
@@ -180,34 +166,28 @@ export default function NuevoProductoForm() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8 relative overflow-hidden">
           
-          {/* BANNER DE NOMBRE DINÁMICO */}
+          {/* BANNER NOMBRE */}
           <div className="p-6 bg-[#00338d] rounded-3xl text-white shadow-lg flex justify-between items-center transition-all">
             <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase opacity-60 tracking-widest">Nombre que se enviará a Obuma</label>
+              <label className="text-[9px] font-black uppercase opacity-60 tracking-widest">Nombre final Obuma</label>
               <div className="text-xl font-black uppercase italic tracking-tight">
-                {form.nombre_completo || "Comienza a escribir..."}
+                {form.nombre_completo || "Escribiendo..."}
               </div>
             </div>
-            <div className="bg-emerald-400/20 px-5 py-2 rounded-full text-[10px] font-black italic border border-emerald-400/30">
-              MODO CREACIÓN
+            <div className="bg-emerald-400/20 px-5 py-2 rounded-full text-[10px] font-black italic border border-emerald-400/30 uppercase">
+              Chile Market
             </div>
           </div>
 
-          {/* CUADRÍCULA DE NOMBRE (C1-C4) */}
+          {/* GRID NOMBRE */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-                { f: 'c1' as const, l: '1. TIPO' }, 
-                { f: 'c2' as const, l: '2. ATRIBUTO' }, 
-                { f: 'c3' as const, l: '3. MEDIDA' }, 
-                { f: 'c4' as const, l: '4. MARCA' }
-            ].map((item) => (
-              <div key={item.f} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">{item.l}</label>
+            {(['c1', 'c2', 'c3', 'c4'] as const).map((f, i) => (
+              <div key={f} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">{i+1}. {f === 'c1' ? 'Tipo' : f === 'c2' ? 'Atributo' : f === 'c3' ? 'Medida' : 'Marca'}</label>
                 <input 
                   className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#00338d] focus:bg-white transition-all shadow-sm"
-                  placeholder="..."
-                  value={form[item.f]}
-                  onChange={(e) => setForm(prev => ({...prev, [item.f]: e.target.value}))}
+                  value={form[f]}
+                  onChange={(e) => setForm(prev => ({...prev, [f]: e.target.value}))}
                 />
               </div>
             ))}
@@ -217,24 +197,16 @@ export default function NuevoProductoForm() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase italic ml-2">Tipo de Item</label>
-              <select 
-                className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" 
-                value={form.tipo} 
-                onChange={(e) => setForm(prev => ({...prev, tipo: e.target.value}))}
-              >
+              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" value={form.tipo} onChange={(e) => setForm(prev => ({...prev, tipo: e.target.value}))}>
                 <option value="Producto">Producto</option>
                 <option value="Servicio">Servicio</option>
               </select>
             </div>
             
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-[#00338d] uppercase italic ml-2">SKU Generado</label>
+              <label className="text-[10px] font-black text-[#00338d] uppercase italic ml-2">SKU Obuma</label>
               <div className="relative">
-                <input 
-                  readOnly 
-                  className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-xs font-black italic text-[#00338d] outline-none" 
-                  value={form.sku || "Auto-generado"} 
-                />
+                <input readOnly className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-xs font-black italic text-[#00338d] outline-none" value={form.sku || "Auto-generado"} />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   {generatingSku ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <RefreshCcw size={16} className="text-blue-300" />}
                 </div>
@@ -243,44 +215,35 @@ export default function NuevoProductoForm() {
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase italic ml-2">Categoría Principal *</label>
-              <select 
-                className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" 
-                value={form.categoria_id} 
-                onChange={(e) => setForm(prev => ({...prev, categoria_id: e.target.value, subcategoria_id: ""}))}
-                required
-              >
+              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" value={form.categoria_id} onChange={(e) => setForm(prev => ({...prev, categoria_id: e.target.value, subcategoria_id: ""}))} required>
                 <option value="">Seleccionar...</option>
-                {categorias.map((cat) => (
-                  <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>
-                    {cat.producto_categoria_nombre}
-                  </option>
-                ))}
+                {categorias.map((cat) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
               </select>
             </div>
           </div>
 
-          {/* SUBCATEGORIA Y PRECIOS */}
+          {/* SUBCATEGORIA Y PRECIOS CON MEJORAS DE IVA */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase italic ml-2">Subcategoria *</label>
-              <select 
-                className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none disabled:opacity-50" 
-                disabled={!form.categoria_id} 
-                value={form.subcategoria_id} 
-                onChange={(e) => solicitarNuevoSku(e.target.value)}
-                required
-              >
+              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none disabled:opacity-50" disabled={!form.categoria_id} value={form.subcategoria_id} onChange={(e) => solicitarNuevoSku(e.target.value)} required>
                 <option value="">Seleccionar...</option>
-                {subCategoriasFiltradas.map((sub) => (
-                  <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>
-                    {sub.producto_subcategoria_nombre}
-                  </option>
-                ))}
+                {subCategoriasFiltradas.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
               </select>
             </div>
 
+            {/* PRECIO COSTO */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase italic ml-2">Precio Costo</label>
+              <div className="flex justify-between items-center px-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase italic">Precio Costo</label>
+                <button 
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, costo_incluye_iva: !prev.costo_incluye_iva }))}
+                  className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.costo_incluye_iva ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-100 text-slate-400 border-slate-200'}`}
+                >
+                  {form.costo_incluye_iva ? 'CON IVA' : 'NETO'}
+                </button>
+              </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
                 <input 
@@ -292,8 +255,18 @@ export default function NuevoProductoForm() {
               </div>
             </div>
 
+            {/* PRECIO VENTA */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-[#00338d] uppercase italic ml-2">Precio Venta Total</label>
+              <div className="flex justify-between items-center px-2">
+                <label className="text-[10px] font-black text-[#00338d] uppercase italic">Precio Venta</label>
+                <button 
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))}
+                  className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#00338d] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'}`}
+                >
+                  {form.venta_incluye_iva ? 'CON IVA (BRUTO)' : 'NETO'}
+                </button>
+              </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#00338d] font-black">$</span>
                 <input 
@@ -306,24 +279,17 @@ export default function NuevoProductoForm() {
             </div>
           </div>
 
-          {/* OPCIONES ADICIONALES */}
+          {/* OPCIONES STOCK */}
           <div className="flex flex-wrap gap-8 py-4 px-2 border-t border-slate-100">
             {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
               <label key={key} className="flex items-center gap-3 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0 cursor-pointer" 
-                  checked={form[key]} 
-                  onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} 
-                />
-                <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">
-                  {key.replace(/_/g, ' ')}
-                </span>
+                <input type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0 cursor-pointer" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
+                <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">{key.replace(/_/g, ' ')}</span>
               </label>
             ))}
           </div>
 
-          {/* BOTONES DE ACCIÓN */}
+          {/* FOOTER */}
           <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex-1">
               {status && (
@@ -333,22 +299,13 @@ export default function NuevoProductoForm() {
                 </div>
               )}
             </div>
-            
             <div className="flex gap-4 w-full md:w-auto">
-              <Link href="/obuma-productos" className="flex-1 md:flex-none px-8 py-4 rounded-2xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 transition-all text-center">
-                Cancelar
-              </Link>
-              <button 
-                type="submit"
-                disabled={loading || !form.sku || !form.nombre_completo}
-                className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-[#00338d] text-white px-16 py-5 rounded-3xl text-xs font-black uppercase shadow-[0_10px_30px_rgba(0,51,141,0.3)] hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none"
-              >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                Crear en Obuma
+              <Link href="/obuma-productos" className="flex-1 md:flex-none px-8 py-4 rounded-2xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 transition-all text-center">Cancelar</Link>
+              <button type="submit" disabled={loading || !form.sku || !form.nombre_completo} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-[#00338d] text-white px-16 py-5 rounded-3xl text-xs font-black uppercase shadow-[0_10px_30px_rgba(0,51,141,0.3)] hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none">
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} Crear en Obuma
               </button>
             </div>
           </div>
-
         </form>
       </div>
     </div>

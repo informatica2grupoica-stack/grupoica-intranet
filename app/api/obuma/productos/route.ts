@@ -7,9 +7,6 @@ export async function POST(request: Request) {
     // 1. LIMPIEZA DE DATOS
     const nombreLimpio = String(body.nombre_completo || "").toUpperCase().trim();
     const skuLimpio = String(body.sku || "").toUpperCase().trim();
-    
-    // Mapeo de tipo de producto (Obuma suele usar "0" para productos físicos)
-    // Si el front envía "Servicio", podrías cambiarlo a "1" según la API de Obuma
     const tipoProducto = body.tipo === "Servicio" ? "1" : "0";
 
     if (!nombreLimpio || !skuLimpio) {
@@ -26,27 +23,26 @@ export async function POST(request: Request) {
     let precioVentaNeto: number;
     let precioVentaBruto: number;
 
+    // Calculamos siempre basándonos en el flag del front
     if (body.venta_incluye_iva) {
-      // Si el precio ingresado en el front ya es el TOTAL (Bruto)
+      // Input es Bruto (1000) -> Neto = 840,33... -> 840
       precioVentaBruto = precioVentaInput;
-      // Calculamos el neto: Total / 1.19
       precioVentaNeto = Math.round(precioVentaBruto / 1.19);
     } else {
-      // Si el precio ingresado es NETO
+      // Input es Neto (1000) -> Bruto = 1190
       precioVentaNeto = precioVentaInput;
-      // Calculamos el bruto: Neto * 1.19
       precioVentaBruto = Math.round(precioVentaNeto * 1.19);
     }
 
-    // Cálculo del IVA para el payload
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // Costo (Obuma siempre pide el costo neto)
+    // Costo (Obuma siempre prefiere el costo neto)
     const precioCostoNeto = body.costo_incluye_iva 
       ? Math.round(precioCostoInput / 1.19) 
       : precioCostoInput;
 
     // 3. CONSTRUCCIÓN DEL PAYLOAD PARA OBUMA
+    // Importante: Se agregan campos de ID de impuesto y se usan nombres de campos estándar
     const obumaPayload = {
       producto_nombre: nombreLimpio,
       producto_tipo: tipoProducto, 
@@ -57,22 +53,28 @@ export async function POST(request: Request) {
       id_categoria: String(body.categoria_id || ""),
       id_subcategoria: String(body.subcategoria_id || ""),
       
-      // Precios y Costos (Strings para evitar problemas de precisión)
+      // Impuestos: 1 es el ID para IVA 19% en la mayoría de las cuentas Obuma Chile
+      producto_impuesto_id: "1", 
+      
+      // Precios y Costos
+      // Usamos tanto el neto como el total para que Obuma no tenga que calcular nada
       producto_costo_clp_neto: precioCostoNeto.toString(),
       producto_precio_clp_neto: precioVentaNeto.toString(),
       producto_precio_clp_iva: ivaVenta.toString(),
       producto_precio_clp_total: precioVentaBruto.toString(),
       
-      // Flags de Estado
+      // Flags de Estado (Obuma espera "1" o "0")
       producto_para_venta: body.se_puede_vender ? "1" : "0",
       producto_para_compra: body.se_puede_comprar ? "1" : "0",
       producto_inventariable: body.se_mantiene_stock ? "1" : "0",
       
-      // Configuración local
+      // Localización
       sucursal_id: "1" 
     };
 
-    // 4. ENVÍO A LA API DE OBUMA
+    console.log("📤 Enviando a Obuma:", obumaPayload);
+
+    // 4. ENVÍO A LA API
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.create.json`, {
       method: 'POST',
       headers: {
@@ -85,19 +87,17 @@ export async function POST(request: Request) {
     const result = await response.json();
 
     // 5. MANEJO DE RESPUESTA
-    if (result.success === false || result.status === false) {
-      console.error("❌ Error devuelto por Obuma:", result);
+    if (!response.ok || result.success === false || result.status === false) {
       return NextResponse.json({ 
         error: result.message || 'Obuma rechazó los datos',
         details: result 
       }, { status: 400 });
     }
 
-    console.log("✅ Producto creado exitosamente:", skuLimpio);
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error("🔥 Error Crítico en el Servidor:", error);
+    console.error("🔥 Error Crítico:", error);
     return NextResponse.json(
       { error: 'Error interno en el servidor', details: error.message }, 
       { status: 500 }
