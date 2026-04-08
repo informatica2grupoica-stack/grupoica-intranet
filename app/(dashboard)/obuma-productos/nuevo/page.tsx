@@ -1,38 +1,45 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { 
-  Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, 
-  Camera, X, Layers, ShoppingCart, Warehouse, BadgePercent 
-} from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Loader2, PackagePlus, RefreshCcw, AlertCircle, Check, DollarSign, Layers, Tag, BarChart3, Info } from "lucide-react";
+
+interface Categoria {
+  producto_categoria_id: string | number;
+  producto_categoria_nombre: string;
+}
+
+interface Subcategoria {
+  producto_subcategoria_id: string | number;
+  producto_subcategoria_nombre: string;
+  rel_producto_categoria_id: string | number;
+}
 
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
   const [generatingSku, setGeneratingSku] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
 
-  const [categorias, setCategorias] = useState<any[]>([]);
-  const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
+  const [nameParts, setNameParts] = useState({ 
+    c1: "", c2: "", c3: "", unit: "MT", c4: "" 
+  });
 
   const [form, setForm] = useState({
     nombre_completo: "",
-    sku: "",
+    sku: "", 
     categoria_id: "",
     subcategoria_id: "",
     precio_costo: 0,
-    costo_incluye_iva: true,
     precio_venta: 0,
     venta_incluye_iva: true,
+    costo_incluye_iva: true,
     se_puede_vender: true,
     se_puede_comprar: true,
     se_mantiene_stock: true,
-    imagen_data: "",
-    imagen_nombre: ""
   });
 
-  // Carga de categorías
   useEffect(() => {
     async function loadData() {
       try {
@@ -40,58 +47,58 @@ export default function NuevoProductoForm() {
           fetch('/api/obuma/categorias'),
           fetch('/api/obuma/subcategorias')
         ]);
-        const dCat = await resCat.json();
-        const dSub = await resSub.json();
-        setCategorias(Array.isArray(dCat) ? dCat : []);
-        setAllSubcategorias(Array.isArray(dSub) ? dSub : []);
+        const dataCat = await resCat.json();
+        const dataSub = await resSub.json();
+        setCategorias(Array.isArray(dataCat) ? dataCat : []);
+        setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
       } catch (err) { 
-        setStatus({ type: 'error', msg: "Fallo conexión con Obuma API" }); 
+        setStatus({ type: 'error', msg: "Error al conectar con la API" });
       }
     }
     loadData();
   }, []);
 
-  const subCategoriasFiltradas = useMemo(() => 
-    allSubcategorias.filter((s: any) => String(s.rel_producto_categoria_id) === String(form.categoria_id))
-  , [allSubcategorias, form.categoria_id]);
+  useEffect(() => {
+    const clean = (t: any) => (t ? String(t).toUpperCase().trim() : "");
+    const parts = [
+      clean(nameParts.c1),
+      clean(nameParts.c2),
+      nameParts.c3 ? `${clean(nameParts.c3)} ${clean(nameParts.unit)}` : "",
+      clean(nameParts.c4)
+    ].filter(p => p !== "");
+    setForm(prev => ({ ...prev, nombre_completo: parts.join(" ") }));
+  }, [nameParts]);
+
+  const subCategoriasFiltradas = useMemo(() => {
+    if (!form.categoria_id) return [];
+    return allSubcategorias.filter(s => 
+      String(s.rel_producto_categoria_id) === String(form.categoria_id)
+    );
+  }, [allSubcategorias, form.categoria_id]);
 
   const solicitarNuevoSku = async (subId: string) => {
-    if (!subId) return;
+    if (!subId) {
+        setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
+        return;
+    }
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
     try {
-      const cat = categorias.find((c: any) => String(c.producto_categoria_id) === String(form.categoria_id));
-      const nombreCat = cat?.producto_categoria_nombre?.toUpperCase() || "";
-      const prefijo = nombreCat.includes("MAYORISTA") ? "70" : "50";
+      const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
+      const prefijo = cat?.producto_categoria_nombre?.toUpperCase().includes("MERCADO PUBLICO") ? "60" : "50";
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
       if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
     } catch (err) { 
-      setStatus({ type: 'error', msg: "Error al generar SKU" }); 
+      setStatus({ type: 'error', msg: "No se pudo generar SKU" });
     } finally { 
       setGeneratingSku(false); 
     }
   };
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setImagePreview(base64);
-        setForm(prev => ({ 
-          ...prev, 
-          imagen_data: base64, // Enviamos con prefijo, el backend lo limpia
-          imagen_nombre: file.name 
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!form.sku || !form.nombre_completo) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.nombre_completo || !form.sku || !form.categoria_id || !form.subcategoria_id) {
       setStatus({ type: 'error', msg: "Faltan campos obligatorios" });
       return;
     }
@@ -101,207 +108,170 @@ export default function NuevoProductoForm() {
       const res = await fetch('/api/obuma/productos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, nombre_completo: form.nombre_completo.toUpperCase() }),
       });
-      const result = await res.json();
       if (res.ok) {
-        setStatus({ type: 'success', msg: `Producto ${form.sku} creado con éxito` });
-        setForm(prev => ({ ...prev, nombre_completo: "", precio_venta: 0, precio_costo: 0 }));
-        setImagePreview(null);
+        setStatus({ type: 'success', msg: `Producto ${form.sku} creado` });
+        setNameParts({ c1: "", c2: "", c3: "", unit: "MT", c4: "" });
+        setForm(prev => ({ ...prev, precio_costo: 0, precio_venta: 0 }));
         await solicitarNuevoSku(form.subcategoria_id);
-      } else {
-        setStatus({ type: 'error', msg: result.error || "Error en Obuma" });
       }
     } catch (error) { 
-      setStatus({ type: 'error', msg: "Error de red" }); 
+      setStatus({ type: 'error', msg: "Error de servidor" }); 
     } finally { 
       setLoading(false); 
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F1F5F9] text-slate-900 antialiased font-sans p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#f8fafc] p-4 lg:p-8 text-slate-800">
+      <div className="max-w-[1200px] mx-auto">
         
-        {/* HEADER TIPO DASHBOARD */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-[32px] shadow-sm border border-slate-200">
+        {/* HEADER SIMPLE */}
+        <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-200">
           <div>
-            <h1 className="text-2xl font-black tracking-tight flex items-center gap-3">
-              <PackagePlus className="text-blue-600" size={28} />
-              NUEVO PRODUCTO
+            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+              <PackagePlus className="text-blue-600" /> Maestro de Productos
             </h1>
-            <p className="text-slate-400 text-[10px] font-bold tracking-widest uppercase mt-1">Gestión Centralizada / Obuma ERP</p>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Obuma Cloud Sync</p>
           </div>
-          <div className="flex gap-2">
-             <div className="px-4 py-2 bg-blue-50 rounded-xl flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-black text-blue-700 uppercase">Sucursal Casa Matriz</span>
-             </div>
+          <div className="hidden md:flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-[10px] font-black text-emerald-700 uppercase">Sistema Online</span>
           </div>
-        </header>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* GRID PRINCIPAL REPARADO */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* COLUMNA IZQUIERDA: DATOS PRINCIPALES */}
-          <div className="lg:col-span-2 space-y-6">
-            <section className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200 space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nombre del Producto *</label>
-                <input 
-                  type="text"
-                  placeholder="Ej: ALICATE UNIVERSAL 7 PULGADAS"
-                  className="w-full bg-slate-50 p-4 rounded-2xl text-lg font-bold outline-none border border-transparent focus:bg-white focus:border-blue-200 transition-all uppercase"
-                  value={form.nombre_completo}
-                  onChange={(e) => setForm({...form, nombre_completo: e.target.value})}
-                />
+          {/* LADO IZQUIERDO (Identidad y Clasificación) */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* SECCIÓN 1: NOMBRE */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-6">
+                <Tag className="text-blue-600" size={18} />
+                <h2 className="font-bold text-sm uppercase tracking-tight">1. Definición de Nombre</h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <input placeholder="TIPO" className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c1} onChange={e => setNameParts({...nameParts, c1: e.target.value})} />
+                <input placeholder="ATRIBUTO" className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c2} onChange={e => setNameParts({...nameParts, c2: e.target.value})} />
+                <input placeholder="MEDIDA" className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c3} onChange={e => setNameParts({...nameParts, c3: e.target.value})} />
+                <select className="p-3 bg-slate-100 rounded-xl font-bold text-xs outline-none" value={nameParts.unit} onChange={e => setNameParts({...nameParts, unit: e.target.value})}>
+                  <option value="MT">MT</option><option value="KG">KG</option><option value="UN">UN</option><option value="MM">MM</option>
+                </select>
+                <input placeholder="MARCA/COLOR" className="col-span-2 md:col-span-4 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 ring-blue-500/20" value={nameParts.c4} onChange={e => setNameParts({...nameParts, c4: e.target.value})} />
               </div>
 
+              {/* PREVIEW COMPACTO */}
+              <div className="mt-6 p-4 bg-slate-900 rounded-2xl border-l-4 border-blue-500 shadow-inner">
+                <span className="text-blue-400 text-[9px] font-black uppercase block mb-1">Vista Previa:</span>
+                <p className="text-white font-bold text-lg uppercase truncate leading-tight">
+                  {form.nombre_completo || "..."}
+                </p>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: CLASIFICACIÓN */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2 mb-6">
+                <Layers className="text-indigo-600" size={18} />
+                <h2 className="font-bold text-sm uppercase tracking-tight">2. Categorización y SKU</h2>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Categoría</label>
-                  <select 
-                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 cursor-pointer"
-                    value={form.categoria_id}
-                    onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {categorias.map((c: any) => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
+                <div className="space-y-4">
+                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" value={form.categoria_id} onChange={e => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}>
+                    <option value="">Categoría...</option>
+                    {categorias.map(c => <option key={c.producto_categoria_id} value={c.producto_categoria_id}>{c.producto_categoria_nombre}</option>)}
+                  </select>
+                  <select disabled={!form.categoria_id} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 disabled:opacity-50" value={form.subcategoria_id} onChange={e => solicitarNuevoSku(e.target.value)}>
+                    <option value="">Subcategoría...</option>
+                    {subCategoriasFiltradas.map(s => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Subcategoría</label>
-                  <select 
-                    disabled={!form.categoria_id}
-                    className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border border-slate-100 disabled:opacity-50 cursor-pointer"
-                    value={form.subcategoria_id}
-                    onChange={(e) => solicitarNuevoSku(e.target.value)}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {subCategoriasFiltradas.map((s: any) => <option key={s.producto_subcategoria_id} value={s.producto_subcategoria_id}>{s.producto_subcategoria_nombre}</option>)}
-                  </select>
+                
+                {/* SKU BOX */}
+                <div className="bg-indigo-600 rounded-2xl p-4 flex flex-col items-center justify-center text-white relative">
+                  <span className="text-[9px] font-black uppercase opacity-60 mb-2 tracking-widest">Código SKU</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl font-black">{generatingSku ? "..." : (form.sku || "---")}</span>
+                    <button onClick={() => solicitarNuevoSku(form.subcategoria_id)} disabled={!form.subcategoria_id} className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors">
+                      <RefreshCcw size={16} className={generatingSku ? "animate-spin" : ""} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </section>
-
-            {/* PRECIOS - ESTILO CICA */}
-            <section className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <BadgePercent size={14} className="text-blue-500" /> Precios de Costo
-                </label>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number"
-                    className="flex-1 bg-slate-50 p-4 rounded-2xl font-black text-xl outline-none"
-                    value={form.precio_costo}
-                    onChange={(e) => setForm({...form, precio_costo: Number(e.target.value)})}
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" className="w-5 h-5 rounded-lg" checked={form.costo_incluye_iva} onChange={(e) => setForm({...form, costo_incluye_iva: e.target.checked})} />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">¿IVA?</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <label className="text-[10px] font-black text-blue-600 uppercase tracking-wider flex items-center gap-2">
-                  <ShoppingCart size={14} /> Precio de Venta Público
-                </label>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number"
-                    className="flex-1 bg-blue-50 p-4 rounded-2xl font-black text-xl text-blue-700 outline-none border border-blue-100"
-                    value={form.precio_venta}
-                    onChange={(e) => setForm({...form, precio_venta: Number(e.target.value)})}
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" className="w-5 h-5 rounded-lg" checked={form.venta_incluye_iva} onChange={(e) => setForm({...form, venta_incluye_iva: e.target.checked})} />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">¿IVA?</span>
-                  </label>
-                </div>
-              </div>
-            </section>
+            </div>
           </div>
 
-          {/* COLUMNA DERECHA: SKU, IMAGEN Y ESTADOS */}
-          <div className="space-y-6">
-            {/* CARD SKU */}
-            <div className="bg-slate-900 p-6 rounded-[32px] text-white space-y-4 shadow-xl shadow-slate-200">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">SKU Identificador</span>
-                <button onClick={() => solicitarNuevoSku(form.subcategoria_id)} className="text-blue-400 hover:text-blue-300">
-                  <RefreshCcw size={18} className={generatingSku ? "animate-spin" : ""} />
+          {/* LADO DERECHO (Precios y Acción) */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 sticky top-6">
+              <div className="flex items-center gap-2 mb-6">
+                <BarChart3 className="text-emerald-600" size={18} />
+                <h2 className="font-bold text-sm uppercase tracking-tight">3. Comercial</h2>
+              </div>
+
+              <div className="space-y-4">
+                {/* COSTO */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input type="number" placeholder="COSTO" className="w-full pl-8 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})} />
+                  </div>
+                  <label className="flex items-center gap-2 px-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={form.costo_incluye_iva} onChange={e => setForm({...form, costo_incluye_iva: e.target.checked})} />
+                    <span className="text-[10px] font-black">IVA</span>
+                  </label>
+                </div>
+
+                {/* VENTA */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-600" size={14} />
+                    <input type="number" placeholder="VENTA" className="w-full pl-8 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-black text-sm outline-none" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})} />
+                  </div>
+                  <label className="flex items-center gap-2 px-3 bg-blue-600 text-white rounded-xl cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 accent-white" checked={form.venta_incluye_iva} onChange={e => setForm({...form, venta_incluye_iva: e.target.checked})} />
+                    <span className="text-[10px] font-black">IVA</span>
+                  </label>
+                </div>
+
+                {/* CHECKBOXES */}
+                <div className="grid grid-cols-1 gap-2 pt-2">
+                  {[
+                    {k:'se_puede_vender', l:'Permitir Venta'}, 
+                    {k:'se_mantiene_stock', l:'Controlar Stock'}
+                  ].map(i => (
+                    <label key={i.k} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer">
+                      <span className="text-[10px] font-black uppercase text-slate-500">{i.l}</span>
+                      <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={(form as any)[i.k]} onChange={e => setForm({...form, [i.k as any]: e.target.checked})} />
+                    </label>
+                  ))}
+                </div>
+
+                {/* STATUS */}
+                {status && (
+                  <div className={`p-4 rounded-2xl flex items-center gap-3 border ${status.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                    {status.type === 'success' ? <Check size={18}/> : <AlertCircle size={18}/>}
+                    <p className="text-[10px] font-black uppercase leading-tight">{status.msg}</p>
+                  </div>
+                )}
+
+                {/* BOTÓN FINAL */}
+                <button 
+                  onClick={handleSubmit}
+                  disabled={loading || !form.sku || !form.nombre_completo}
+                  className="w-full bg-[#00338d] hover:bg-blue-900 disabled:bg-slate-200 disabled:text-slate-400 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+                >
+                  {loading ? <Loader2 className="animate-spin" size={20} /> : <PackagePlus size={20} />}
+                  <span className="text-xs">Finalizar Registro</span>
                 </button>
               </div>
-              <div className="text-3xl font-black tracking-tighter text-blue-400 italic">
-                {form.sku || "--- --- ---"}
-              </div>
-            </div>
-
-            {/* CARD IMAGEN */}
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="group aspect-square bg-white rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all overflow-hidden relative"
-            >
-              {imagePreview ? (
-                <>
-                  <img src={imagePreview} className="w-full h-full object-contain p-4" alt="Preview" />
-                  <button 
-                    onClick={(e) => {e.stopPropagation(); setImagePreview(null);}} 
-                    className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-full shadow-lg"
-                  >
-                    <X size={14}/>
-                  </button>
-                </>
-              ) : (
-                <div className="text-center">
-                  <Camera className="text-slate-300 mx-auto mb-2" size={32}/>
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Añadir Foto</span>
-                </div>
-              )}
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImage} />
-            </div>
-
-            {/* CONFIGURACIÓN DE ESTADOS */}
-            <div className="bg-white p-6 rounded-[32px] border border-slate-200 space-y-4">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Parámetros de Sistema</label>
-              {[
-                { label: "¿Se vende?", key: "se_puede_vender" },
-                { label: "¿Se compra?", key: "se_puede_comprar" },
-                { label: "¿Control Stock?", key: "se_mantiene_stock" },
-              ].map((item) => (
-                <label key={item.key} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                  <span className="text-xs font-bold text-slate-600 uppercase">{item.label}</span>
-                  <input 
-                    type="checkbox" 
-                    className="w-5 h-5 rounded-md accent-blue-600"
-                    checked={(form as any)[item.key]} 
-                    onChange={(e) => setForm({...form, [item.key]: e.target.checked})} 
-                  />
-                </label>
-              ))}
             </div>
           </div>
+
         </div>
-
-        {/* FOOTER ACCIÓN */}
-        <div className="flex flex-col gap-4">
-          <button 
-            onClick={handleSubmit}
-            disabled={loading || !form.sku}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-6 rounded-[32px] font-black text-sm uppercase tracking-[4px] shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3"
-          >
-            {loading ? <Loader2 className="animate-spin" /> : "REGISTRAR EN OBUMA ERP"}
-          </button>
-
-          {status && (
-            <div className={`p-5 rounded-[24px] border flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'}`}>
-              {status.type === 'success' ? <Check size={18}/> : <AlertCircle size={18}/>}
-              <p className="text-xs font-black uppercase tracking-tight">{status.msg}</p>
-            </div>
-          )}
-        </div>
-
       </div>
     </div>
   );

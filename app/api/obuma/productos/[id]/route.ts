@@ -8,7 +8,7 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // 1. LÓGICA DE IMPUESTOS (Tus originales intactos)
+    // 1. LÓGICA DE IMPUESTOS (Igual a tu creación)
     const precioVentaBruto = Number(body.precio_venta) || 0;
     const precioCostoBruto = Number(body.precio_costo) || 0;
 
@@ -22,11 +22,11 @@ export async function PUT(
 
     const ivaVenta = precioVentaBruto - precioVentaNeto;
 
-    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA UPDATE (Respetando toda tu lógica)
+    // 2. CONSTRUCCIÓN DEL PAYLOAD PARA UPDATE
+    // Nota: Obuma para actualizar usa producto_categoria y producto_subcategoria
     const obumaPayload: any = {
       producto_id: id,
       producto_nombre: body.nombre_completo.toUpperCase().trim(),
-      // Mantenemos tu lógica de tipo
       producto_tipo: body.tipo === "Servicio" ? "2" : "1",
       
       // Clasificación
@@ -48,17 +48,8 @@ export async function PUT(
       sucursal_id: "1"
     };
 
-    // --- MEJORA: AGREGAR IMAGEN SI VIENE EN EL UPDATE ---
-    // Solo se añade si el usuario seleccionó una imagen nueva en el formulario
-    if (body.imagen_data) {
-      obumaPayload.imagen_base64 = body.imagen_data; 
-      obumaPayload.referencia_imagen = body.imagen_data; 
-      obumaPayload.imagen_nombre = body.imagen_nombre || `${body.sku}.jpg`;
-      obumaPayload.referencia_imagen_nombre = body.imagen_nombre || `${body.sku}.jpg`;
-    }
-
     const response = await fetch(`${process.env.OBUMA_API_URL}/productos.update.json`, {
-      method: 'POST', // Obuma usa POST para updates
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'access-token': process.env.OBUMA_API_TOKEN || '',
@@ -76,11 +67,8 @@ export async function PUT(
     }
 
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error en Update:", error);
-    return NextResponse.json({ 
-      error: 'Error crítico de servidor',
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json({ error: 'Error crítico de servidor' }, { status: 500 });
   }
 }
