@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 
+// --- INTERFACES ---
 interface Categoria {
   producto_categoria_id: string;
   producto_categoria_nombre: string;
@@ -15,6 +16,44 @@ interface Subcategoria {
   rel_producto_categoria_id: string;
 }
 
+interface FormState {
+  c1: string;
+  c2: string;
+  c3: string;
+  c4: string;
+  nombre_completo: string;
+  tipo: string;
+  sku: string;
+  categoria_id: string;
+  subcategoria_id: string;
+  precio_costo: number;
+  precio_venta: number;
+  venta_incluye_iva: boolean;
+  costo_incluye_iva: boolean;
+  se_puede_vender: boolean;
+  se_puede_comprar: boolean;
+  se_mantiene_stock: boolean;
+}
+
+const initialState: FormState = {
+  c1: "",
+  c2: "",
+  c3: "",
+  c4: "",
+  nombre_completo: "",
+  tipo: "Producto",
+  sku: "",
+  categoria_id: "",
+  subcategoria_id: "",
+  precio_costo: 0,
+  precio_venta: 0,
+  venta_incluye_iva: true,
+  costo_incluye_iva: true,
+  se_puede_vender: true,
+  se_puede_comprar: true,
+  se_mantiene_stock: true,
+};
+
 export default function NuevoProductoForm() {
   const [loading, setLoading] = useState(false);
   const [generatingSku, setGeneratingSku] = useState(false);
@@ -23,26 +62,9 @@ export default function NuevoProductoForm() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
 
-  const [form, setForm] = useState<any>({
-    c1: "", // TIPO
-    c2: "", // ATRIBUTO
-    c3: "", // MEDIDA
-    c4: "", // MARCA
-    nombre_completo: "",
-    tipo: "Producto",
-    sku: "", 
-    categoria_id: "",
-    subcategoria_id: "",
-    precio_costo: 0,
-    precio_venta: 0,
-    venta_incluye_iva: true,
-    costo_incluye_iva: true,
-    se_puede_vender: true,
-    se_puede_comprar: true,
-    se_mantiene_stock: true,
-  });
+  const [form, setForm] = useState<FormState>(initialState);
 
-  // 1. CARGA INICIAL
+  // 1. CARGA INICIAL DE DATOS
   useEffect(() => {
     async function loadData() {
       try {
@@ -61,9 +83,10 @@ export default function NuevoProductoForm() {
     loadData();
   }, []);
 
-  // 2. CONSTRUCCIÓN AUTOMÁTICA DEL NOMBRE (Lógica igual a editar)
+  // 2. CONSTRUCCIÓN AUTOMÁTICA DEL NOMBRE
   useEffect(() => {
     const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    
     const nombreConstruido = [
       limpiar(form.c1),
       limpiar(form.c2),
@@ -72,30 +95,36 @@ export default function NuevoProductoForm() {
     ].filter(Boolean).join(" ");
     
     if (nombreConstruido !== form.nombre_completo) {
-      setForm((prev: any) => ({ ...prev, nombre_completo: nombreConstruido }));
+      setForm(prev => ({ ...prev, nombre_completo: nombreConstruido }));
     }
-  }, [form.c1, form.c2, form.c3, form.c4]);
+  }, [form.c1, form.c2, form.c3, form.c4, form.nombre_completo]);
 
-  // 3. FILTRADO SUBCATEGORÍAS
+  // 3. FILTRADO DE SUBCATEGORÍAS
   const subCategoriasFiltradas = useMemo(() => {
     if (!form.categoria_id) return [];
     return allSubcategorias.filter(s => String(s.rel_producto_categoria_id) === String(form.categoria_id));
   }, [allSubcategorias, form.categoria_id]);
 
-  // 4. GENERACIÓN DE SKU
+  // 4. GENERACIÓN DE SKU DINÁMICO
   const solicitarNuevoSku = async (subId: string) => {
     if (!subId) {
         setForm(prev => ({ ...prev, subcategoria_id: "", sku: "" }));
         return;
     }
+    
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
+
     try {
       const cat = categorias.find(c => String(c.producto_categoria_id) === String(form.categoria_id));
       const prefijo = cat?.producto_categoria_nombre?.toUpperCase().includes("MERCADO PUBLICO") ? "60" : "50";
+      
       const res = await fetch(`/api/obuma/siguiente-sku?prefijoSub=${prefijo}${subId}`);
       const data = await res.json();
-      if (data.sku) setForm(prev => ({ ...prev, sku: String(data.sku) }));
+      
+      if (data.sku) {
+        setForm(prev => ({ ...prev, sku: String(data.sku) }));
+      }
     } catch (err) { 
       setStatus({ type: 'error', msg: "Error al generar SKU" });
     } finally { 
@@ -118,8 +147,12 @@ export default function NuevoProductoForm() {
 
       if (res.ok) {
         setStatus({ type: 'success', msg: "¡Producto creado en Obuma!" });
-        // Limpiar campos de texto pero mantener config de categorías si se desea seguir creando parecidos
-        setForm({ ...form, c1: "", c2: "", c3: "", c4: "", sku: "", nombre_completo: "", precio_costo: 0, precio_venta: 0 });
+        // Resetea pero mantiene categorías para agilizar la carga del siguiente item
+        setForm(prev => ({ 
+            ...initialState, 
+            categoria_id: prev.categoria_id, 
+            subcategoria_id: prev.subcategoria_id 
+        }));
       } else {
         setStatus({ type: 'error', msg: result.error || "Error al guardar" });
       }
@@ -147,7 +180,7 @@ export default function NuevoProductoForm() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8 relative overflow-hidden">
           
-          {/* BANNER DE NOMBRE (Igual al de Editar) */}
+          {/* BANNER DE NOMBRE DINÁMICO */}
           <div className="p-6 bg-[#00338d] rounded-3xl text-white shadow-lg flex justify-between items-center transition-all">
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase opacity-60 tracking-widest">Nombre que se enviará a Obuma</label>
@@ -162,27 +195,32 @@ export default function NuevoProductoForm() {
 
           {/* CUADRÍCULA DE NOMBRE (C1-C4) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[{ f: 'c1', l: '1. TIPO' }, { f: 'c2', l: '2. ATRIBUTO' }, { f: 'c3', l: '3. MEDIDA' }, { f: 'c4', l: '4. MARCA' }].map((item) => (
+            {[
+                { f: 'c1' as const, l: '1. TIPO' }, 
+                { f: 'c2' as const, l: '2. ATRIBUTO' }, 
+                { f: 'c3' as const, l: '3. MEDIDA' }, 
+                { f: 'c4' as const, l: '4. MARCA' }
+            ].map((item) => (
               <div key={item.f} className="flex flex-col gap-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">{item.l}</label>
                 <input 
                   className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#00338d] focus:bg-white transition-all shadow-sm"
                   placeholder="..."
                   value={form[item.f]}
-                  onChange={(e) => setForm({...form, [item.f]: e.target.value})}
+                  onChange={(e) => setForm(prev => ({...prev, [item.f]: e.target.value}))}
                 />
               </div>
             ))}
           </div>
 
-          {/* DATOS MAESTROS (Tipo, SKU, Categoría) */}
+          {/* DATOS MAESTROS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase italic ml-2">Tipo de Item</label>
               <select 
                 className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" 
                 value={form.tipo} 
-                onChange={(e) => setForm({...form, tipo: e.target.value})}
+                onChange={(e) => setForm(prev => ({...prev, tipo: e.target.value}))}
               >
                 <option value="Producto">Producto</option>
                 <option value="Servicio">Servicio</option>
@@ -208,11 +246,15 @@ export default function NuevoProductoForm() {
               <select 
                 className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer focus:border-[#00338d]" 
                 value={form.categoria_id} 
-                onChange={(e) => setForm({...form, categoria_id: e.target.value, subcategoria_id: ""})}
+                onChange={(e) => setForm(prev => ({...prev, categoria_id: e.target.value, subcategoria_id: ""}))}
                 required
               >
                 <option value="">Seleccionar...</option>
-                {categorias.map((cat) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
+                {categorias.map((cat) => (
+                  <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>
+                    {cat.producto_categoria_nombre}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -229,7 +271,11 @@ export default function NuevoProductoForm() {
                 required
               >
                 <option value="">Seleccionar...</option>
-                {subCategoriasFiltradas.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
+                {subCategoriasFiltradas.map((sub) => (
+                  <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>
+                    {sub.producto_subcategoria_nombre}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -241,7 +287,7 @@ export default function NuevoProductoForm() {
                   type="number" 
                   className="w-full p-4 pl-8 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" 
                   value={form.precio_costo} 
-                  onChange={(e) => setForm({...form, precio_costo: e.target.value})} 
+                  onChange={(e) => setForm(prev => ({...prev, precio_costo: Number(e.target.value)}))} 
                 />
               </div>
             </div>
@@ -254,7 +300,7 @@ export default function NuevoProductoForm() {
                   type="number" 
                   className="w-full p-4 pl-8 bg-white border-2 border-[#00338d] rounded-2xl text-sm font-black text-[#00338d] outline-none shadow-md" 
                   value={form.precio_venta} 
-                  onChange={(e) => setForm({...form, precio_venta: e.target.value})} 
+                  onChange={(e) => setForm(prev => ({...prev, precio_venta: Number(e.target.value)}))} 
                 />
               </div>
             </div>
@@ -262,13 +308,13 @@ export default function NuevoProductoForm() {
 
           {/* OPCIONES ADICIONALES */}
           <div className="flex flex-wrap gap-8 py-4 px-2 border-t border-slate-100">
-            {['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'].map((key) => (
+            {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
               <label key={key} className="flex items-center gap-3 cursor-pointer group">
                 <input 
                   type="checkbox" 
                   className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0 cursor-pointer" 
                   checked={form[key]} 
-                  onChange={e => setForm({...form, [key]: e.target.checked})} 
+                  onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} 
                 />
                 <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">
                   {key.replace(/_/g, ' ')}
