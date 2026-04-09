@@ -19,24 +19,18 @@ def scrape_prices():
     if not producto:
         return jsonify([])
     
-    # Mantenemos el test para verificar salud del sistema
+    # Modo Test
     if producto.lower() == "test":
-        return jsonify([{
-            "tienda": "PRUEBA",
-            "nombre": "API Serper Conectada Correctamente",
-            "precio_formateado": "$9.990",
-            "precio_valor": 9990,
-            "link": "#"
-        }])
+        return jsonify([{"tienda": "PRUEBA", "nombre": "API Conectada", "precio_formateado": "$9.990", "precio_valor": 9990, "link": "#"}])
 
     url = "https://google.serper.dev/search"
     
-    # Forzamos la búsqueda en Chile (gl: cl) y en español (hl: es)
+    # AUMENTAMOS 'num' a 40 para capturar la mayor cantidad de páginas posibles
     payload = json.dumps({
-        "q": f"{producto} precio chile ferreteria .cl",
+        "q": f"{producto} precio chile ferreteria", # Quitamos el .cl de aquí para que Google sea más abierto
         "gl": "cl",
         "hl": "es",
-        "num": 10
+        "num": 40 # Pedimos 40 resultados para filtrar los mejores
     })
     
     headers = {
@@ -48,41 +42,50 @@ def scrape_prices():
         response = requests.request("POST", url, headers=headers, data=payload)
         data = response.json()
         resultados = []
+        vistos = set() # Para evitar duplicados de la misma tienda y mismo precio
 
-        # Serper devuelve los resultados en la lista 'organic'
+        # Procesamos los resultados orgánicos
         for item in data.get('organic', []):
             link = item.get('link', '')
             title = item.get('title', '')
             snippet = item.get('snippet', '')
 
-            # Buscamos el patrón de precio ($ 10.000) en el título y la descripción
+            # Buscamos el precio ($ XXX.XXX)
             price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
             
             if price_match:
-                # Extraemos el número puro
                 raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
                 
-                # Filtramos para asegurar que sean tiendas reales de Chile
-                if ".cl" in link and raw_val > 400:
-                    # Limpiamos el nombre de la tienda para que se vea bien en la tarjeta
+                # FILTROS DE CALIDAD PARA MAYORISTA CONSTRUCTOR:
+                # 1. Que el dominio sea chileno (.cl)
+                # 2. Que el precio sea realista (ej: mayor a $1.000 para cemento/ferretería)
+                # 3. Que no hayamos agregado este link exacto ya
+                if ".cl" in link and raw_val > 1000 and link not in vistos:
                     try:
+                        # Extraer nombre limpio de la tienda
                         tienda = link.split('/')[2].replace('www.', '').split('.')[0].upper()
+                        
+                        # Lista negra de sitios que no son tiendas (opcional)
+                        if tienda in ["CHILEATIENDE", "WIKIPEDIA", "FACEBOOK", "INSTAGRAM"]:
+                            continue
+
+                        resultados.append({
+                            "tienda": tienda,
+                            "nombre": title[:85],
+                            "precio_formateado": format_chile_price(raw_val),
+                            "precio_valor": raw_val,
+                            "link": link
+                        })
+                        vistos.add(link)
                     except:
-                        tienda = "TIENDA CL"
+                        continue
 
-                    resultados.append({
-                        "tienda": tienda,
-                        "nombre": title[:70],
-                        "precio_formateado": format_chile_price(raw_val),
-                        "precio_valor": raw_val,
-                        "link": link
-                    })
-
-        # Ordenamos por el más barato siempre para que ICA destaque
+        # Ordenamos por precio para que veas quién es el más barato de todos
         resultados_ordenados = sorted(resultados, key=lambda x: x['precio_valor'])
         
-        return jsonify(resultados_ordenados)
+        # Devolvemos los mejores 20 resultados (puedes subir este número si quieres)
+        return jsonify(resultados_ordenados[:20])
 
     except Exception as e:
-        print(f"Error en API Serper: {e}")
+        print(f"Error: {e}")
         return jsonify([])
