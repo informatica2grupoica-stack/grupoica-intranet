@@ -173,7 +173,7 @@ export default function TareasPage() {
         </div>
       </header>
 
-      {/* FORMULARIO (Se mantiene igual) */}
+      {/* FORMULARIO */}
       {perfilUsuario?.rol !== 'user' && (
         <section className="mx-4 md:mx-0 bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-slate-100 relative overflow-hidden group">
           <form onSubmit={handleCrearTarea} className="relative z-10 space-y-6">

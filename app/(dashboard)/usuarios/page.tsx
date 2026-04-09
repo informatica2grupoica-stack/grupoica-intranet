@@ -143,7 +143,6 @@ export default function GestionUsuarios() {
     }
   }
 
-  // ... (Funciones de eliminar y toggleEstado se mantienen igual)
   async function handleEliminar(user: any) {
     if (user.rol === 'superuser') return alert("Error: El Superusuario es intocable.");
     if (!confirm(`¿Estás seguro de eliminar a ${user.nombre}?`)) return;
