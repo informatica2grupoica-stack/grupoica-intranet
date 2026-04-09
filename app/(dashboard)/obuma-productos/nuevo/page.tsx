@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase"; // Importación de Supabase necesaria
+import { supabase } from "@/lib/supabase";
 
 interface Categoria {
   producto_categoria_id: string;
@@ -69,7 +69,6 @@ export default function NuevoProductoForm() {
     async function loadData() {
       setLoadingPermisos(true);
       try {
-        // VERIFICACIÓN DE SESIÓN Y ROL
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: miPerfil } = await supabase
@@ -97,8 +96,11 @@ export default function NuevoProductoForm() {
     loadData();
   }, []);
 
-  // Lógica de permiso
-  const puedeCrear = perfilLogueado?.rol === 'admin' || perfilLogueado?.rol === 'superuser';
+  // Lógica de permiso extendida para usar el objeto de permisos de tu base de datos
+  const puedeCrear = 
+    perfilLogueado?.rol === 'admin' || 
+    perfilLogueado?.rol === 'superuser' || 
+    perfilLogueado?.permisos?.can_create_products === true;
 
   useEffect(() => {
     const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -112,7 +114,7 @@ export default function NuevoProductoForm() {
   }, [allSubcategorias, form.categoria_id]);
 
   const solicitarNuevoSku = async (subId: string) => {
-    if (!subId || !puedeCrear) return; // No solicita SKU si no tiene permiso
+    if (!subId || !puedeCrear) return; 
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
     try {
@@ -128,7 +130,7 @@ export default function NuevoProductoForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!puedeCrear) return; // Doble validación
+    if (!puedeCrear) return;
     setLoading(true);
     setStatus(null);
     try {
@@ -230,7 +232,7 @@ export default function NuevoProductoForm() {
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase italic">Precio Costo</label>
-                <button disabled={!puedeCrear} type="button" onClick={() => setForm(prev => ({ ...prev, costo_incluye_iva: !prev.costo_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.costo_incluye_iva ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
+                <button type="button" disabled={!puedeCrear} onClick={() => setForm(prev => ({ ...prev, costo_incluye_iva: !prev.costo_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.costo_incluye_iva ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
                   {form.costo_incluye_iva ? 'CON IVA' : 'NETO'}
                 </button>
               </div>
@@ -244,7 +246,7 @@ export default function NuevoProductoForm() {
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-[#00338d] uppercase italic">Precio Venta</label>
-                <button disabled={!puedeCrear} type="button" onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#00338d] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
+                <button type="button" disabled={!puedeCrear} onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#00338d] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
                   {form.venta_incluye_iva ? 'CON IVA (BRUTO)' : 'NETO'}
                 </button>
               </div>
@@ -285,7 +287,6 @@ export default function NuevoProductoForm() {
             <div className="flex gap-4 w-full md:w-auto">
               <Link href="/obuma-productos" className="flex-1 md:flex-none px-8 py-4 rounded-2xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 text-center">Cancelar</Link>
               
-              {/* BOTÓN FINAL CON LÓGICA DE BLOQUEO */}
               <button 
                 type="submit" 
                 disabled={loading || !form.sku || !form.nombre_completo || !puedeCrear} 

@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   Laptop, Smartphone, Plus, Search, User, Hash, 
   Loader2, Trash2, X, Edit3, CheckCircle2, Mail
-} from "lucide-react"; // Corregido: lucide-react
+} from "lucide-react";
 
 export default function DispositivosPage() {
   const [loading, setLoading] = useState(true);
@@ -29,7 +29,23 @@ export default function DispositivosPage() {
   useEffect(() => {
     const initialize = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email === 'informatica2.grupoica@gmail.com') setCanEdit(true);
+      
+      if (session) {
+        // Validación dinámica de permisos (Igual que en Productos/Tareas)
+        const { data: perfil } = await supabase
+          .from('perfiles')
+          .select('es_admin, permiso_dispositivos')
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (
+          session.user.email === 'informatica2.grupoica@gmail.com' || 
+          perfil?.es_admin || 
+          perfil?.permiso_dispositivos
+        ) {
+          setCanEdit(true);
+        }
+      }
       await fetchData();
     };
     initialize();
@@ -41,7 +57,6 @@ export default function DispositivosPage() {
       supabase.from('perfiles').select('user_id, nombre, email').order('nombre', { ascending: true })
     ]);
 
-    // LÓGICA DE AGRUPACIÓN: Agrupamos por el ID del trabajador asignado
     const data = resDisp.data || [];
     const grupos: any = {};
 
@@ -108,10 +123,10 @@ export default function DispositivosPage() {
     setSelectedId(disp.id);
     setForm({
       trabajador_id: disp.asignado_a || "",
-      nb_marca: disp.tipo === 'Notebook' ? disp.marca : "",
+      nb_marca: disp.tipo === 'Notebook' ? disp.marca : "HP",
       nb_modelo: disp.tipo === 'Notebook' ? disp.modelo : "",
       nb_serie: disp.tipo === 'Notebook' ? disp.serie_imei : "",
-      ph_marca: disp.tipo === 'Telefono' ? disp.marca : "",
+      ph_marca: disp.tipo === 'Telefono' ? disp.marca : "Samsung",
       ph_modelo: disp.tipo === 'Telefono' ? disp.modelo : "",
       ph_imei: disp.tipo === 'Telefono' ? disp.serie_imei : "",
       ph_numero: disp.numero_telefono || "",
@@ -125,6 +140,7 @@ export default function DispositivosPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditMode(false);
+    setSelectedId(null);
     setForm({
         trabajador_id: "", nb_marca: "HP", nb_modelo: "", nb_serie: "",
         ph_marca: "Samsung", ph_modelo: "", ph_imei: "", ph_numero: "",
@@ -132,10 +148,15 @@ export default function DispositivosPage() {
     });
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="animate-spin text-[#00338d]" /></div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+      <Loader2 className="animate-spin text-[#00338d]" size={40} />
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando Inventario...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter">Inventario de Asignaciones</h2>
@@ -150,17 +171,15 @@ export default function DispositivosPage() {
 
       <div className="relative max-w-md">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-        <input type="text" placeholder="Buscar trabajador..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-[1.2rem] text-sm outline-none shadow-sm" onChange={(e) => setSearchTerm(e.target.value)} />
+        <input type="text" placeholder="Buscar trabajador..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-[1.2rem] text-sm outline-none shadow-sm focus:border-blue-300 transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
-      {/* GRID DE TARJETAS UNIFICADAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {dispositivosAgrupados.filter(g => g.usuario.toLowerCase().includes(searchTerm.toLowerCase())).map((grupo) => (
-          <div key={grupo.id_asignado} className="bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm hover:border-blue-200 transition-all">
-            
+          <div key={grupo.id_asignado} className="bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm hover:border-blue-200 transition-all group/card">
             <div className="flex items-start justify-between mb-8">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-lg font-black">
+                <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-lg font-black group-hover/card:bg-[#00338d] transition-colors">
                   {grupo.usuario.substring(0,2).toUpperCase()}
                 </div>
                 <div>
@@ -174,7 +193,7 @@ export default function DispositivosPage() {
 
             <div className="space-y-4">
               {grupo.equipos.map((eq: any) => (
-                <div key={eq.id} onClick={() => canEdit && openEdit(eq)} className="group relative flex items-center gap-4 p-4 bg-slate-50 rounded-[1.5rem] border border-transparent hover:border-blue-100 hover:bg-white transition-all cursor-pointer">
+                <div key={eq.id} onClick={() => canEdit && openEdit(eq)} className={`group relative flex items-center gap-4 p-4 bg-slate-50 rounded-[1.5rem] border border-transparent transition-all ${canEdit ? 'hover:border-blue-100 hover:bg-white cursor-pointer' : 'cursor-default'}`}>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${eq.tipo === 'Telefono' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-[#00338d]'}`}>
                     {eq.tipo === 'Telefono' ? <Smartphone size={18} /> : <Laptop size={18} />}
                   </div>
@@ -193,14 +212,14 @@ export default function DispositivosPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto max-h-[90vh] relative">
-            <button onClick={closeModal} className="absolute top-8 right-8 text-slate-300 hover:text-rose-500"><X size={24} /></button>
+            <button onClick={closeModal} className="absolute top-8 right-8 text-slate-300 hover:text-rose-500 transition-colors"><X size={24} /></button>
             <h3 className="text-2xl font-black text-[#00338d] uppercase italic mb-8 border-b border-slate-100 pb-4">
               {editMode ? 'Gestión de Activo' : 'Asignación de Nuevo Kit'}
             </h3>
 
             <div className="space-y-8">
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 ml-1">Seleccionar Trabajador:</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 ml-1">Asignar a:</label>
                 <select className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-[#00338d] outline-none" value={form.trabajador_id} onChange={(e) => setForm({...form, trabajador_id: e.target.value})}>
                     <option value="">-- ENVIAR A BODEGA (SIN ASIGNAR) --</option>
                     {usuarios.map(u => <option key={u.user_id} value={u.user_id}>{u.nombre} ({u.email})</option>)}
@@ -210,7 +229,7 @@ export default function DispositivosPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {(!editMode || form.edit_tipo === 'Notebook') && (
                   <div className="space-y-4 p-6 bg-blue-50/30 border border-blue-100/50 rounded-3xl">
-                    <div className="flex items-center gap-2 text-[#00338d] mb-2"><Laptop size={20}/><span className="text-xs font-black uppercase">Detalle Notebook</span></div>
+                    <div className="flex items-center gap-2 text-[#00338d] mb-2"><Laptop size={20}/><span className="text-xs font-black uppercase tracking-tight">Detalle Notebook</span></div>
                     <input type="text" placeholder="Marca" className="w-full p-3 bg-white rounded-xl text-sm outline-none border border-slate-200" value={form.nb_marca} onChange={(e) => setForm({...form, nb_marca: e.target.value})} />
                     <input type="text" placeholder="Modelo" className="w-full p-3 bg-white rounded-xl text-sm outline-none border border-slate-200" value={form.nb_modelo} onChange={(e) => setForm({...form, nb_modelo: e.target.value})} />
                     <input type="text" placeholder="N° Serie" className="w-full p-3 bg-white rounded-xl text-sm outline-none font-mono border border-slate-200" value={form.nb_serie} onChange={(e) => setForm({...form, nb_serie: e.target.value})} />
@@ -219,7 +238,7 @@ export default function DispositivosPage() {
 
                 {(!editMode || form.edit_tipo === 'Telefono') && (
                   <div className="space-y-4 p-6 bg-amber-50/30 border border-amber-100/50 rounded-3xl">
-                    <div className="flex items-center gap-2 text-amber-600 mb-2"><Smartphone size={20}/><span className="text-xs font-black uppercase">Detalle Smartphone</span></div>
+                    <div className="flex items-center gap-2 text-amber-600 mb-2"><Smartphone size={20}/><span className="text-xs font-black uppercase tracking-tight">Detalle Smartphone</span></div>
                     <input type="text" placeholder="Marca" className="w-full p-3 bg-white rounded-xl text-sm outline-none border border-slate-200" value={form.ph_marca} onChange={(e) => setForm({...form, ph_marca: e.target.value})} />
                     <input type="text" placeholder="Modelo" className="w-full p-3 bg-white rounded-xl text-sm outline-none border border-slate-200" value={form.ph_modelo} onChange={(e) => setForm({...form, ph_modelo: e.target.value})} />
                     <input type="text" placeholder="IMEI" className="w-full p-3 bg-white rounded-xl text-sm outline-none font-mono border border-slate-200" value={form.ph_imei} onChange={(e) => setForm({...form, ph_imei: e.target.value})} />
@@ -231,21 +250,21 @@ export default function DispositivosPage() {
               {editMode && (
                 <div className="p-6 bg-slate-900 rounded-3xl grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Etiqueta</label>
+                        <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Nombre Visual</label>
                         <input type="text" className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white outline-none mt-1" value={form.edit_nombre} onChange={(e) => setForm({...form, edit_nombre: e.target.value})} />
                     </div>
                     <div>
                         <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Estado</label>
                         <select className="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white mt-1 outline-none" value={form.edit_estado} onChange={(e) => setForm({...form, edit_estado: e.target.value})}>
                             <option className="text-slate-800" value="operativo">Operativo</option>
-                            <option className="text-slate-800" value="dañado">Dañado</option>
-                            <option className="text-slate-800" value="de baja">De Baja</option>
+                            <option className="text-slate-800" value="dañado">Dañado / Falla</option>
+                            <option className="text-slate-800" value="de baja">De Baja / Obsoleto</option>
                         </select>
                     </div>
                 </div>
               )}
 
-              <button onClick={handleSave} className="w-full py-5 bg-[#00338d] text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-2xl flex items-center justify-center gap-3 hover:bg-blue-800 transition-all">
+              <button onClick={handleSave} className="w-full py-5 bg-[#00338d] text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-2xl flex items-center justify-center gap-3 hover:bg-blue-800 transition-all active:scale-[0.98]">
                 <CheckCircle2 size={20} /> {editMode ? 'Confirmar Cambios' : 'Registrar Entrega de Kit'}
               </button>
             </div>
