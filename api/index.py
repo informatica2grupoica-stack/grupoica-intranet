@@ -9,14 +9,15 @@ app = Flask(__name__)
 # Tu API Key de Serper.dev
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
 
-def clean_store_name(url):
-    """Extrae el nombre de la tienda del dominio de forma limpia"""
+def clean_store_name(url, source_title=None):
+    """Extrae el nombre de la tienda o usa el título del mapa"""
+    if source_title:
+        return source_title.upper()
     try:
         domain = url.split('/')[2].replace('www.', '')
-        name = domain.split('.')[0].upper()
-        return name
+        return domain.split('.')[0].upper()
     except:
-        return "TIENDA CL"
+        return "FERRETERÍA LOCAL"
 
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
@@ -24,20 +25,23 @@ def scrape_prices():
     if not producto:
         return jsonify([])
     
-    # Modo Test para verificar conexión
+    # Modo Test
     if producto.lower() == "test":
-        return jsonify([{"tienda": "SISTEMA", "nombre": "Modo Masivo Activado", "precio_formateado": "$1.000", "precio_valor": 1000, "link": "#"}])
+        return jsonify([{"tienda": "SISTEMA", "nombre": "Radar Total Activado", "precio_formateado": "$1.000", "precio_valor": 1000, "link": "#"}])
 
     url = "https://google.serper.dev/search"
     
-    # CONFIGURACIÓN MASIVA:
-    # 1. 'num': 100 -> Pedimos los 100 mejores resultados de Google de una vez (abarca varias páginas)
-    # 2. 'q': Quitamos restricciones para que traiga caras, baratas, grandes y pequeñas
+    # QUERY POTENCIADA: Buscamos en retail, patios constructores y ferreterías locales
+    # Usamos términos que disparan resultados de construcción profesional
+    main_query = f"{producto} precio chile (ferreteria OR 'patio constructor' OR 'materiales construccion' OR 'venta empresa') .cl"
+    
     payload = json.dumps({
-        "q": f"{producto} precio ferreteria chile",
+        "q": main_query,
         "gl": "cl",
         "hl": "es",
-        "num": 100 
+        "num": 100,
+        "page": 1,
+        "type": "search" # Esto abarca web, shopping y lugares cercanos
     })
     
     headers = {
@@ -46,42 +50,48 @@ def scrape_prices():
     }
 
     try:
-        response = requests.post(url, headers=headers, data=payload, timeout=20)
+        response = requests.post(url, headers=headers, data=payload, timeout=25)
         data = response.json()
         
         resultados_brutos = []
-        vistos = set() # Para no repetir el mismo producto de la misma tienda
+        vistos = set()
 
-        # 1. Recolección de resultados orgánicos
-        fuentes = data.get('organic', [])
-        
-        # 2. Recolección de resultados de "Shopping" si Google los muestra en la búsqueda
-        if 'shopping' in data:
-            fuentes.extend(data.get('shopping', []))
+        # 1. CAPTURAMOS RESULTADOS DE MAPAS (Ferreterías de barrio / locales físicos)
+        if 'places' in data:
+            for place in data.get('places', []):
+                # Los lugares de mapas a veces no tienen precio directo, 
+                # pero los incluimos si el sistema detecta uno en su descripción
+                title = place.get('title', '')
+                address = place.get('address', '')
+                link = place.get('website', f"https://www.google.com/maps/search/{quote_plus(title)}")
+                
+                # Para mapas, si no hay precio, ponemos 0 para que el front lo maneje o lo mande al final
+                resultados_brutos.append({
+                    "tienda": clean_store_name("", title),
+                    "nombre": f"Local: {title} - {address[:50]}",
+                    "precio_formateado": "Ver en Local",
+                    "precio_valor": 0, # Se irá al final por precio
+                    "link": link
+                })
 
-        for item in fuentes:
+        # 2. CAPTURAMOS RESULTADOS ORGÁNICOS (Webs, Patios, Constructoras)
+        for item in data.get('organic', []):
             link = item.get('link', '')
             title = item.get('title', '')
-            snippet = item.get('snippet', '') or item.get('source', '')
+            snippet = item.get('snippet', '')
 
-            # Buscamos el precio con un regex que aguanta cualquier formato chileno
+            # Buscamos precio con regex flexible
             price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
             
             if price_match:
                 try:
-                    # Limpiamos el precio a número entero
                     raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
                     
-                    # FILTROS DE ROBUSTEZ MASIVA
-                    # - Solo dominios de Chile (.cl)
-                    # - Precios mayores a $500 (para evitar errores de 'desde' o miniaturas)
-                    # - Evitar duplicados exactos de URL
                     if ".cl" in link and raw_val > 500 and link not in vistos:
                         tienda = clean_store_name(link)
                         
-                        # Lista negra de sitios que NO son tiendas
-                        if tienda in ["CHILEATIENDE", "YOUTUBE", "WIKIPEDIA", "FACEBOOK", "INSTAGRAM", "PINTEREST"]:
-                            continue
+                        # Filtro de ruido
+                        if any(x in tienda for x in ["YOUTUBE", "FACEBOOK", "WIKIPEDIA"]): continue
 
                         resultados_brutos.append({
                             "tienda": tienda,
@@ -91,15 +101,16 @@ def scrape_prices():
                             "link": link
                         })
                         vistos.add(link)
-                except:
-                    continue
+                except: continue
 
-        # ORDENAMIENTO CRÍTICO: De más barato a más caro
-        # Esto pone las ofertas de Mayorista Constructor contra el mundo
-        resultados_finales = sorted(resultados_brutos, key=lambda x: x['precio_valor'])
+        # 3. ORDENAMIENTO INTELIGENTE
+        # Primero los que tienen precio (de más barato a más caro)
+        # Al final los locales de mapas que no publican precio online
+        con_precio = sorted([r for r in resultados_brutos if r['precio_valor'] > 0], key=lambda x: x['precio_valor'])
+        sin_precio = [r for r in resultados_brutos if r['precio_valor'] == 0]
         
-        return jsonify(resultados_finales)
+        return jsonify(con_precio + sin_precio)
 
     except Exception as e:
-        print(f"Error Masivo: {e}")
+        print(f"Error Radar: {e}")
         return jsonify([])
