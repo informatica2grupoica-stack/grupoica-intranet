@@ -31,17 +31,21 @@ export default function DispositivosPage() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Validación dinámica de permisos (Igual que en Productos/Tareas)
+        // AJUSTE SEGÚN TU ESQUEMA DE BASE DE DATOS:
+        // Buscamos el rol y el objeto JSONB de permisos
         const { data: perfil } = await supabase
           .from('perfiles')
-          .select('es_admin, permiso_dispositivos')
+          .select('rol, permisos')
           .eq('user_id', session.user.id)
           .single();
 
+        const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'superuser';
+        const tienePermisoManual = perfil?.permisos?.can_manage_devices === true;
+
         if (
           session.user.email === 'informatica2.grupoica@gmail.com' || 
-          perfil?.es_admin || 
-          perfil?.permiso_dispositivos
+          esAdmin || 
+          tienePermisoManual
         ) {
           setCanEdit(true);
         }
@@ -53,7 +57,7 @@ export default function DispositivosPage() {
 
   const fetchData = async () => {
     const [resDisp, resUsers] = await Promise.all([
-      supabase.from('dispositivos').select('*, perfiles(nombre, email)').order('created_at', { ascending: false }),
+      supabase.from('dispositivos').select('*, perfiles!dispositivos_asignado_a_fkey(nombre, email)').order('created_at', { ascending: false }),
       supabase.from('perfiles').select('user_id, nombre, email').order('nombre', { ascending: true })
     ]);
 
