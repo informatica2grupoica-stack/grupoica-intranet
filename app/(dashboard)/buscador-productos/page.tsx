@@ -21,7 +21,7 @@ export default function ComparadorB2B() {
     if (!input.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/scrapper?producto=${encodeURIComponent(input)}`);
+      const res = await fetch(`/api/index?producto=${encodeURIComponent(input)}`);
       const data = await res.json();
       setLista(data);
     } catch (error) {
