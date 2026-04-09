@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe } from "lucide-react";
+import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase"; // Importación de Supabase necesaria
 
 interface Categoria {
   producto_categoria_id: string;
@@ -32,7 +33,7 @@ interface FormState {
   se_puede_vender: boolean;
   se_puede_comprar: boolean;
   se_mantiene_stock: boolean;
-  producto_vender_en_web: boolean; // ACTUALIZADO: Nombre exacto para API Obuma
+  producto_vender_en_web: boolean;
 }
 
 const initialState: FormState = {
@@ -49,7 +50,7 @@ const initialState: FormState = {
   se_puede_vender: true,
   se_puede_comprar: true,
   se_mantiene_stock: true,
-  producto_vender_en_web: true, // Por defecto activado para el punto verde
+  producto_vender_en_web: true,
 };
 
 export default function NuevoProductoForm() {
@@ -60,9 +61,25 @@ export default function NuevoProductoForm() {
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
   const [form, setForm] = useState<FormState>(initialState);
 
+  // ESTADOS PARA PERMISOS
+  const [perfilLogueado, setPerfilLogueado] = useState<any>(null);
+  const [loadingPermisos, setLoadingPermisos] = useState(true);
+
   useEffect(() => {
     async function loadData() {
+      setLoadingPermisos(true);
       try {
+        // VERIFICACIÓN DE SESIÓN Y ROL
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: miPerfil } = await supabase
+            .from('perfiles')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .single();
+          setPerfilLogueado(miPerfil);
+        }
+
         const [resCat, resSub] = await Promise.all([
           fetch('/api/obuma/categorias'),
           fetch('/api/obuma/subcategorias')
@@ -73,10 +90,15 @@ export default function NuevoProductoForm() {
         setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
       } catch (err) { 
         setStatus({ type: 'error', msg: "Error de conexión con Obuma" });
+      } finally {
+        setLoadingPermisos(false);
       }
     }
     loadData();
   }, []);
+
+  // Lógica de permiso
+  const puedeCrear = perfilLogueado?.rol === 'admin' || perfilLogueado?.rol === 'superuser';
 
   useEffect(() => {
     const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -90,7 +112,7 @@ export default function NuevoProductoForm() {
   }, [allSubcategorias, form.categoria_id]);
 
   const solicitarNuevoSku = async (subId: string) => {
-    if (!subId) return;
+    if (!subId || !puedeCrear) return; // No solicita SKU si no tiene permiso
     setGeneratingSku(true);
     setForm(prev => ({ ...prev, subcategoria_id: subId }));
     try {
@@ -106,6 +128,7 @@ export default function NuevoProductoForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!puedeCrear) return; // Doble validación
     setLoading(true);
     setStatus(null);
     try {
@@ -128,6 +151,15 @@ export default function NuevoProductoForm() {
   return (
     <div className="min-h-screen bg-[#f8fafc] p-6 lg:p-12 text-slate-700 font-sans">
       <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* AVISO DE SIN PERMISOS */}
+        {!loadingPermisos && !puedeCrear && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-700 mb-2 shadow-sm animate-in fade-in slide-in-from-top-2">
+            <Lock size={16} />
+            <p className="text-[10px] font-black uppercase tracking-widest">Modo Lectura: Tu cuenta no tiene permisos para crear SKUs en Obuma.</p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-4">
           <div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase">Nuevo Producto</h1>
@@ -152,7 +184,7 @@ export default function NuevoProductoForm() {
             {(['c1', 'c2', 'c3', 'c4'] as const).map((f, i) => (
               <div key={f} className="flex flex-col gap-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">{i+1}. {f === 'c1' ? 'Tipo' : f === 'c2' ? 'Atributo' : f === 'c3' ? 'Medida' : 'Marca'}</label>
-                <input className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#00338d] focus:bg-white transition-all shadow-sm" value={form[f]} onChange={(e) => setForm(prev => ({...prev, [f]: e.target.value}))} />
+                <input disabled={!puedeCrear} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#00338d] focus:bg-white transition-all shadow-sm disabled:opacity-50" value={form[f]} onChange={(e) => setForm(prev => ({...prev, [f]: e.target.value}))} />
               </div>
             ))}
           </div>
@@ -161,7 +193,7 @@ export default function NuevoProductoForm() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo de Item</label>
-              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer" value={form.tipo} onChange={(e) => setForm(prev => ({...prev, tipo: e.target.value}))}>
+              <select disabled={!puedeCrear} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer disabled:opacity-50" value={form.tipo} onChange={(e) => setForm(prev => ({...prev, tipo: e.target.value}))}>
                 <option value="Producto">Producto</option>
                 <option value="Servicio">Servicio</option>
               </select>
@@ -177,7 +209,7 @@ export default function NuevoProductoForm() {
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Categoría Principal *</label>
-              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer" value={form.categoria_id} onChange={(e) => setForm(prev => ({...prev, categoria_id: e.target.value, subcategoria_id: ""}))} required>
+              <select disabled={!puedeCrear} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none cursor-pointer disabled:opacity-50" value={form.categoria_id} onChange={(e) => setForm(prev => ({...prev, categoria_id: e.target.value, subcategoria_id: ""}))} required>
                 <option value="">Seleccionar...</option>
                 {categorias.map((cat) => <option key={cat.producto_categoria_id} value={String(cat.producto_categoria_id)}>{cat.producto_categoria_nombre}</option>)}
               </select>
@@ -188,7 +220,7 @@ export default function NuevoProductoForm() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Subcategoria *</label>
-              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" disabled={!form.categoria_id} value={form.subcategoria_id} onChange={(e) => solicitarNuevoSku(e.target.value)} required>
+              <select className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none disabled:opacity-50" disabled={!form.categoria_id || !puedeCrear} value={form.subcategoria_id} onChange={(e) => solicitarNuevoSku(e.target.value)} required>
                 <option value="">Seleccionar...</option>
                 {subCategoriasFiltradas.map((sub) => <option key={sub.producto_subcategoria_id} value={String(sub.producto_subcategoria_id)}>{sub.producto_subcategoria_nombre}</option>)}
               </select>
@@ -198,13 +230,13 @@ export default function NuevoProductoForm() {
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase italic">Precio Costo</label>
-                <button type="button" onClick={() => setForm(prev => ({ ...prev, costo_incluye_iva: !prev.costo_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.costo_incluye_iva ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                <button disabled={!puedeCrear} type="button" onClick={() => setForm(prev => ({ ...prev, costo_incluye_iva: !prev.costo_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.costo_incluye_iva ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
                   {form.costo_incluye_iva ? 'CON IVA' : 'NETO'}
                 </button>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                <input type="number" className="w-full p-4 pl-8 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" value={form.precio_costo} onChange={(e) => setForm(prev => ({...prev, precio_costo: Number(e.target.value)}))} />
+                <input disabled={!puedeCrear} type="number" className="w-full p-4 pl-8 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none disabled:opacity-50" value={form.precio_costo} onChange={(e) => setForm(prev => ({...prev, precio_costo: Number(e.target.value)}))} />
               </div>
             </div>
 
@@ -212,13 +244,13 @@ export default function NuevoProductoForm() {
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-[#00338d] uppercase italic">Precio Venta</label>
-                <button type="button" onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#00338d] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                <button disabled={!puedeCrear} type="button" onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#00338d] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
                   {form.venta_incluye_iva ? 'CON IVA (BRUTO)' : 'NETO'}
                 </button>
               </div>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#00338d] font-black">$</span>
-                <input type="number" className="w-full p-4 pl-8 bg-white border-2 border-[#00338d] rounded-2xl text-sm font-black text-[#00338d] outline-none shadow-md" value={form.precio_venta} onChange={(e) => setForm(prev => ({...prev, precio_venta: Number(e.target.value)}))} />
+                <input disabled={!puedeCrear} type="number" className="w-full p-4 pl-8 bg-white border-2 border-[#00338d] rounded-2xl text-sm font-black text-[#00338d] outline-none shadow-md disabled:border-slate-200 disabled:text-slate-300 disabled:shadow-none" value={form.precio_venta} onChange={(e) => setForm(prev => ({...prev, precio_venta: Number(e.target.value)}))} />
               </div>
             </div>
           </div>
@@ -226,16 +258,15 @@ export default function NuevoProductoForm() {
           {/* OPCIONES STOCK Y WEB */}
           <div className="flex flex-wrap items-center gap-8 py-4 px-2 border-t border-slate-100">
             {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
-              <label key={key} className="flex items-center gap-3 cursor-pointer group">
-                <input type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
+              <label key={key} className={`flex items-center gap-3 cursor-pointer group ${!puedeCrear ? 'pointer-events-none opacity-40' : ''}`}>
+                <input disabled={!puedeCrear} type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#00338d] focus:ring-0" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
                 <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">{key.replace(/_/g, ' ')}</span>
               </label>
             ))}
 
-            {/* SELECTOR WEB OBUMA */}
             <div className="h-6 w-[1px] bg-slate-200 hidden md:block"></div>
-            <label className="flex items-center gap-3 cursor-pointer group bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-all">
-              <input type="checkbox" className="w-5 h-5 rounded-lg border-emerald-300 text-emerald-600 focus:ring-0" checked={form.producto_vender_en_web} onChange={e => setForm(prev => ({...prev, producto_vender_en_web: e.target.checked}))} />
+            <label className={`flex items-center gap-3 cursor-pointer group bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-all ${!puedeCrear ? 'pointer-events-none opacity-40' : ''}`}>
+              <input disabled={!puedeCrear} type="checkbox" className="w-5 h-5 rounded-lg border-emerald-300 text-emerald-600 focus:ring-0" checked={form.producto_vender_en_web} onChange={e => setForm(prev => ({...prev, producto_vender_en_web: e.target.checked}))} />
               <div className="flex items-center gap-2">
                 <Globe size={14} className="text-emerald-600" />
                 <span className="text-[10px] font-black uppercase text-emerald-700">Sincronizar con Web (Punto Verde)</span>
@@ -253,9 +284,20 @@ export default function NuevoProductoForm() {
             </div>
             <div className="flex gap-4 w-full md:w-auto">
               <Link href="/obuma-productos" className="flex-1 md:flex-none px-8 py-4 rounded-2xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 text-center">Cancelar</Link>
-              <button type="submit" disabled={loading || !form.sku || !form.nombre_completo} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-[#00338d] text-white px-16 py-5 rounded-3xl text-xs font-black uppercase shadow-[0_10px_30px_rgba(0,51,141,0.3)] hover:bg-blue-800 transition-all disabled:opacity-50">
-                {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} Crear en Obuma
+              
+              {/* BOTÓN FINAL CON LÓGICA DE BLOQUEO */}
+              <button 
+                type="submit" 
+                disabled={loading || !form.sku || !form.nombre_completo || !puedeCrear} 
+                className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-16 py-5 rounded-3xl text-xs font-black uppercase transition-all shadow-xl
+                  ${puedeCrear 
+                    ? 'bg-[#00338d] text-white hover:bg-blue-800 shadow-[0_10px_30px_rgba(0,51,141,0.3)]' 
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : (puedeCrear ? <Save size={20} /> : <Lock size={20} />)} 
+                {puedeCrear ? "Crear en Obuma" : "Sin Permisos"}
               </button>
+
             </div>
           </div>
         </form>
