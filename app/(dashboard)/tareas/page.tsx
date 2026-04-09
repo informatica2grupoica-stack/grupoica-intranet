@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   Plus, User as UserIcon, Loader2, 
   CheckCircle2, PlayCircle, Trash2, Clock, AlertCircle, Bookmark, X, Check,
-  MessageSquare, Send
+  MessageSquare, Send, Lock
 } from "lucide-react";
 
 export default function TareasPage() {
@@ -15,7 +15,6 @@ export default function TareasPage() {
   const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null);
   const [notificacion, setNotificacion] = useState<{msg: string, tipo: 'success' | 'error'} | null>(null);
   
-  // ESTADOS PARA COMENTARIOS
   const [tareaExpandida, setTareaExpandida] = useState<string | null>(null);
   const [comentarios, setComentarios] = useState<any[]>([]);
   const [nuevoComentario, setNuevoComentario] = useState("");
@@ -24,6 +23,11 @@ export default function TareasPage() {
   const [form, setForm] = useState({ 
     titulo: "", descripcion: "", prioridad: "media", asignado_a: "" 
   });
+
+  // --- NUEVAS VARIABLES DE PERMISOS ---
+  const esAdminOSuper = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
+  const puedeCrearTareas = esAdminOSuper || perfilUsuario?.permisos?.can_create_tasks === true;
+  const puedeAsignarAOtros = esAdminOSuper || perfilUsuario?.permisos?.can_assign_tasks === true;
 
   useEffect(() => {
     if (notificacion) {
@@ -36,8 +40,7 @@ export default function TareasPage() {
     fetchData();
     const channel = supabase.channel('cambios-tareas')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comentarios_tareas' }, (payload) => {
-          // Si el comentario pertenece a la tarea abierta, recargar comentarios
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comentarios_tareas' }, () => {
           if (tareaExpandida) fetchComentarios(tareaExpandida);
       })
       .subscribe();
@@ -51,6 +54,11 @@ export default function TareasPage() {
       const { data: p } = await supabase.from('perfiles').select('*').eq('user_id', session.user.id).single();
       setPerfilUsuario(p);
       perfilActual = p;
+
+      // Si el usuario NO puede asignar a otros, fijamos su ID en el formulario por defecto
+      if (p && (p.rol === 'user' && !p.permisos?.can_assign_tasks)) {
+        setForm(prev => ({ ...prev, asignado_a: p.id }));
+      }
     }
     if (!perfilActual) return;
 
@@ -61,7 +69,8 @@ export default function TareasPage() {
         comentarios:comentarios_tareas(count)
       `);
 
-    if (perfilActual.rol === 'user') {
+    // Los "user" normales (sin permisos de admin) solo ven lo suyo o lo que crearon
+    if (perfilActual.rol === 'user' && perfilActual.rol !== 'admin' && perfilActual.rol !== 'superuser') {
       query = query.or(`asignado_a.eq.${perfilActual.id},creado_por.eq.${perfilActual.id}`);
     }
     const { data: t } = await query.order('created_at', { ascending: false });
@@ -70,7 +79,6 @@ export default function TareasPage() {
     if (users) setUsuarios(users);
   }
 
-  // LOGICA DE COMENTARIOS
   async function fetchComentarios(tareaId: string) {
     const { data } = await supabase
       .from('comentarios_tareas')
@@ -105,8 +113,16 @@ export default function TareasPage() {
         ...form, creado_por: perfilUsuario.id, estado: 'pendiente' 
       }]);
       if (error) throw error;
-      setForm({ titulo: "", descripcion: "", prioridad: "media", asignado_a: "" });
-      setNotificacion({ msg: "Tarea asignada correctamente", tipo: 'success' });
+      
+      // Reset form pero manteniendo la auto-asignación si corresponde
+      setForm({ 
+        titulo: "", 
+        descripcion: "", 
+        prioridad: "media", 
+        asignado_a: puedeAsignarAOtros ? "" : perfilUsuario.id 
+      });
+      
+      setNotificacion({ msg: "Tarea guardada correctamente", tipo: 'success' });
       fetchData();
     } catch (error: any) { 
         setNotificacion({ msg: "Error: " + error.message, tipo: 'error' });
@@ -149,7 +165,6 @@ export default function TareasPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative">
       
-      {/* ALERTA FLOTANTE (TOAST) */}
       {notificacion && (
         <div className={`fixed top-10 right-1/2 translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-[2rem] shadow-2xl backdrop-blur-xl border animate-in slide-in-from-top-10 duration-500 ${
           notificacion.tipo === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'
@@ -160,7 +175,6 @@ export default function TareasPage() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-4 md:px-0">
         <div>
           <h2 className="text-4xl font-black text-[#00338d] tracking-tighter uppercase italic leading-none">
@@ -173,13 +187,15 @@ export default function TareasPage() {
         </div>
       </header>
 
-      {/* FORMULARIO (Se mantiene igual) */}
-      {perfilUsuario?.rol !== 'user' && (
+      {/* SECCIÓN FORMULARIO (MODIFICADA CON PERMISOS) */}
+      {puedeCrearTareas && (
         <section className="mx-4 md:mx-0 bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-slate-100 relative overflow-hidden group">
           <form onSubmit={handleCrearTarea} className="relative z-10 space-y-6">
             <div className="flex items-center gap-2 mb-2 text-[#00338d]">
               <Bookmark className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Nueva Asignación</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {puedeAsignarAOtros ? "Nueva Asignación" : "Auto-Asignación de Tarea"}
+              </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="md:col-span-2">
@@ -194,10 +210,25 @@ export default function TareasPage() {
                 <option value="media">Prioridad Media</option>
                 <option value="alta">Prioridad Alta</option>
               </select>
-              <select required className="bg-[#00338d] text-white rounded-2xl px-6 py-4 text-sm font-bold outline-none appearance-none cursor-pointer" value={form.asignado_a} onChange={e => setForm({...form, asignado_a: e.target.value})}>
-                <option value="">Asignar a...</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>)}
-              </select>
+
+              {/* SELECT DE ASIGNACIÓN (BLOQUEADO SI NO TIENE PERMISO) */}
+              <div className="relative">
+                <select 
+                  required 
+                  disabled={!puedeAsignarAOtros}
+                  className={`w-full h-full rounded-2xl px-6 py-4 text-sm font-bold outline-none appearance-none cursor-pointer ${
+                    puedeAsignarAOtros ? 'bg-[#00338d] text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  }`} 
+                  value={form.asignado_a} 
+                  onChange={e => setForm({...form, asignado_a: e.target.value})}
+                >
+                  <option value={perfilUsuario?.id}>Asignada a mí</option>
+                  {puedeAsignarAOtros && usuarios.filter(u => u.id !== perfilUsuario?.id).map(u => (
+                    <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
+                  ))}
+                </select>
+                {!puedeAsignarAOtros && <Lock className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
+              </div>
             </div>
             <div className="flex flex-col md:flex-row gap-6 items-start">
               <textarea 
@@ -219,7 +250,7 @@ export default function TareasPage() {
           const idActual = String(perfilUsuario?.id || "").trim();
           const esAsignado = idActual === String(t.asignado_a || "").trim();
           const esCreador = idActual === String(t.creado_por || "").trim();
-          const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'super-user';
+          const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
           const esConfirmando = confirmarEliminar === t.id;
           const estaAbierta = tareaExpandida === t.id;
 
@@ -310,7 +341,6 @@ export default function TareasPage() {
                     </div>
                 </div>
                 
-                {/* BOTON COMENTARIOS (BURBUJA) */}
                 <button 
                     onClick={() => {
                         setTareaExpandida(t.id);
@@ -355,7 +385,6 @@ export default function TareasPage() {
         })}
       </section>
 
-      {/* FOOTER VACIO */}
       {tareas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 opacity-20">
           <AlertCircle className="w-16 h-16 mb-4" />
