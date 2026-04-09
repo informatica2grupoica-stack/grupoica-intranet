@@ -3,8 +3,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
   UserPlus, Loader2, X, Pencil, Trash2, Search, 
-  Lock, Briefcase 
-} from "lucide-react"; // Corregido: Importación limpia de lucide-react
+  Lock, Briefcase, CheckCircle2, Circle, LayoutList, Package, Laptop
+} from "lucide-react";
 
 export default function GestionUsuarios() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -16,13 +16,19 @@ export default function GestionUsuarios() {
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
+  // ESTADO INICIAL CON PERMISOS
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     nombre: "",
     apellido: "",
     cargo: "",
-    rol: "user" 
+    rol: "user",
+    permisos: {
+      can_create_tasks: false,
+      can_create_products: false,
+      can_manage_devices: false
+    }
   });
 
   useEffect(() => {
@@ -55,7 +61,6 @@ export default function GestionUsuarios() {
     }
   }
 
-  // Ahora el filtro también busca por Cargo
   const usuariosFiltrados = usuarios.filter(u => 
     `${u.nombre} ${u.apellido} ${u.email} ${u.cargo}`.toLowerCase().includes(filtro.toLowerCase())
   );
@@ -63,7 +68,10 @@ export default function GestionUsuarios() {
   function cerrarModal() {
     setIsModalOpen(false);
     setEditandoId(null);
-    setFormData({ email: "", password: "", nombre: "", apellido: "", cargo: "", rol: "user" });
+    setFormData({ 
+      email: "", password: "", nombre: "", apellido: "", cargo: "", rol: "user",
+      permisos: { can_create_tasks: false, can_create_products: false, can_manage_devices: false }
+    });
     setMensaje({ tipo: "", texto: "" });
   }
 
@@ -76,25 +84,22 @@ export default function GestionUsuarios() {
       nombre: user.nombre,
       apellido: user.apellido,
       cargo: user.cargo || "",
-      rol: user.rol 
+      rol: user.rol,
+      permisos: user.permisos || { can_create_tasks: false, can_create_products: false, can_manage_devices: false }
     });
     setIsModalOpen(true);
   }
 
-  async function handleEliminar(user: any) {
-    if (user.rol === 'superuser') return alert("Error: El Superusuario es intocable.");
-    if (!confirm(`¿Estás seguro de eliminar a ${user.nombre}?`)) return;
-    
-    const { error } = await supabase.from('perfiles').delete().eq('id', user.id);
-    if (!error) obtenerUsuariosYSesion();
-    else alert("No tienes permisos suficientes.");
-  }
-
-  async function toggleEstado(user: any) {
-    if (user.rol === 'superuser') return;
-    const { error } = await supabase.from('perfiles').update({ activo: !user.activo }).eq('id', user.id);
-    if (!error) obtenerUsuariosYSesion();
-  }
+  // Función para alternar permisos individuales
+  const togglePermiso = (key: string) => {
+    setFormData(prev => ({
+      ...prev,
+      permisos: {
+        ...prev.permisos,
+        [key]: !(prev.permisos as any)[key]
+      }
+    }));
+  };
 
   async function handleGuardarUsuario(e: React.FormEvent) {
     e.preventDefault();
@@ -102,15 +107,16 @@ export default function GestionUsuarios() {
     setMensaje({ tipo: "", texto: "" });
 
     try {
-      if (editandoId) {
-        const dataUpdate: any = {
-          nombre: formData.nombre,
-          apellido: formData.apellido,
-          cargo: formData.cargo,
-          rol: formData.rol === 'superuser' ? 'admin' : formData.rol
-        };
+      const dataPayload: any = {
+        nombre: formData.nombre,
+        apellido: formData.apellido,
+        cargo: formData.cargo,
+        rol: formData.rol === 'superuser' ? 'admin' : formData.rol,
+        permisos: formData.permisos // ENVIAMOS EL OBJETO DE PODERES
+      };
 
-        const { error } = await supabase.from('perfiles').update(dataUpdate).eq('id', editandoId);
+      if (editandoId) {
+        const { error } = await supabase.from('perfiles').update(dataPayload).eq('id', editandoId);
         if (error) throw error;
       } else {
         const { data: auth, error: authErr } = await supabase.auth.signUp({
@@ -120,24 +126,36 @@ export default function GestionUsuarios() {
         if (authErr) throw authErr;
 
         const { error: pErr } = await supabase.from('perfiles').insert([{
+          ...dataPayload,
           user_id: auth.user?.id,
           email: formData.email.toLowerCase().trim(),
-          nombre: formData.nombre,
-          apellido: formData.apellido,
-          cargo: formData.cargo,
-          rol: formData.rol === 'superuser' ? 'admin' : formData.rol,
           activo: true
         }]);
         if (pErr) throw pErr;
       }
       
-      setMensaje({ tipo: "success", texto: "Operación exitosa" });
+      setMensaje({ tipo: "success", texto: "Usuario actualizado con éxito" });
       setTimeout(() => { cerrarModal(); obtenerUsuariosYSesion(); }, 1000);
     } catch (err: any) {
       setMensaje({ tipo: "error", texto: err.message });
     } finally {
       setLoadingForm(false);
     }
+  }
+
+  // ... (Funciones de eliminar y toggleEstado se mantienen igual)
+  async function handleEliminar(user: any) {
+    if (user.rol === 'superuser') return alert("Error: El Superusuario es intocable.");
+    if (!confirm(`¿Estás seguro de eliminar a ${user.nombre}?`)) return;
+    const { error } = await supabase.from('perfiles').delete().eq('id', user.id);
+    if (!error) obtenerUsuariosYSesion();
+    else alert("No tienes permisos suficientes.");
+  }
+
+  async function toggleEstado(user: any) {
+    if (user.rol === 'superuser') return;
+    const { error } = await supabase.from('perfiles').update({ activo: !user.activo }).eq('id', user.id);
+    if (!error) obtenerUsuariosYSesion();
   }
 
   return (
@@ -251,7 +269,7 @@ export default function GestionUsuarios() {
                           </button>
                         </>
                       ) : (
-                        <span className="text-[10px] text-slate-300 font-bold px-2 italic uppercase italic">Protegido</span>
+                        <span className="text-[10px] text-slate-300 font-bold px-2 italic uppercase">Protegido</span>
                       )}
                     </div>
                   </td>
@@ -262,12 +280,12 @@ export default function GestionUsuarios() {
         </table>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL CON SECCIÓN DE PODERES */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+          <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden">
             <div className="px-10 py-8 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-xl font-black text-slate-800">{editandoId ? "Editar Perfil" : "Nuevo Miembro"}</h2>
+              <h2 className="text-xl font-black text-slate-800">{editandoId ? "Gestionar Colaborador" : "Nuevo Miembro"}</h2>
               <button onClick={cerrarModal} className="p-2 hover:bg-slate-200 rounded-full text-slate-400"><X /></button>
             </div>
             
@@ -277,18 +295,48 @@ export default function GestionUsuarios() {
                 <input placeholder="Apellido" className="bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 ring-blue-500/20" value={formData.apellido} onChange={e => setFormData({...formData, apellido: e.target.value})} required />
               </div>
 
-              <input type="email" placeholder="Email" disabled={!!editandoId} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm disabled:opacity-50" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+              <div className="grid grid-cols-2 gap-6 items-center">
+                <input type="email" placeholder="Email" disabled={!!editandoId} className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm disabled:opacity-50" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                <select className="bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold text-blue-600 outline-none" value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})}>
+                  <option value="user">USER (Normal)</option>
+                  <option value="admin">ADMIN (Gestión)</option>
+                </select>
+              </div>
 
               {!editandoId && (
                 <input placeholder="Contraseña temporal" className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-mono" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
               )}
 
-              <div className="grid grid-cols-2 gap-6">
-                <input placeholder="Cargo" className="bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 ring-blue-500/20" value={formData.cargo} onChange={e => setFormData({...formData, cargo: e.target.value})} />
-                <select className="bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold text-blue-600 outline-none" value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})}>
-                  <option value="user">USER</option>
-                  <option value="admin">ADMIN</option>
-                </select>
+              <input placeholder="Cargo en la empresa" className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-medium" value={formData.cargo} onChange={e => setFormData({...formData, cargo: e.target.value})} />
+
+              {/* PANEL DE ATRIBUCIONES ESPECIALES */}
+              <div className="bg-slate-900 rounded-[2rem] p-6 text-white space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Atribuciones Especiales</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {[
+                    { key: 'can_create_tasks', label: 'Tareas', icon: LayoutList },
+                    { key: 'can_create_products', label: 'Productos', icon: Package },
+                    { key: 'can_manage_devices', label: 'Equipos', icon: Laptop },
+                  ].map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => togglePermiso(p.key)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-all border-2 ${
+                        (formData.permisos as any)[p.key] 
+                        ? 'bg-blue-600 border-blue-400 text-white' 
+                        : 'bg-white/5 border-transparent text-white/40 hover:bg-white/10'
+                      }`}
+                    >
+                      <p.icon size={18} />
+                      <span className="text-[10px] font-bold uppercase">{p.label}</span>
+                      {(formData.permisos as any)[p.key] ? <CheckCircle2 size={12}/> : <Circle size={12}/>}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {mensaje.texto && (
@@ -298,7 +346,7 @@ export default function GestionUsuarios() {
               )}
 
               <button disabled={loadingForm} className="w-full bg-[#00338d] text-white py-4 rounded-[1.5rem] font-black text-sm hover:bg-blue-900 transition-all uppercase tracking-widest shadow-xl">
-                {loadingForm ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (editandoId ? "Actualizar" : "Registrar")}
+                {loadingForm ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (editandoId ? "Guardar Atribuciones" : "Registrar Miembro")}
               </button>
             </form>
           </div>
