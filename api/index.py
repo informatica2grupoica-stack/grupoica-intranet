@@ -2,27 +2,9 @@ from flask import Flask, request, jsonify
 import requests
 from bs4 import BeautifulSoup
 import re
-import random
+from urllib.parse import quote_plus
 
 app = Flask(__name__)
-
-# Lista de User-Agents para evitar que Google nos bloquee por ser un robot
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-]
-
-def get_raw_number(text):
-    """Extrae solo los números de un string de precio (ej: '$14.990' -> 14990)"""
-    nums = re.sub(r'[^\d]', '', text)
-    return int(nums) if nums else 0
-
-def format_chile_price(value):
-    """Formatea un número al estilo moneda chilena (ej: 14990 -> $14.990)"""
-    if value > 0:
-        return f"${value:,}".replace(",", ".")
-    return "Ver sitio"
 
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
@@ -30,62 +12,53 @@ def scrape_prices():
     if not producto:
         return jsonify([])
 
-    # Construimos la búsqueda enfocada en e-commerce de ferretería en Chile
-    # El parámetro 'hl=es' y 'gl=cl' le dice a Google que estamos en Chile
-    query = f"{producto} precio chile ferreteria"
-    url = f"https://www.google.com/search?q={quote_plus(query)}&hl=es&gl=cl"
-    
+    # MODO DE PRUEBA: Si buscas 'test', verificamos que la API responda
+    if producto.lower() == "test":
+        return jsonify([{
+            "tienda": "Prueba",
+            "nombre": "Conexión Exitosa con Python",
+            "precio_formateado": "$9.990",
+            "precio_valor": 9990,
+            "link": "https://google.cl"
+        }])
+
     headers = {
-        "User-Agent": random.choice(USER_AGENTS),
-        "Accept-Language": "es-CL,es;q=0.9,en;q=0.8"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
+    
+    # Buscamos de forma más amplia
+    url = f"https://www.google.com/search?q={quote_plus(producto + ' precio ferreteria chile')}"
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return jsonify([])
-
         soup = BeautifulSoup(response.text, "html.parser")
         resultados = []
 
-        # 'tF2Cxc' es el contenedor estándar de resultados de Google
+        # Selector principal de Google
         for g in soup.find_all('div', class_='tF2Cxc'):
-            anchors = g.find_all('a')
-            if not anchors: continue
-            
-            link = anchors[0]['href']
             title = g.find('h3').text if g.find('h3') else ""
-            snippet = g.find('div', class_='VwiC3b').text if g.find('div', class_='VwiC3b') else ""
+            link = g.find('a')['href'] if g.find('a') else ""
             
-            # Buscamos el precio en el título o en la descripción (snippet)
-            # Buscamos el formato $XX.XXX
-            price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
+            # Buscamos el precio en cualquier parte del texto
+            full_text = g.get_text()
+            price_match = re.search(r'\$\s?([\d\.]+)', full_text)
             
-            raw_val = 0
             if price_match:
-                raw_val = get_raw_number(price_match.group(0))
-
-            # Solo agregamos si es una tienda chilena y pudimos detectar un precio
-            if ".cl" in link and raw_val > 0:
-                # Extraemos el nombre de la tienda del dominio
-                tienda_nombre = link.split('/')[2].replace('www.', '').split('.')[0].capitalize()
+                price_str = price_match.group(0)
+                # Limpiar el número para la lógica de Mayorista Constructor
+                raw_val = int(re.sub(r'[^\d]', '', price_str))
                 
-                resultados.append({
-                    "tienda": tienda_nombre,
-                    "nombre": title[:80] + "...", # Acortamos títulos muy largos
-                    "precio_formateado": format_chile_price(raw_val),
-                    "precio_valor": raw_val,
-                    "link": link
-                })
+                # Solo tiendas chilenas para ICA
+                if ".cl" in link:
+                    tienda = link.split('/')[2].replace('www.', '').split('.')[0].capitalize()
+                    resultados.append({
+                        "tienda": tienda,
+                        "nombre": title,
+                        "precio_formateado": f"${raw_val:,}".replace(",", "."),
+                        "precio_valor": raw_val,
+                        "link": link
+                    })
 
-        # Ordenar por precio de menor a mayor (opcional, muy útil para el B2B)
-        resultados_ordenados = sorted(resultados, key=lambda x: x['precio_valor'])
-
-        return jsonify(resultados_ordenados[:12])
-    
+        return jsonify(resultados[:12])
     except Exception as e:
-        print(f"Error en Scraper: {e}")
-        return jsonify([])
-
-# Necesario para importar quote_plus
-from urllib.parse import quote_plus
+        return jsonify([{"error": str(e)}])
