@@ -66,8 +66,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     },
     {
-      title: "Ventas",
-      items: [{ name: "Productos", icon: Box, path: "/productos" }]
+      title: "Analisis de productos",
+      items: [{ name: "Buscador Productos", icon: Box, path: "/buscador-productos" }]
     },
     {
       title: "Recursos Humanos",
