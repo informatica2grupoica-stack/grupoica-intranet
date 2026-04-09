@@ -90,7 +90,6 @@ export default function GestionUsuarios() {
     setIsModalOpen(true);
   }
 
-  // Función para alternar permisos individuales
   const togglePermiso = (key: string) => {
     setFormData(prev => ({
       ...prev,
@@ -111,8 +110,8 @@ export default function GestionUsuarios() {
         nombre: formData.nombre,
         apellido: formData.apellido,
         cargo: formData.cargo,
-        rol: formData.rol === 'superuser' ? 'admin' : formData.rol,
-        permisos: formData.permisos // ENVIAMOS EL OBJETO DE PODERES
+        rol: formData.rol, // Quitamos la validación que forzaba a 'admin' para permitir que el state maneje el rol elegido
+        permisos: formData.permisos 
       };
 
       if (editandoId) {
@@ -134,7 +133,7 @@ export default function GestionUsuarios() {
         if (pErr) throw pErr;
       }
       
-      setMensaje({ tipo: "success", texto: "Usuario actualizado con éxito" });
+      setMensaje({ tipo: "success", texto: editandoId ? "Cambios guardados" : "Miembro registrado" });
       setTimeout(() => { cerrarModal(); obtenerUsuariosYSesion(); }, 1000);
     } catch (err: any) {
       setMensaje({ tipo: "error", texto: err.message });

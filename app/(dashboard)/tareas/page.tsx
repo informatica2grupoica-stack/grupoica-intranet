@@ -21,6 +21,12 @@ export default function TareasPage() {
   const [nuevoComentario, setNuevoComentario] = useState("");
   const [enviandoComentario, setEnviandoComentario] = useState(false);
 
+  // LÓGICA DE PERMISOS DERIVADA
+  const puedeCrear = 
+    perfilUsuario?.rol === 'admin' || 
+    perfilUsuario?.rol === 'superuser' || 
+    perfilUsuario?.permisos?.can_create_tasks === true;
+
   const [form, setForm] = useState({ 
     titulo: "", descripcion: "", prioridad: "media", asignado_a: "" 
   });
@@ -37,7 +43,6 @@ export default function TareasPage() {
     const channel = supabase.channel('cambios-tareas')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comentarios_tareas' }, (payload) => {
-          // Si el comentario pertenece a la tarea abierta, recargar comentarios
           if (tareaExpandida) fetchComentarios(tareaExpandida);
       })
       .subscribe();
@@ -70,7 +75,6 @@ export default function TareasPage() {
     if (users) setUsuarios(users);
   }
 
-  // LOGICA DE COMENTARIOS
   async function fetchComentarios(tareaId: string) {
     const { data } = await supabase
       .from('comentarios_tareas')
@@ -173,8 +177,8 @@ export default function TareasPage() {
         </div>
       </header>
 
-      {/* FORMULARIO */}
-      {perfilUsuario?.rol !== 'user' && (
+      {/* FORMULARIO - AHORA USA LA NUEVA LÓGICA DE PERMISOS */}
+      {puedeCrear && (
         <section className="mx-4 md:mx-0 bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-blue-900/5 border border-slate-100 relative overflow-hidden group">
           <form onSubmit={handleCrearTarea} className="relative z-10 space-y-6">
             <div className="flex items-center gap-2 mb-2 text-[#00338d]">
@@ -219,7 +223,8 @@ export default function TareasPage() {
           const idActual = String(perfilUsuario?.id || "").trim();
           const esAsignado = idActual === String(t.asignado_a || "").trim();
           const esCreador = idActual === String(t.creado_por || "").trim();
-          const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'super-user';
+          // Corregido 'super-user' a 'superuser' para coincidir con el CHECK de tu DB
+          const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
           const esConfirmando = confirmarEliminar === t.id;
           const estaAbierta = tareaExpandida === t.id;
 
