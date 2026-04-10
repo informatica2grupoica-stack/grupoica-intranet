@@ -113,7 +113,7 @@ export default function MonitorMasivoICA() {
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tight text-slate-900 leading-none">
-                RADAR <span className="text-orange-600">ICA</span> 
+                BUSCADOR <span className="text-orange-600">IA</span> 
                 <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded-full ml-2 font-black tracking-widest">PRO</span>
               </h1>
             </div>
@@ -191,7 +191,7 @@ export default function MonitorMasivoICA() {
               <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-slate-200 border border-slate-50 mb-8">
                 <Globe size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
               </div>
-              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Ready for Data Injection</p>
+              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Lista de Productos</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
