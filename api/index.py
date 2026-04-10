@@ -7,6 +7,7 @@ from urllib.parse import quote_plus
 
 app = Flask(__name__)
 
+# REVISAR: Tu API KEY de Serper.dev
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
 
 def fetch_serper_data(query, search_type="search"):
@@ -30,7 +31,22 @@ def fetch_serper_data(query, search_type="search"):
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
     producto = request.args.get("producto")
+    # Capturamos el nombre original del Excel si existe
+    origen_excel = request.args.get("origen") 
+    
     if not producto: return jsonify([])
+
+    # MODO TEST: Para verificar conexión sin gastar créditos
+    if producto.lower() == "test":
+        return jsonify([{
+            "tienda": "SISTEMA",
+            "nombre": "BACKEND OPERATIVO - LISTO PARA EXCEL",
+            "precio_valor": 0,
+            "precio_formateado": "OK",
+            "link": "#",
+            "canal": "DEBUG",
+            "busqueda_original": "TEST"
+        }])
 
     # Query optimizada para el sector construcción
     query_maestra = f"{producto} chile"
@@ -40,19 +56,16 @@ def scrape_prices():
 
     # EJECUCIÓN EN PARALELO: Shopping + Orgánico + Maps
     with ThreadPoolExecutor(max_workers=2) as executor:
-        # Petición 1: Búsqueda Orgánica y Mapas
         future_organic = executor.submit(fetch_serper_data, query_maestra, "search")
-        # Petición 2: Google Shopping
         future_shopping = executor.submit(fetch_serper_data, query_maestra, "shopping")
         
         data_org = future_organic.result()
         data_shop = future_shopping.result()
 
-    # --- 1. PROCESAR GOOGLE SHOPPING (Precisión quirúrgica) ---
+    # --- 1. PROCESAR GOOGLE SHOPPING ---
     for item in data_shop.get('shopping', []):
         link = item.get('link', '')
         if link not in vistos:
-            # Shopping ya entrega el precio limpio
             raw_val = int(re.sub(r'[^\d]', '', str(item.get('price', '0'))))
             tienda = item.get('source', 'RETAIL').upper()
             
@@ -62,11 +75,12 @@ def scrape_prices():
                 "precio_valor": raw_val,
                 "precio_formateado": f"${raw_val:,}".replace(",", "."),
                 "link": link,
-                "canal": "SHOPPING"
+                "canal": "SHOPPING",
+                "busqueda_original": origen_excel if origen_excel else producto
             })
             vistos.add(link)
 
-    # --- 2. PROCESAR ORGÁNICO Y MAPAS (Ferreterías y Mayoristas) ---
+    # --- 2. PROCESAR ORGÁNICO Y MAPAS ---
     organic_results = data_org.get('organic', []) + data_org.get('places', [])
     for item in organic_results:
         link = item.get('link') or item.get('website') or f"https://www.google.com/search?q={quote_plus(item.get('title',''))}"
@@ -81,7 +95,6 @@ def scrape_prices():
                     raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
                 except: pass
 
-            # Filtrar dominios no comerciales
             if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia']):
                 continue
 
@@ -93,9 +106,13 @@ def scrape_prices():
                 "precio_valor": raw_val,
                 "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "COTIZAR",
                 "link": link,
-                "canal": "WEB/MAPS"
+                "canal": "WEB/MAPS",
+                "busqueda_original": origen_excel if origen_excel else producto
             })
             vistos.add(link)
 
-    # Ordenar: Más baratos de Shopping y Web primero
+    # Ordenar por precio (los que tienen precio primero, luego de menor a mayor)
     return jsonify(sorted(final_data, key=lambda x: (x['precio_valor'] == 0, x['precio_valor'])))
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
