@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx'; // Asegúrate de instalarlo con: npm install xlsx
+import * as XLSX from 'xlsx'; 
 import { 
   Search, ExternalLink, Loader2, Target, 
   TrendingDown, LineChart, BarChart3, 
@@ -19,7 +19,7 @@ export default function MonitorMasivoICA() {
   const [procesandoExcel, setProcesandoExcel] = useState(false);
   const [progreso, setProgreso] = useState({ actual: 0, total: 0 });
 
-  // Lógica de cálculo (Mantenida)
+  // Lógica de cálculo de métricas
   const stats = useMemo(() => {
     const conPrecio = lista.filter(p => p.precio_valor > 0);
     if (conPrecio.length === 0) return { min: 0, avg: 0, count: 0 };
@@ -31,76 +31,98 @@ export default function MonitorMasivoICA() {
     };
   }, [lista]);
 
-  // FUNCIÓN: Leer Excel con detección flexible de columnas
+  // FUNCIÓN: Leer Excel con detección mejorada
   const manejarExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data: any[] = XLSX.utils.sheet_to_json(ws);
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
 
-      // MEJORA: Busca la columna detalle sin importar mayúsculas, espacios o tildes
-      const nombres = data.map(fila => {
-        const columnaEncontrada = Object.keys(fila).find(key => 
-          key.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === "detalle"
-        );
-        return columnaEncontrada ? fila[columnaEncontrada] : null;
-      }).filter(nombre => !!nombre);
+        if (data.length === 0) {
+          alert("El archivo Excel parece estar vacío.");
+          return;
+        }
 
-      if (nombres.length === 0) {
-        alert("No se detectó la columna 'detalle'. Verifica que el nombre sea exacto en el Excel.");
+        // Buscador de columnas inteligente (ignora mayúsculas y tildes)
+        // Se añade el filtro final para asegurar que solo pasen strings a setColaProductos
+        const nombres: string[] = data.map(fila => {
+          const llaves = Object.keys(fila);
+          const columnaClave = llaves.find(k => {
+            const normalizado = k.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return normalizado.includes("detalle") || 
+                   normalizado.includes("producto") || 
+                   normalizado.includes("item") || 
+                   normalizado.includes("nombre");
+          });
+          
+          const valor = columnaClave ? String(fila[columnaClave]).trim() : null;
+          return valor;
+        }).filter((n): n is string => !!n && n !== "undefined" && n !== "");
+
+        if (nombres.length === 0) {
+          alert("No se encontró una columna llamada 'Detalle' o similar. Revisa el encabezado de tu Excel.");
+          return;
+        }
+
+        setColaProductos(nombres);
+        setProgreso({ actual: 0, total: nombres.length });
+      } catch (err) {
+        console.error("Error al procesar Excel:", err);
+        alert("Hubo un error al leer el archivo.");
       }
-
-      setColaProductos(nombres);
-      setProgreso({ actual: 0, total: nombres.length });
     };
     reader.readAsBinaryString(file);
   };
 
-  // FUNCIÓN: Barrido Automático de la lista del Excel
+  // FUNCIÓN: Barrido Automático
   const iniciarBarridoExcel = async () => {
-    if (colaProductos.length === 0) return;
+    if (colaProductos.length === 0 || procesandoExcel) return;
+    
     setProcesandoExcel(true);
-    setLista([]); 
-
-    const acumulados: any[] = [];
+    setLista([]); // Limpiar resultados anteriores para el nuevo barrido
 
     for (let i = 0; i < colaProductos.length; i++) {
-      setProgreso(prev => ({ ...prev, actual: i + 1 }));
       const producto = colaProductos[i];
+      setProgreso(prev => ({ ...prev, actual: i + 1 }));
 
       try {
         const res = await fetch(`/api/index?producto=${encodeURIComponent(producto)}&origen=${encodeURIComponent(producto)}`);
+        
+        if (!res.ok) throw new Error("Error en respuesta de API");
+        
         const data = await res.json();
         
         if (Array.isArray(data)) {
-          acumulados.push(...data);
-          // Actualizamos la lista progresivamente para ver resultados mientras carga
-          setLista([...acumulados]);
+          // Actualización funcional del estado para evitar problemas de cierre (closures)
+          setLista(prevLista => [...data, ...prevLista]);
         }
       } catch (error) {
-        console.error(`Error en item ${producto}:`, error);
+        console.error(`Fallo en item: ${producto}`, error);
       }
     }
     setProcesandoExcel(false);
   };
 
-  // Lógica de escaneo manual (Mantenida)
+  // Escaneo manual individual
   const escanear = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
     setLoading(true);
     setLista([]);
     try {
       const res = await fetch(`/api/index?producto=${encodeURIComponent(input)}`);
       const data = await res.json();
-      setLista(data);
+      if (Array.isArray(data)) {
+        setLista(data);
+      }
     } catch (e) {
-      console.error("Error en radar:", e);
+      console.error("Error en radar manual:", e);
     } finally {
       setLoading(false);
     }
@@ -109,7 +131,7 @@ export default function MonitorMasivoICA() {
   return (
     <div className="p-0 bg-[#f1f5f9] min-h-screen text-slate-800 font-sans antialiased">
       
-      {/* HEADER TOP BAR - CON CONTROLES DE EXCEL */}
+      {/* HEADER TOP BAR */}
       <div className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-20 shadow-sm">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
@@ -125,14 +147,12 @@ export default function MonitorMasivoICA() {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* BOTÓN CARGAR EXCEL */}
             <label className="flex items-center gap-2 bg-white border border-slate-300 px-4 py-2 rounded-xl cursor-pointer hover:bg-slate-50 transition-all text-[10px] font-bold uppercase tracking-wider text-slate-600">
               <FileUp size={14} />
               {colaProductos.length > 0 ? `${colaProductos.length} Items Listos` : "Cargar Excel"}
               <input type="file" accept=".xlsx, .xls" className="hidden" onChange={manejarExcel} />
             </label>
 
-            {/* BOTÓN INICIAR BARRIDO */}
             {colaProductos.length > 0 && (
               <button 
                 onClick={iniciarBarridoExcel}
@@ -140,7 +160,7 @@ export default function MonitorMasivoICA() {
                 className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-emerald-700 disabled:bg-slate-300 shadow-sm transition-all"
               >
                 {procesandoExcel ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                {procesandoExcel ? `Procesando ${progreso.actual}/${progreso.total}` : "Iniciar Barrido"}
+                {procesandoExcel ? `Item ${progreso.actual} de ${progreso.total}` : "Iniciar Barrido"}
               </button>
             )}
 
@@ -148,7 +168,7 @@ export default function MonitorMasivoICA() {
 
             <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[10px] font-bold uppercase tracking-wider">Activo</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">Sistema Online</span>
             </div>
           </div>
         </div>
@@ -204,7 +224,7 @@ export default function MonitorMasivoICA() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                  <th className="p-4">Ref. Excel / Fuente</th>
+                  <th className="p-4">Ref. Fuente</th>
                   <th className="p-4">Descripción Proveedor</th>
                   <th className="p-4 text-right">Precio Ref.</th>
                   <th className="p-4 text-right">Delta ICA</th>
@@ -215,7 +235,7 @@ export default function MonitorMasivoICA() {
                 {lista.map((item, i) => {
                   const dif = miPrecio && item.precio_valor > 0 ? item.precio_valor - Number(miPrecio) : null;
                   return (
-                    <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`${item.link}-${i}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-4 border-r border-slate-50">
                         <p className="text-[10px] font-black text-slate-400 mb-1 uppercase truncate max-w-[150px]">
                           {item.busqueda_original || "Manual"}
@@ -234,10 +254,8 @@ export default function MonitorMasivoICA() {
                           {item.nombre}
                         </p>
                       </td>
-                      <td className="p-4 text-right">
-                        <span className="text-base font-black text-slate-900 font-mono">
-                          {item.precio_formateado}
-                        </span>
+                      <td className="p-4 text-right font-mono font-black text-slate-900">
+                        {item.precio_formateado}
                       </td>
                       <td className="p-4 text-right font-mono text-xs">
                         {dif !== null ? (
@@ -247,7 +265,7 @@ export default function MonitorMasivoICA() {
                         ) : '--'}
                       </td>
                       <td className="p-4 text-center">
-                        <a href={item.link} target="_blank" className="text-slate-400 hover:text-orange-600 p-2 inline-block">
+                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-orange-600 p-2 inline-block">
                           <ExternalLink size={16} />
                         </a>
                       </td>
@@ -260,7 +278,7 @@ export default function MonitorMasivoICA() {
               <div className="p-20 text-center">
                 <Loader2 className="animate-spin mx-auto text-orange-500 mb-2" size={32} />
                 <p className="text-slate-400 font-bold text-xs uppercase animate-pulse">
-                  Procesando barrido de mercado...
+                  Buscando en tiempo real...
                 </p>
               </div>
             )}
