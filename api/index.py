@@ -2,115 +2,84 @@ import requests
 import json
 import re
 from flask import Flask, request, jsonify
-from urllib.parse import quote_plus
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
-# Tu API Key de Serper.dev
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
 
-def identificar_canal(url, titulo):
-    """Clasifica el tipo de competidor para inteligencia de mercado"""
-    url_lower = url.lower()
-    titulo_lower = titulo.lower()
-    
-    # Cadenas de Retail
-    if any(x in url_lower for x in ['sodimac', 'easy', 'falabella', 'ripley', 'paris']):
-        return "GRAN RETAIL"
-    # Especialistas y Cadenas Ferreteras
-    if any(x in url_lower for x in ['imperial', 'construmart', 'mts', 'chilemat', 'yolito', 'ferreteria']):
-        return "CADENA FERRETERA"
-    # Mayoristas y Distribuidores
-    if any(x in url_lower or x in titulo_lower for x in ['mayorista', 'distribuidora', 'bodega', 'importadora', 'patio']):
-        return "MAYORISTA / DIST."
-    # Marketplaces
-    if 'mercadolibre' in url_lower:
-        return "MARKETPLACE"
-    
-    return "FERRETERÍA LOCAL"
+def fetch_serper_page(query, page_num):
+    """Función para traer una página específica de resultados"""
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({
+        "q": query,
+        "gl": "cl",
+        "hl": "es",
+        "num": 100,      # Máximo por página
+        "page": page_num # Saltamos a la siguiente página de Google
+    })
+    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+    try:
+        response = requests.post(url, headers=headers, data=payload, timeout=30)
+        return response.json()
+    except:
+        return {}
 
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
     producto = request.args.get("producto")
     if not producto: return jsonify([])
-    
-    if producto.lower() == "test":
-        return jsonify([{"tienda": "SISTEMA", "nombre": "Radar Masivo OK", "precio_formateado": "$1.000", "precio_valor": 1000, "link": "#", "canal": "TEST"}])
 
-    url = "https://google.serper.dev/search"
+    # QUERY MAESTRA: Forzamos a Google a buscar en el ecosistema de construcción
+    query_maestra = f'"{producto}" precio (ferreteria OR mayorista OR distribuidor OR "patio constructor") .cl'
     
-    # QUERY ULTRA-ABARCATIVA:
-    # Buscamos en todos los niveles de la cadena de suministro
-    search_query = f"{producto} precio (sodimac OR imperial OR mayorista OR distribuidora OR ferreteria) chile .cl"
-    
-    payload = json.dumps({
-        "q": search_query,
-        "gl": "cl",
-        "hl": "es",
-        "num": 100, # El máximo permitido para no dejar nada fuera
-        "autocorrect": True
-    })
-    
-    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+    # SISTEMA DE RASTREO MULTIPÁGINA (Paginación interna)
+    # Lanzamos hilos en paralelo para traer 300 resultados (3 páginas de 100)
+    all_results = []
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(fetch_serper_page, query_maestra, p) for p in range(1, 4)]
+        for f in futures:
+            page_data = f.result()
+            # Combinamos orgánicos y lugares (mapas)
+            all_results.extend(page_data.get('organic', []))
+            all_results.extend(page_data.get('places', []))
 
-    try:
-        response = requests.post(url, headers=headers, data=payload, timeout=25)
-        data = response.json()
+    final_data = []
+    vistos = set()
+
+    for item in all_results:
+        # Extraer link y título dependiendo si es lugar o link orgánico
+        link = item.get('link') or item.get('website') or f"https://www.google.com/search?q={quote_plus(item.get('title',''))}"
+        title = item.get('title', '')
+        snippet = item.get('snippet', '') or item.get('address', '')
+
+        # Limpieza y Regex de Precio
+        price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
         
-        resultados_brutos = []
-        vistos = set()
-
-        # 1. PROCESAR MAPAS (Ferreterías de Barrio y Patios Físicos)
-        if 'places' in data:
-            for place in data.get('places', []):
-                nombre_local = place.get('title', '').upper()
-                resultados_brutos.append({
-                    "tienda": nombre_local,
-                    "nombre": f"LOCAL FÍSICO: {place.get('address', 'Dirección no disponible')}",
-                    "precio_formateado": "COTIZAR",
-                    "precio_valor": 0,
-                    "link": f"https://www.google.com/maps/search/{quote_plus(nombre_local)}",
-                    "canal": "LOCAL MAPS"
-                })
-
-        # 2. PROCESAR RESULTADOS ORGÁNICOS (Webs, B2B, Mayoristas)
-        for item in data.get('organic', []):
-            link = item.get('link', '')
-            title = item.get('title', '')
-            snippet = item.get('snippet', '')
-
-            # Regex para capturar precios en formato chileno ($ 10.000 o $10000)
-            price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
-            
+        if link not in vistos:
+            raw_val = 0
             if price_match:
                 try:
                     raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
-                    
-                    # Filtros de exclusión (basura)
-                    if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'pdf', 'noticias']):
-                        continue
+                except: pass
 
-                    if ".cl" in link and raw_val > 300 and link not in vistos:
-                        canal = identificar_canal(link, title)
-                        
-                        resultados_brutos.append({
-                            "tienda": link.split('/')[2].replace('www.', '').split('.')[0].upper(),
-                            "nombre": title[:90],
-                            "precio_formateado": f"${raw_val:,}".replace(",", "."),
-                            "precio_valor": raw_val,
-                            "link": link,
-                            "canal": canal
-                        })
-                        vistos.add(link)
-                except: continue
+            # Filtrar basura (Redes sociales y noticias)
+            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'noticias']):
+                continue
 
-        # ORDENAMIENTO DE INTELIGENCIA:
-        # Los que tienen precio de más barato a más caro, luego los locales de mapas
-        con_precio = sorted([r for r in resultados_brutos if r['precio_valor'] > 0], key=lambda x: x['precio_valor'])
-        sin_precio = [r for r in resultados_brutos if r['precio_valor'] == 0]
-        
-        return jsonify(con_precio + sin_precio)
+            tienda = link.split('/')[2].replace('www.', '').split('.')[0].upper() if "http" in link else "LOCAL"
+            
+            final_data.append({
+                "tienda": tienda,
+                "nombre": title[:100],
+                "precio_valor": raw_val,
+                "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "COTIZAR",
+                "link": link
+            })
+            vistos.add(link)
 
-    except Exception as e:
-        print(f"Error Radar: {e}")
-        return jsonify([])
+    # ORDENAMIENTO ROBUSTO: Baratos primero, luego los que no tienen precio (Locales)
+    con_p = sorted([x for x in final_data if x['precio_valor'] > 0], key=lambda x: x['precio_valor'])
+    sin_p = [x for x in final_data if x['precio_valor'] == 0]
+    
+    return jsonify(con_p + sin_p)
