@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  Plus, Loader2, CheckCircle2, PlayCircle, Trash2, AlertCircle, X, Check,
-  MessageSquare, Send, Briefcase, Calendar, Clock, LayoutList
+  Plus, Loader2, CheckCircle2, PlayCircle, Trash2, AlertCircle, X, 
+  MessageSquare, Send, Briefcase, Calendar, Clock, LayoutList, Info, User
 } from "lucide-react";
 
 export default function TareasPage() {
@@ -24,7 +24,6 @@ export default function TareasPage() {
     fecha_inicio: "", fecha_limite: "" 
   });
 
-  // Formateador de fechas para Chile (DD/MM/YYYY)
   const formatFecha = (fechaStr: string) => {
     if (!fechaStr) return '--/--';
     const date = new Date(fechaStr);
@@ -110,12 +109,10 @@ export default function TareasPage() {
     }
     setLoading(true);
     try {
-      // Supabase insertará ahora 'proyecto' y 'fecha_inicio' correctamente
       const { error } = await supabase.from('tareas').insert([{ 
         ...form, 
         creado_por: perfilUsuario.id, 
         estado: 'pendiente',
-        // Aseguramos que si están vacíos se manden como null para la DB
         fecha_inicio: form.fecha_inicio || null,
         fecha_limite: form.fecha_limite || null,
         proyecto: form.proyecto || null
@@ -159,12 +156,13 @@ export default function TareasPage() {
   const getEstadoConfig = (tarea: any) => {
     const hoy = new Date();
     const limite = tarea.fecha_limite ? new Date(tarea.fecha_limite) : null;
-
     if (tarea.estado === 'completada') return { label: 'Completado', css: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
     if (limite && limite < hoy && tarea.estado !== 'completada') return { label: 'Atrasado', css: 'bg-rose-100 text-rose-700 border-rose-200 animate-pulse' };
     if (tarea.estado === 'en_proceso') return { label: 'En Proceso', css: 'bg-amber-100 text-amber-700 border-amber-200' };
     return { label: 'Pendiente', css: 'bg-slate-100 text-slate-600 border-slate-200' };
   };
+
+  const tareaSeleccionada = tareas.find(t => t.id === tareaExpandida);
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 space-y-10 animate-in fade-in duration-700">
@@ -179,7 +177,7 @@ export default function TareasPage() {
         </div>
       )}
 
-      {/* HEADER ELEGANTE */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-100 pb-8">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -194,7 +192,7 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* FORMULARIO DE TAREAS */}
+      {/* FORMULARIO */}
       {puedeCrear && (
         <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group transition-all hover:shadow-xl hover:shadow-blue-900/5">
           <form onSubmit={handleCrearTarea} className="space-y-4">
@@ -224,7 +222,7 @@ export default function TareasPage() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                <textarea 
                 className="md:col-span-7 bg-slate-50 border-transparent focus:border-blue-500 focus:bg-white border rounded-2xl px-5 py-3 text-sm font-bold outline-none h-14 resize-none transition-all"
-                placeholder="Observaciones adicionales..."
+                placeholder="Escribe aquí el detalle de lo que se debe hacer..."
                 value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})}
               />
               <div className="md:col-span-3 relative group/input">
@@ -243,7 +241,7 @@ export default function TareasPage() {
         </section>
       )}
 
-      {/* CONTENEDOR DE TABLA */}
+      {/* TABLA DE TAREAS */}
       <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -257,16 +255,6 @@ export default function TareasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {tareas.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center opacity-20">
-                      <LayoutList size={48} />
-                      <p className="mt-4 font-black uppercase tracking-tighter text-xl">Sin tareas pendientes</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
               {tareas.map((t) => {
                 const esAsignado = String(perfilUsuario?.id || "").trim() === String(t.asignado_a || "").trim();
                 const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
@@ -274,7 +262,7 @@ export default function TareasPage() {
 
                 return (
                   <tr key={t.id} className="group hover:bg-blue-50/30 transition-colors relative">
-                    <td className="px-6 py-5">
+                    <td className="px-6 py-5 cursor-pointer" onClick={() => { setTareaExpandida(t.id); fetchComentarios(t.id); }}>
                       <div className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-700 transition-colors">{t.titulo}</div>
                       {t.proyecto && (
                         <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-blue-500 uppercase bg-blue-50 px-2 py-0.5 rounded-md italic">
@@ -298,7 +286,6 @@ export default function TareasPage() {
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg w-fit">
                           <Calendar size={10} /> {formatFecha(t.fecha_inicio)}
                         </div>
-                        <div className="w-0.5 h-2 bg-slate-200"></div>
                         <div className={`flex items-center gap-2 text-[10px] font-bold px-2 py-1 rounded-lg w-fit ${status.label === 'Atrasado' ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-500'}`}>
                           <Clock size={10} /> {formatFecha(t.fecha_limite)}
                         </div>
@@ -349,46 +336,88 @@ export default function TareasPage() {
         </div>
       </section>
 
-      {/* DRAWER LATERAL DE COMENTARIOS */}
+      {/* DRAWER LATERAL DE DETALLES Y COMENTARIOS */}
       {tareaExpandida && (
         <>
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] animate-in fade-in duration-300" onClick={() => setTareaExpandida(null)} />
-          <div className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[120] flex flex-col animate-in slide-in-from-right duration-500">
+          <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[120] flex flex-col animate-in slide-in-from-right duration-500">
+              
+              {/* Header Drawer */}
               <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                   <div className="flex flex-col">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Log de Operaciones</span>
-                      <h3 className="text-lg font-black text-slate-900 uppercase italic tracking-tight truncate max-w-[300px]">
-                        {tareas.find(t => t.id === tareaExpandida)?.titulo}
+                      <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Detalle de Tarea</span>
+                      <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight leading-tight">
+                        {tareaSeleccionada?.titulo}
                       </h3>
                   </div>
                   <button onClick={() => setTareaExpandida(null)} className="w-10 h-10 flex items-center justify-center hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl transition-all"><X size={20}/></button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                  {comentarios.map(c => (
-                      <div key={c.id} className={`flex flex-col ${c.perfil_id === perfilUsuario.id ? 'items-end' : 'items-start'}`}>
-                          <div className={`max-w-[90%] p-5 rounded-3xl shadow-sm border ${
-                            c.perfil_id === perfilUsuario.id 
-                            ? 'bg-blue-600 text-white border-blue-500 rounded-tr-none' 
-                            : 'bg-slate-50 text-slate-800 border-slate-100 rounded-tl-none'
-                          }`}>
-                              <div className="flex items-center gap-2 mb-2 opacity-70">
-                                <span className="text-[8px] font-black uppercase tracking-tighter">{c.autor?.nombre} {c.autor?.apellido}</span>
-                                <span className="text-[8px]">•</span>
-                                <span className="text-[8px] font-bold">Actividad</span>
-                              </div>
-                              <p className="text-xs font-bold leading-relaxed">{c.contenido}</p>
-                          </div>
-                      </div>
-                  ))}
+              {/* Contenido Scrollable */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                  
+                  {/* SECCIÓN DE OBSERVACIÓN PRINCIPAL */}
+                  <section className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6">
+                    <div className="flex items-center gap-2 mb-3 text-blue-600">
+                      <Info size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Requerimientos de la tarea</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {tareaSeleccionada?.descripcion || "No hay observaciones detalladas para esta tarea."}
+                    </p>
+                  </section>
+
+                  {/* MINI FICHA TÉCNICA */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1"><Briefcase size={12}/> <span className="text-[9px] font-black uppercase">Proyecto</span></div>
+                      <div className="text-xs font-bold text-slate-800 uppercase">{tareaSeleccionada?.proyecto || 'General'}</div>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1"><User size={12}/> <span className="text-[9px] font-black uppercase">Asignado por</span></div>
+                      <div className="text-xs font-bold text-slate-800 uppercase">{tareaSeleccionada?.creador?.nombre} {tareaSeleccionada?.creador?.apellido}</div>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-slate-100 w-full" />
+
+                  {/* LOG DE COMENTARIOS */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <MessageSquare size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Historial de actualizaciones</span>
+                    </div>
+
+                    {comentarios.length === 0 && (
+                      <p className="text-center text-[10px] font-bold text-slate-300 uppercase py-4 italic">No hay actualizaciones aún</p>
+                    )}
+
+                    {comentarios.map(c => (
+                        <div key={c.id} className={`flex flex-col ${c.perfil_id === perfilUsuario.id ? 'items-end' : 'items-start'}`}>
+                            <div className={`max-w-[90%] p-5 rounded-3xl shadow-sm border ${
+                              c.perfil_id === perfilUsuario.id 
+                              ? 'bg-blue-600 text-white border-blue-500 rounded-tr-none' 
+                              : 'bg-slate-50 text-slate-800 border-slate-100 rounded-tl-none'
+                            }`}>
+                                <div className="flex items-center gap-2 mb-2 opacity-70">
+                                  <span className="text-[8px] font-black uppercase tracking-tighter">{c.autor?.nombre} {c.autor?.apellido}</span>
+                                  <span className="text-[8px]">•</span>
+                                  <span className="text-[8px] font-bold">{formatFecha(c.created_at)}</span>
+                                </div>
+                                <p className="text-xs font-bold leading-relaxed">{c.contenido}</p>
+                            </div>
+                        </div>
+                    ))}
+                  </div>
               </div>
 
+              {/* Input de Comentarios */}
               <div className="p-6 bg-slate-50 border-t border-slate-100">
                   <div className="relative flex gap-2">
                     <input 
                         value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && enviarComentario(tareaExpandida)}
-                        placeholder="Escribe una actualización..."
+                        placeholder="Escribe una actualización o respuesta..."
                         className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-blue-500 shadow-sm transition-all"
                     />
                     <button disabled={enviandoComentario} onClick={() => enviarComentario(tareaExpandida)} className="w-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center hover:bg-slate-900 transition-all shadow-lg shadow-blue-100">
