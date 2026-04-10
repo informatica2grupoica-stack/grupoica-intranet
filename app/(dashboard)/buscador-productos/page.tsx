@@ -31,7 +31,7 @@ export default function MonitorMasivoICA() {
     };
   }, [lista]);
 
-  // FUNCIÓN: Leer Excel y extraer columna "detalle"
+  // FUNCIÓN: Leer Excel con detección flexible de columnas
   const manejarExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -44,10 +44,17 @@ export default function MonitorMasivoICA() {
       const ws = wb.Sheets[wsname];
       const data: any[] = XLSX.utils.sheet_to_json(ws);
 
-      // Buscamos la columna "detalle" (insensible a mayúsculas)
-      const nombres = data
-        .map(fila => fila.detalle || fila.Detalle || fila.DETALLE)
-        .filter(nombre => !!nombre);
+      // MEJORA: Busca la columna detalle sin importar mayúsculas, espacios o tildes
+      const nombres = data.map(fila => {
+        const columnaEncontrada = Object.keys(fila).find(key => 
+          key.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === "detalle"
+        );
+        return columnaEncontrada ? fila[columnaEncontrada] : null;
+      }).filter(nombre => !!nombre);
+
+      if (nombres.length === 0) {
+        alert("No se detectó la columna 'detalle'. Verifica que el nombre sea exacto en el Excel.");
+      }
 
       setColaProductos(nombres);
       setProgreso({ actual: 0, total: nombres.length });
@@ -68,13 +75,14 @@ export default function MonitorMasivoICA() {
       const producto = colaProductos[i];
 
       try {
-        // Pasamos el parámetro 'origen' para que el backend sepa de qué fila viene
         const res = await fetch(`/api/index?producto=${encodeURIComponent(producto)}&origen=${encodeURIComponent(producto)}`);
         const data = await res.json();
         
-        // Vamos acumulando resultados en tiempo real
-        acumulados.push(...data);
-        setLista([...acumulados]);
+        if (Array.isArray(data)) {
+          acumulados.push(...data);
+          // Actualizamos la lista progresivamente para ver resultados mientras carga
+          setLista([...acumulados]);
+        }
       } catch (error) {
         console.error(`Error en item ${producto}:`, error);
       }
@@ -177,7 +185,7 @@ export default function MonitorMasivoICA() {
           </div>
         </div>
 
-        {/* MÉTRICAS (Igual que antes) */}
+        {/* MÉTRICAS */}
         {lista.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <StatCard label="Mínimo Mercado" value={`$${stats.min.toLocaleString('es-cl')}`} color="emerald" icon={<TrendingDown size={14}/>} />
@@ -190,7 +198,7 @@ export default function MonitorMasivoICA() {
           </div>
         )}
 
-        {/* TABLA DE RESULTADOS CON REFERENCIA DE EXCEL */}
+        {/* TABLA DE RESULTADOS */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
