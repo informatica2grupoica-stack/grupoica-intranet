@@ -3,19 +3,42 @@
 import { useState, useMemo } from 'react';
 import { 
   Search, ExternalLink, Loader2, Target, 
-  BarChart3, Globe, Play, ClipboardList, Trash2, ChevronDown
+  BarChart3, Globe, Play, ClipboardList, Trash2, 
+  ChevronRight, Bell, CheckCircle2, AlertCircle, X 
 } from 'lucide-react';
+
+// --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
+const Toast = ({ message, type, onClose }: any) => (
+  <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${
+    type === 'success' 
+      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800' 
+      : 'bg-orange-50/90 border-orange-200 text-orange-800'
+  }`}>
+    {/* Corregido: CheckCircle2 con Mayúscula */}
+    {type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+    <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
+    <button onClick={onClose} className="ml-2 hover:opacity-50 transition-opacity">
+      <X size={14} />
+    </button>
+  </div>
+);
 
 export default function MonitorMasivoICA() {
   const [inputManual, setInputManual] = useState("");
   const [inputMasivo, setInputMasivo] = useState("");
-  const [miPrecio, setMiPrecio] = useState<number | "">("");
   const [lista, setLista] = useState<any[]>([]);
   const [procesando, setProcesando] = useState(false);
+  const [buscandoUno, setBuscandoUno] = useState(false);
   const [progreso, setProgreso] = useState({ actual: 0, total: 0 });
+  const [toasts, setToasts] = useState<any[]>([]);
 
-  // --- LÓGICA DE AGRUPACIÓN Y ORDEN ---
-  // Agrupamos los resultados por el nombre del producto original
+  // Función para lanzar alertas
+  const notify = (message: string, type: 'success' | 'error' = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
   const resultadosAgrupados = useMemo(() => {
     const grupos: { [key: string]: any[] } = {};
     lista.forEach(item => {
@@ -23,24 +46,30 @@ export default function MonitorMasivoICA() {
       if (!grupos[key]) grupos[key] = [];
       grupos[key].push(item);
     });
-    // Ordenar los grupos alfabéticamente
     return Object.keys(grupos).sort().map(key => ({
       nombre: key,
       items: grupos[key].sort((a, b) => (a.precio_valor || Infinity) - (b.precio_valor || Infinity))
     }));
   }, [lista]);
 
-  // FUNCIÓN: Búsqueda Individual
+  // FUNCIÓN: Búsqueda Individual con Spinner y Alerta
   const buscarUno = async () => {
-    if (!inputManual.trim() || procesando) return;
-    setProcesando(true);
+    if (!inputManual.trim() || buscandoUno) return;
+    setBuscandoUno(true);
     try {
       const res = await fetch(`/api/index?producto=${encodeURIComponent(inputManual)}&origen=${encodeURIComponent(inputManual)}`);
       const data = await res.json();
-      if (Array.isArray(data)) setLista(prev => [...data, ...prev]);
+      if (Array.isArray(data) && data.length > 0) {
+        setLista(prev => [...data, ...prev]);
+        notify(`ENCONTRADO: ${inputManual}`, 'success');
+      } else {
+        notify(`SIN RESULTADOS: ${inputManual}`, 'error');
+      }
       setInputManual("");
-    } catch (e) { console.error(e); }
-    setProcesando(false);
+    } catch (e) {
+      notify("ERROR DE CONEXIÓN", 'error');
+    }
+    setBuscandoUno(false);
   };
 
   // FUNCIÓN: Barrido Masivo
@@ -50,6 +79,7 @@ export default function MonitorMasivoICA() {
 
     setProcesando(true);
     setProgreso({ actual: 0, total: productos.length });
+    notify(`INICIANDO RASTREO: ${productos.length} ITEMS`, 'success');
 
     for (let i = 0; i < productos.length; i++) {
       setProgreso(prev => ({ ...prev, actual: i + 1 }));
@@ -61,112 +91,169 @@ export default function MonitorMasivoICA() {
     }
     setProcesando(false);
     setInputMasivo(""); 
+    notify("BARRIDO COMPLETADO", 'success');
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-orange-100">
       
-      {/* HEADER SIMPLIFICADO */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <BarChart3 className="text-orange-600" size={24} />
-            <h1 className="font-black text-lg tracking-tighter">RADAR ICA <span className="text-orange-600 text-sm">PRO</span></h1>
+      {/* --- SISTEMA DE ALERTAS FLOTANTES --- */}
+      <div className="fixed top-24 right-6 z-50 flex flex-col gap-3">
+        {toasts.map(t => (
+          <Toast key={t.id} {...t} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />
+        ))}
+      </div>
+
+      {/* HEADER ESTILO ICA 2026 */}
+      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-4">
+            <div className="bg-slate-900 text-white p-2.5 rounded-2xl shadow-xl">
+              <BarChart3 size={22} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h1 className="font-black text-xl tracking-tight text-slate-900 leading-none">
+                RADAR <span className="text-orange-600">ICA</span> 
+                <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded-full ml-2 font-black tracking-widest">PRO</span>
+              </h1>
+            </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            {/* BUSCADOR INDIVIDUAL */}
-            <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-transparent focus-within:border-orange-500 transition-all">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            {/* BUSCADOR INDIVIDUAL CON SPINNER */}
+            <div className="flex-1 md:w-80 flex items-center bg-slate-100/50 border border-slate-200 rounded-2xl px-4 focus-within:ring-4 focus-within:ring-orange-500/10 focus-within:bg-white focus-within:border-orange-500 transition-all">
               <Search size={16} className="text-slate-400" />
               <input 
-                className="bg-transparent py-2 px-2 text-xs outline-none w-64 font-medium"
-                placeholder="Buscar un producto solo..."
+                className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
+                placeholder="Rastreo express..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
               />
+              <button 
+                onClick={buscarUno}
+                disabled={buscandoUno || !inputManual.trim()}
+                className="bg-slate-900 text-white p-1.5 rounded-xl hover:bg-orange-600 transition-all active:scale-90 disabled:bg-slate-200"
+              >
+                {buscandoUno ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+              </button>
             </div>
-            <button onClick={() => setLista([])} className="text-slate-400 hover:text-rose-500 p-2 transition-colors">
+            <button 
+              onClick={() => { setLista([]); notify("LISTA LIMPIA", "error"); }} 
+              className="bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 hover:text-rose-500 hover:border-rose-100 transition-all shadow-sm active:scale-90"
+            >
               <Trash2 size={18} />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="max-w-[1500px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* PANEL LATERAL: ENTRADA MASIVA */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <label className="flex items-center gap-2 mb-3 font-bold text-[10px] uppercase text-slate-500 tracking-widest">
-              <ClipboardList size={14} /> Pegar Lista de Excel
+        <div className="lg:col-span-3">
+          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-200/40 sticky top-32">
+            <label className="flex items-center gap-3 mb-5 font-black text-[10px] uppercase text-slate-400 tracking-[0.2em]">
+              <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+              Importación Masiva
             </label>
             <textarea 
-              className="w-full h-[500px] bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs outline-none focus:ring-1 focus:ring-orange-500 transition-all resize-none font-mono"
-              placeholder="Ejemplo:&#10;Pino 2x3&#10;Saco Cemento&#10;Clavos 2 pulg"
+              className="w-full h-[450px] bg-slate-50 border border-slate-100 rounded-3xl p-5 text-[11px] font-bold text-slate-600 outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/5 transition-all resize-none shadow-inner"
+              placeholder="Pega aquí la columna del Excel..."
               value={inputMasivo}
               onChange={e => setInputMasivo(e.target.value)}
+              disabled={procesando}
             />
             <button 
               onClick={iniciarBarrido}
               disabled={procesando || !inputMasivo.trim()}
-              className="w-full mt-4 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-orange-100 transition-all disabled:bg-slate-200"
+              className="w-full mt-6 bg-slate-900 hover:bg-orange-600 text-white py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-2xl shadow-slate-300 transition-all active:scale-95 disabled:bg-slate-200"
             >
-              {procesando ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} fill="currentColor" />}
-              {procesando ? `Buscando ${progreso.actual}/${progreso.total}` : "Iniciar Barrido"}
+              {procesando ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>{progreso.actual} / {progreso.total}</span>
+                </>
+              ) : (
+                <>
+                  <Play size={16} fill="currentColor" />
+                  <span>Iniciar Rastreo</span>
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* CONTENIDO PRINCIPAL: RESULTADOS AGRUPADOS */}
-        <div className="lg:col-span-9">
+        <div className="lg:col-span-9 space-y-8 pb-20">
           {resultadosAgrupados.length === 0 ? (
-            <div className="h-64 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400">
-              <Globe size={48} strokeWidth={1} className="mb-4 opacity-20" />
-              <p className="text-sm font-medium italic">Esperando datos para iniciar el rastreo...</p>
+            <div className="h-[60vh] flex flex-col items-center justify-center text-center animate-in fade-in duration-1000">
+              <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-slate-200 border border-slate-50 mb-8">
+                <Globe size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
+              </div>
+              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Ready for Data Injection</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
               {resultadosAgrupados.map((grupo, idx) => (
-                <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                      Producto: {grupo.nombre}
-                    </h3>
-                    <span className="text-[10px] font-bold text-slate-400">{grupo.items.length} opciones</span>
+                <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden group hover:shadow-xl hover:shadow-slate-200 transition-all duration-500">
+                  <div className="bg-slate-50/50 px-8 py-5 border-b border-slate-100 flex justify-between items-center group-hover:bg-orange-50/30 transition-colors">
+                    <div className="flex items-center gap-5">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md font-black text-orange-600 text-sm border border-slate-100">
+                        {String(idx + 1).padStart(2, '0')}
+                      </div>
+                      <h3 className="font-black text-sm uppercase tracking-tight text-slate-800">
+                        {grupo.nombre}
+                      </h3>
+                    </div>
+                    <span className="text-[9px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shadow-slate-200">
+                      {grupo.items.length} HALLAZGOS
+                    </span>
                   </div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-[9px] uppercase text-slate-400 border-b border-slate-100">
-                        <th className="px-4 py-3">Tienda / Proveedor</th>
-                        <th className="px-4 py-3">Descripción en Web</th>
-                        <th className="px-4 py-3 text-right">Precio</th>
-                        <th className="px-4 py-3 text-center">Ir</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {grupo.items.map((item, i) => (
-                        <tr key={i} className="hover:bg-orange-50/30 transition-colors">
-                          <td className="px-4 py-3">
-                            <span className="font-bold text-slate-800">{item.tienda}</span>
-                            <p className="text-[9px] text-slate-400 uppercase font-bold">{item.canal}</p>
-                          </td>
-                          <td className="px-4 py-3 text-slate-600 font-medium">
-                            {item.nombre.length > 80 ? item.nombre.substring(0, 80) + "..." : item.nombre}
-                          </td>
-                          <td className="px-4 py-3 text-right font-black text-slate-900 italic">
-                            {item.precio_formateado}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <a href={item.link} target="_blank" className="text-orange-500 hover:scale-125 inline-block transition-transform">
-                              <ExternalLink size={14} />
-                            </a>
-                          </td>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="text-[9px] uppercase text-slate-400 font-black tracking-[0.2em] border-b border-slate-50">
+                          <th className="px-10 py-5">Fuente</th>
+                          <th className="px-10 py-5">Descripción</th>
+                          <th className="px-10 py-5 text-right">Precio Ref.</th>
+                          <th className="px-10 py-5 text-center">Enlace</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {grupo.items.map((item, i) => (
+                          <tr key={i} className="hover:bg-slate-50/80 transition-all group/row">
+                            <td className="px-10 py-6">
+                              <span className="font-black text-slate-900 text-[11px] block mb-1 group-hover/row:text-orange-600 transition-colors">{item.tienda}</span>
+                              <span className={`text-[8px] font-black px-2 py-0.5 rounded-md tracking-tighter uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                {item.canal}
+                              </span>
+                            </td>
+                            <td className="px-10 py-6">
+                              <p className="text-[11px] font-bold text-slate-500 leading-relaxed max-w-md group-hover/row:text-slate-800 transition-colors line-clamp-2">
+                                {item.nombre}
+                              </p>
+                            </td>
+                            <td className="px-10 py-6 text-right">
+                              <span className="text-xl font-black text-slate-900 italic tracking-tighter">
+                                {item.precio_formateado}
+                              </span>
+                            </td>
+                            <td className="px-10 py-6 text-center">
+                              <a 
+                                href={item.link} 
+                                target="_blank" 
+                                className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 hover:bg-orange-600 hover:text-white hover:rotate-12 transition-all shadow-sm active:scale-90"
+                              >
+                                <ExternalLink size={18} />
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ))}
             </div>
