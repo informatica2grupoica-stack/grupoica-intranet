@@ -30,11 +30,15 @@ def fetch_serper_data(query, search_type="search"):
 
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
-    producto = request.args.get("producto")
+    producto_raw = request.args.get("producto")
     # Capturamos el nombre original del Excel si existe
     origen_excel = request.args.get("origen") 
     
-    if not producto: return jsonify([])
+    if not producto_raw: return jsonify([])
+
+    # --- MEJORA: Limpieza de ruidos comunes en Excel de construcción ---
+    # Esto evita que busque cosas como "Saco Cemento x20" y mejor busque "Saco Cemento"
+    producto = re.sub(r'\s?\d+\s?(un|unidad|kg|mt|m2|mm)\b', '', producto_raw, flags=re.IGNORECASE).strip()
 
     # MODO TEST: Para verificar conexión sin gastar créditos
     if producto.lower() == "test":
@@ -49,7 +53,7 @@ def scrape_prices():
         }])
 
     # Query optimizada para el sector construcción
-    query_maestra = f"{producto} chile"
+    query_maestra = f"{producto} precio chile" # Añadido 'precio' para forzar resultados comerciales
     
     final_data = []
     vistos = set()
@@ -66,17 +70,20 @@ def scrape_prices():
     for item in data_shop.get('shopping', []):
         link = item.get('link', '')
         if link not in vistos:
-            raw_val = int(re.sub(r'[^\d]', '', str(item.get('price', '0'))))
+            try:
+                raw_val = int(re.sub(r'[^\d]', '', str(item.get('price', '0'))))
+            except: raw_val = 0
+            
             tienda = item.get('source', 'RETAIL').upper()
             
             final_data.append({
                 "tienda": tienda,
                 "nombre": item.get('title', '')[:100],
                 "precio_valor": raw_val,
-                "precio_formateado": f"${raw_val:,}".replace(",", "."),
+                "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "N/A",
                 "link": link,
                 "canal": "SHOPPING",
-                "busqueda_original": origen_excel if origen_excel else producto
+                "busqueda_original": origen_excel if origen_excel else producto_raw
             })
             vistos.add(link)
 
@@ -88,14 +95,17 @@ def scrape_prices():
         snippet = item.get('snippet', '') or item.get('address', '')
 
         if link not in vistos:
+            # Buscamos patrones de precio en el texto del buscador
             price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
             raw_val = 0
             if price_match:
                 try:
+                    # Limpiamos el valor encontrado para convertirlo en número
                     raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
                 except: pass
 
-            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia']):
+            # Filtro de ruido (redes sociales y sitios no comerciales)
+            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'twitter', 'linkedin']):
                 continue
 
             tienda_label = link.split('/')[2].replace('www.', '').split('.')[0].upper() if "http" in link else "LOCAL"
@@ -107,11 +117,12 @@ def scrape_prices():
                 "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "COTIZAR",
                 "link": link,
                 "canal": "WEB/MAPS",
-                "busqueda_original": origen_excel if origen_excel else producto
+                "busqueda_original": origen_excel if origen_excel else producto_raw
             })
             vistos.add(link)
 
-    # Ordenar por precio (los que tienen precio primero, luego de menor a mayor)
+    # Ordenar por precio: los que tienen precio detectado primero, de menor a mayor
+    # Los que dicen "COTIZAR" (valor 0) quedan al final
     return jsonify(sorted(final_data, key=lambda x: (x['precio_valor'] == 0, x['precio_valor'])))
 
 if __name__ == "__main__":
