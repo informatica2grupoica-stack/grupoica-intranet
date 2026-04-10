@@ -14,7 +14,6 @@ const Toast = ({ message, type, onClose }: any) => (
       ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800' 
       : 'bg-orange-50/90 border-orange-200 text-orange-800'
   }`}>
-    {/* Corregido: CheckCircle2 con Mayúscula */}
     {type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
     <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
     <button onClick={onClose} className="ml-2 hover:opacity-50 transition-opacity">
@@ -202,11 +201,11 @@ export default function MonitorMasivoICA() {
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md font-black text-orange-600 text-sm border border-slate-100">
                         {String(idx + 1).padStart(2, '0')}
                       </div>
-                      <h3 className="font-black text-sm uppercase tracking-tight text-slate-800">
+                      <h3 className="font-black text-base uppercase tracking-tight text-slate-800">
                         {grupo.nombre}
                       </h3>
                     </div>
-                    <span className="text-[9px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shadow-slate-200">
+                    <span className="text-[10px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shadow-slate-200">
                       {grupo.items.length} HALLAZGOS
                     </span>
                   </div>
@@ -214,7 +213,7 @@ export default function MonitorMasivoICA() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="text-[9px] uppercase text-slate-400 font-black tracking-[0.2em] border-b border-slate-50">
+                        <tr className="text-[10px] uppercase text-slate-400 font-black tracking-[0.2em] border-b border-slate-50">
                           <th className="px-10 py-5">Fuente</th>
                           <th className="px-10 py-5">Descripción</th>
                           <th className="px-10 py-5 text-right">Precio Ref.</th>
@@ -225,13 +224,16 @@ export default function MonitorMasivoICA() {
                         {grupo.items.map((item, i) => (
                           <tr key={i} className="hover:bg-slate-50/80 transition-all group/row">
                             <td className="px-10 py-6">
-                              <span className="font-black text-slate-900 text-[11px] block mb-1 group-hover/row:text-orange-600 transition-colors">{item.tienda}</span>
-                              <span className={`text-[8px] font-black px-2 py-0.5 rounded-md tracking-tighter uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                              {/* FUENTE AGRANDADA: text-sm font-black */}
+                              <span className="font-black text-slate-900 text-sm block mb-1 group-hover/row:text-orange-600 transition-colors">{item.tienda}</span>
+                              {/* CANAL AGRANDADO: text-[10px] */}
+                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-md tracking-tighter uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                                 {item.canal}
                               </span>
                             </td>
                             <td className="px-10 py-6">
-                              <p className="text-[11px] font-bold text-slate-500 leading-relaxed max-w-md group-hover/row:text-slate-800 transition-colors line-clamp-2">
+                              {/* DESCRIPCIÓN AGRANDADA: text-base (era 11px) */}
+                              <p className="text-base font-bold text-slate-600 leading-tight max-w-md group-hover/row:text-slate-900 transition-colors line-clamp-2">
                                 {item.nombre}
                               </p>
                             </td>
