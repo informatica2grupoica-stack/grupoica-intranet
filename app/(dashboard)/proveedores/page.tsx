@@ -75,7 +75,7 @@ export default function SeccionProveedores() {
   };
 
   // Obtener categorías únicas para el filtro
-  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria))];
+  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(Boolean))];
 
   const filtrados = proveedores.filter(p => {
     const cumpleBusqueda = p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) || p.rut_empresa?.includes(busqueda);
@@ -103,7 +103,7 @@ export default function SeccionProveedores() {
                 <Building2 size={32} />
               </div>
               <div>
-                <h1 className="text-3xl font-black tracking-tighter text-slate-800">CENTRAL DE PROVEEDORES</h1>
+                <h1 className="text-3xl font-black tracking-tighter text-slate-800 uppercase">Central de Proveedores</h1>
                 <p className="text-slate-400 font-medium text-sm uppercase tracking-widest">Base de Datos Industrial</p>
               </div>
             </div>
@@ -118,7 +118,6 @@ export default function SeccionProveedores() {
                 />
               </div>
               
-              {/* FILTRO CATEGORÍA */}
               <select 
                 value={categoriaFiltro}
                 onChange={(e) => setCategoriaFiltro(e.target.value)}
@@ -137,7 +136,7 @@ export default function SeccionProveedores() {
           </div>
         </div>
 
-        {/* FORMULARIO DE CREACIÓN COMPLETO */}
+        {/* FORMULARIO DE CREACIÓN */}
         {showForm && (
           <form onSubmit={guardarProveedor} className="mb-12 bg-white border border-slate-100 p-8 rounded-[3rem] shadow-2xl animate-in slide-in-from-top duration-500 overflow-hidden relative">
             <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
@@ -198,18 +197,14 @@ export default function SeccionProveedores() {
           </form>
         )}
 
-        {/* LISTADO DE TARJETAS TIPO LISTA EXPANDIBLE */}
+        {/* LISTADO DE TARJETAS */}
         <div className="space-y-4">
           {filtrados.map((prov) => (
-            <div 
-              key={prov.id}
-              className="group bg-white border border-slate-100 rounded-[2rem] hover:shadow-xl transition-all duration-300 overflow-hidden"
-            >
-              {/* VISTA PRINCIPAL (CABECERA) */}
+            <div key={prov.id} className="group bg-white border border-slate-100 rounded-[2rem] hover:shadow-xl transition-all duration-300 overflow-hidden">
               <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-6 w-full md:w-auto">
                   <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600 font-black">
-                    {prov.nombre_empresa.charAt(0)}
+                    {prov.nombre_empresa?.charAt(0) || 'P'}
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-slate-800 leading-none mb-2 uppercase">{prov.nombre_empresa}</h3>
@@ -239,11 +234,10 @@ export default function SeccionProveedores() {
                 </div>
               </div>
 
-              {/* VISTA DETALLADA (LISTA EXPANDIDA) */}
+              {/* VISTA DETALLADA */}
               {expandedCard === prov.id && (
                 <div className="p-8 bg-slate-50/50 border-t border-slate-50 animate-in slide-in-from-top-4 duration-300">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Columna Contacto */}
                     <div className="space-y-4">
                       <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><Mail size={14}/> Contacto Directo</h4>
                       <div className="bg-white p-4 rounded-2xl space-y-3 shadow-sm">
@@ -254,7 +248,6 @@ export default function SeccionProveedores() {
                       </div>
                     </div>
 
-                    {/* Columna Ubicación */}
                     <div className="space-y-4">
                       <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><Map size={14}/> Localización</h4>
                       <div className="bg-white p-4 rounded-2xl space-y-3 shadow-sm text-xs text-slate-600 font-medium">
@@ -268,7 +261,6 @@ export default function SeccionProveedores() {
                       </div>
                     </div>
 
-                    {/* Columna Financiera */}
                     <div className="space-y-4">
                       <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><DollarSign size={14}/> Datos de Pago</h4>
                       <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg space-y-3">
@@ -304,7 +296,7 @@ export default function SeccionProveedores() {
         )}
       </div>
 
-      {/* MODAL DE EDICIÓN TOTAL CON CONTRASTE GRIS */}
+      {/* MODAL DE EDICIÓN */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
           <div className="w-full max-w-3xl bg-white rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
@@ -317,7 +309,6 @@ export default function SeccionProveedores() {
             </div>
 
             <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              {/* Sección General */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-100 rounded-2xl">
                   <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Nombre Empresa</label>
@@ -337,7 +328,6 @@ export default function SeccionProveedores() {
                 </div>
               </div>
 
-              {/* Sección Contacto y Ubicación */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-100 rounded-2xl">
                   <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Nombre Contacto</label>
@@ -356,7 +346,6 @@ export default function SeccionProveedores() {
                 </div>
               </div>
 
-              {/* Sección Pago */}
               <div className="p-6 bg-slate-900 rounded-[2rem] text-white">
                 <p className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Información de Transferencia</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -380,6 +369,7 @@ export default function SeccionProveedores() {
                   onClick={async () => {
                     const { error } = await supabase.from('proveedores').update(seleccionado).eq('id', seleccionado.id);
                     if (!error) { showAlert("Proveedor actualizado en DB", "success"); cargarProveedores(); setSeleccionado(null); }
+                    else { showAlert(error.message, 'error'); }
                   }}
                   className="flex-1 bg-blue-600 text-white py-5 rounded-[2rem] font-black flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-xl shadow-blue-100"
                 >
