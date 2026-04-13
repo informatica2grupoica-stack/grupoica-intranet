@@ -169,7 +169,7 @@ export default function TareasPage() {
       
       {/* ALERTA TOAST */}
       {notificacion && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-md border animate-in slide-in-from-top-full ${
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[150] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-md border animate-in slide-in-from-top-full ${
           notificacion.tipo === 'success' ? 'bg-emerald-600/90 border-emerald-400 text-white' : 'bg-rose-600/90 border-rose-400 text-white'
         }`}>
           {notificacion.tipo === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
@@ -340,71 +340,73 @@ export default function TareasPage() {
       {tareaExpandida && (
         <>
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] animate-in fade-in duration-300" onClick={() => setTareaExpandida(null)} />
-          <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[120] flex flex-col animate-in slide-in-from-right duration-500">
+          <div className="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[120] flex flex-col animate-in slide-in-from-right duration-500">
               
               {/* Header Drawer */}
-              <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
                   <div className="flex flex-col">
                       <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Detalle de Tarea</span>
-                      <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight leading-tight">
+                      <h3 className="text-lg font-black text-slate-900 uppercase italic tracking-tight leading-tight max-w-[300px] break-words">
                         {tareaSeleccionada?.titulo}
                       </h3>
                   </div>
-                  <button onClick={() => setTareaExpandida(null)} className="w-10 h-10 flex items-center justify-center hover:bg-white border border-transparent hover:border-slate-200 rounded-2xl transition-all"><X size={20}/></button>
+                  <button onClick={() => setTareaExpandida(null)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-2xl transition-all"><X size={20}/></button>
               </div>
 
               {/* Contenido Scrollable */}
-              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
                   
                   {/* SECCIÓN DE OBSERVACIÓN PRINCIPAL */}
-                  <section className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6">
-                    <div className="flex items-center gap-2 mb-3 text-blue-600">
-                      <Info size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Requerimientos de la tarea</span>
+                  <section className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-3 text-slate-400">
+                      <Info size={14} />
+                      <span className="text-[9px] font-black uppercase tracking-widest">Requerimientos</span>
                     </div>
-                    <p className="text-sm font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {tareaSeleccionada?.descripcion || "No hay observaciones detalladas para esta tarea."}
+                    <p className="text-xs font-bold text-slate-600 leading-relaxed whitespace-pre-wrap break-words">
+                      {tareaSeleccionada?.descripcion || "Sin descripción."}
                     </p>
                   </section>
 
-                  {/* MINI FICHA TÉCNICA */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-2 text-slate-400 mb-1"><Briefcase size={12}/> <span className="text-[9px] font-black uppercase">Proyecto</span></div>
-                      <div className="text-xs font-bold text-slate-800 uppercase">{tareaSeleccionada?.proyecto || 'General'}</div>
+                  {/* FICHA TÉCNICA MINIMALISTA */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1"><Briefcase size={12}/> <span className="text-[8px] font-black uppercase">Proyecto</span></div>
+                      <div className="text-[11px] font-bold text-slate-800 uppercase truncate">{tareaSeleccionada?.proyecto || 'General'}</div>
                     </div>
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-2 text-slate-400 mb-1"><User size={12}/> <span className="text-[9px] font-black uppercase">Asignado por</span></div>
-                      <div className="text-xs font-bold text-slate-800 uppercase">{tareaSeleccionada?.creador?.nombre} {tareaSeleccionada?.creador?.apellido}</div>
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                      <div className="flex items-center gap-2 text-slate-400 mb-1"><User size={12}/> <span className="text-[8px] font-black uppercase">Origen</span></div>
+                      <div className="text-[11px] font-bold text-slate-800 uppercase truncate">{tareaSeleccionada?.creador?.nombre}</div>
                     </div>
                   </div>
 
                   <div className="h-px bg-slate-100 w-full" />
 
                   {/* LOG DE COMENTARIOS */}
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <MessageSquare size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Historial de actualizaciones</span>
+                  <div className="space-y-4 pb-4">
+                    <div className="flex items-center gap-2 text-slate-400 mb-4">
+                      <MessageSquare size={14} />
+                      <span className="text-[9px] font-black uppercase tracking-widest">Actualizaciones</span>
                     </div>
 
                     {comentarios.length === 0 && (
-                      <p className="text-center text-[10px] font-bold text-slate-300 uppercase py-4 italic">No hay actualizaciones aún</p>
+                      <div className="text-center py-10 opacity-20 flex flex-col items-center">
+                        <MessageSquare size={30} className="mb-2" />
+                        <p className="text-[10px] font-black uppercase">Sin mensajes</p>
+                      </div>
                     )}
 
                     {comentarios.map(c => (
-                        <div key={c.id} className={`flex flex-col ${c.perfil_id === perfilUsuario.id ? 'items-end' : 'items-start'}`}>
-                            <div className={`max-w-[90%] p-5 rounded-3xl shadow-sm border ${
+                        <div key={c.id} className="flex flex-col w-full">
+                            <div className={`max-w-[85%] p-4 rounded-2xl border shadow-sm ${
                               c.perfil_id === perfilUsuario.id 
-                              ? 'bg-blue-600 text-white border-blue-500 rounded-tr-none' 
-                              : 'bg-slate-50 text-slate-800 border-slate-100 rounded-tl-none'
+                              ? 'bg-blue-600 text-white border-blue-500 self-end rounded-tr-none' 
+                              : 'bg-slate-50 text-slate-800 border-slate-100 self-start rounded-tl-none'
                             }`}>
-                                <div className="flex items-center gap-2 mb-2 opacity-70">
-                                  <span className="text-[8px] font-black uppercase tracking-tighter">{c.autor?.nombre} {c.autor?.apellido}</span>
-                                  <span className="text-[8px]">•</span>
+                                <div className="flex items-center gap-2 mb-1.5 opacity-70">
+                                  <span className="text-[8px] font-black uppercase">{c.autor?.nombre} {c.autor?.apellido}</span>
                                   <span className="text-[8px] font-bold">{formatFecha(c.created_at)}</span>
                                 </div>
-                                <p className="text-xs font-bold leading-relaxed">{c.contenido}</p>
+                                <p className="text-[11px] font-bold leading-relaxed break-words">{c.contenido}</p>
                             </div>
                         </div>
                     ))}
@@ -412,16 +414,16 @@ export default function TareasPage() {
               </div>
 
               {/* Input de Comentarios */}
-              <div className="p-6 bg-slate-50 border-t border-slate-100">
+              <div className="p-6 bg-white border-t border-slate-100">
                   <div className="relative flex gap-2">
                     <input 
                         value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && enviarComentario(tareaExpandida)}
-                        placeholder="Escribe una actualización o respuesta..."
-                        className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-blue-500 shadow-sm transition-all"
+                        placeholder="Mensaje..."
+                        className="flex-1 bg-slate-50 border border-transparent rounded-2xl px-5 py-3.5 text-xs font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
                     />
-                    <button disabled={enviandoComentario} onClick={() => enviarComentario(tareaExpandida)} className="w-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center hover:bg-slate-900 transition-all shadow-lg shadow-blue-100">
-                        {enviandoComentario ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send size={18} />}
+                    <button disabled={enviandoComentario} onClick={() => enviarComentario(tareaExpandida)} className="w-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center hover:bg-slate-900 transition-all shadow-lg shadow-blue-100">
+                        {enviandoComentario ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send size={16} />}
                     </button>
                   </div>
               </div>
