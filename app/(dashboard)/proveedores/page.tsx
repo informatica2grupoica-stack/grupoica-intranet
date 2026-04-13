@@ -4,15 +4,18 @@ import { supabase } from '@/lib/supabase';
 import { 
   Building2, Search, Loader2, MapPin, X, Phone, Star, 
   Trash2, Edit3, Save, Plus, CheckCircle2, AlertCircle,
-  Landmark, CreditCard, Mail, Globe, Info, Calendar
+  Landmark, CreditCard, Mail, Globe, Info, ChevronDown, ChevronUp,
+  Briefcase, DollarSign, Map
 } from 'lucide-react';
 
 export default function SeccionProveedores() {
   const [proveedores, setProveedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [categoriaFiltro, setCategoriaFiltro] = useState("Todas");
   const [seleccionado, setSeleccionado] = useState<any | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
   const initialFormState = {
@@ -71,16 +74,18 @@ export default function SeccionProveedores() {
     if (!error) cargarProveedores();
   };
 
-  const filtrados = proveedores.filter(p => 
-    p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) || 
-    p.categoria?.toLowerCase().includes(busqueda.toLowerCase()) ||
-    p.rut_empresa?.includes(busqueda)
-  );
+  // Obtener categorías únicas para el filtro
+  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria))];
+
+  const filtrados = proveedores.filter(p => {
+    const cumpleBusqueda = p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) || p.rut_empresa?.includes(busqueda);
+    const cumpleCategoria = categoriaFiltro === "Todas" || p.categoria === categoriaFiltro;
+    return cumpleBusqueda && cumpleCategoria;
+  });
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] p-4 lg:p-10 text-slate-900 font-sans">
       
-      {/* ALERTAS */}
       {alert && (
         <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border animate-in fade-in zoom-in duration-300 ${alert.type === 'success' ? 'bg-white border-emerald-100 text-emerald-600' : 'bg-white border-rose-100 text-rose-600'}`}>
           {alert.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
@@ -90,172 +95,206 @@ export default function SeccionProveedores() {
 
       <div className="max-w-[1400px] mx-auto">
         
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
-          <div className="flex items-center gap-4">
-            <div className="bg-slate-900 p-3 rounded-2xl text-white">
-              <Building2 size={32} />
+        {/* HEADER Y FILTROS */}
+        <div className="flex flex-col space-y-6 mb-12">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-4">
+              <div className="bg-slate-900 p-3 rounded-2xl text-white shadow-xl shadow-slate-200">
+                <Building2 size={32} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-black tracking-tighter text-slate-800">CENTRAL DE PROVEEDORES</h1>
+                <p className="text-slate-400 font-medium text-sm uppercase tracking-widest">Base de Datos Industrial</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-800 uppercase">Directorio Central</h1>
-              <p className="text-slate-400 font-medium">Panel de Suministros y Proveedores</p>
+            
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="relative flex-1 md:w-72">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input 
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por RUT o nombre..." 
+                  className="w-full bg-slate-100 border-none rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+              
+              {/* FILTRO CATEGORÍA */}
+              <select 
+                value={categoriaFiltro}
+                onChange={(e) => setCategoriaFiltro(e.target.value)}
+                className="bg-slate-100 border-none rounded-2xl py-4 px-6 text-sm font-bold text-slate-600 focus:ring-2 focus:ring-blue-100 outline-none appearance-none cursor-pointer"
+              >
+                {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+
+              <button 
+                onClick={() => setShowForm(!showForm)}
+                className="bg-blue-600 text-white p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-blue-100"
+              >
+                {showForm ? <X size={24} /> : <Plus size={24} />}
+              </button>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="relative flex-1 md:w-96">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-              <input 
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar RUT, Empresa o Categoría..." 
-                className="w-full bg-slate-100 border-none rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-2 focus:ring-blue-100 transition-all outline-none"
-              />
-            </div>
-            <button 
-              onClick={() => setShowForm(!showForm)}
-              className="bg-blue-600 text-white p-4 rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-blue-100"
-            >
-              {showForm ? <X size={24} /> : <Plus size={24} />}
-            </button>
           </div>
         </div>
 
-        {/* FORMULARIO DE INGRESO COMPLETO (BASE DE DATOS TOTAL) */}
+        {/* FORMULARIO DE CREACIÓN COMPLETO */}
         {showForm && (
           <form onSubmit={guardarProveedor} className="mb-12 bg-white border border-slate-100 p-8 rounded-[3rem] shadow-2xl animate-in slide-in-from-top duration-500 overflow-hidden relative">
             <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
-            <h2 className="text-xl font-black mb-8 text-slate-800 flex items-center gap-2">
-              <Plus className="text-blue-600" /> REGISTRAR NUEVA FICHA TÉCNICA
-            </h2>
+            <h2 className="text-xl font-black mb-8 text-slate-800 flex items-center gap-2">NUEVA FICHA DE PROVEEDOR</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              {/* Bloque Identificación */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
               <div className="md:col-span-2 space-y-4">
-                <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">Identificación Principal</p>
-                <input required placeholder="Razón Social / Nombre Fantasía" value={nuevo.nombre_empresa} onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none border border-transparent focus:border-blue-200" />
+                <p className="text-[10px] font-black text-blue-600 tracking-widest uppercase">General</p>
+                <input required placeholder="Razón Social" value={nuevo.nombre_empresa} onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none border border-transparent focus:border-blue-200" />
                 <div className="grid grid-cols-2 gap-4">
                   <input placeholder="RUT Empresa" value={nuevo.rut_empresa} onChange={e => setNuevo({...nuevo, rut_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
-                  <input required placeholder="Categoría (Ej: Construcción)" value={nuevo.categoria} onChange={e => setNuevo({...nuevo, categoria: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
+                  <input required placeholder="Categoría" value={nuevo.categoria} onChange={e => setNuevo({...nuevo, categoria: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 </div>
+                <input placeholder="Tipo de Servicio (Ej: Cemento, Flete)" value={nuevo.tipo_servicio} onChange={e => setNuevo({...nuevo, tipo_servicio: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
               </div>
 
-              {/* Bloque Contacto */}
               <div className="md:col-span-2 space-y-4">
-                <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">Canales de Contacto</p>
+                <p className="text-[10px] font-black text-blue-600 tracking-widest uppercase">Contacto y Web</p>
                 <input placeholder="Nombre de Contacto" value={nuevo.nombre_contacto} onChange={e => setNuevo({...nuevo, nombre_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 <div className="grid grid-cols-2 gap-4">
                   <input placeholder="Teléfono" value={nuevo.telefono} onChange={e => setNuevo({...nuevo, telefono: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
-                  <input placeholder="Email Corporativo" value={nuevo.email_contacto} onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
+                  <input placeholder="Email" value={nuevo.email_contacto} onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 </div>
+                <input placeholder="Sitio Web (https://...)" value={nuevo.sitio_web} onChange={e => setNuevo({...nuevo, sitio_web: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
               </div>
 
-              {/* Bloque Localización */}
               <div className="md:col-span-2 space-y-4">
-                <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">Ubicación</p>
+                <p className="text-[10px] font-black text-blue-600 tracking-widest uppercase">Ubicación</p>
                 <input placeholder="Dirección" value={nuevo.direccion} onChange={e => setNuevo({...nuevo, direccion: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 <div className="grid grid-cols-2 gap-4">
                   <input placeholder="Comuna" value={nuevo.comuna} onChange={e => setNuevo({...nuevo, comuna: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
-                  <input placeholder="Sitio Web" value={nuevo.sitio_web} onChange={e => setNuevo({...nuevo, sitio_web: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
+                  <input placeholder="Ciudad" value={nuevo.ciudad} onChange={e => setNuevo({...nuevo, ciudad: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 </div>
               </div>
 
-              {/* Bloque Financiero */}
               <div className="md:col-span-2 space-y-4">
-                <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">Datos Bancarios y Pago</p>
+                <p className="text-[10px] font-black text-blue-600 tracking-widest uppercase">Financiero</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <select value={nuevo.condiciones_pago} onChange={e => setNuevo({...nuevo, condiciones_pago: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none">
-                    <option value="Contado">Contado</option>
-                    <option value="Transferencia">Transferencia</option>
-                    <option value="30 días">30 días</option>
-                    <option value="60 días">60 días</option>
-                  </select>
+                  <input placeholder="Condiciones Pago (Contado, 30 días)" value={nuevo.condiciones_pago} onChange={e => setNuevo({...nuevo, condiciones_pago: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                   <input placeholder="Banco" value={nuevo.banco_nombre} onChange={e => setNuevo({...nuevo, banco_nombre: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <select value={nuevo.cuenta_tipo} onChange={e => setNuevo({...nuevo, cuenta_tipo: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none">
                     <option value="Corriente">Corriente</option>
-                    <option value="Vista / RUT">Vista / RUT</option>
+                    <option value="Vista">Vista / RUT</option>
                   </select>
                   <input placeholder="Número de Cuenta" value={nuevo.cuenta_numero} onChange={e => setNuevo({...nuevo, cuenta_numero: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" />
                 </div>
               </div>
             </div>
 
-            <textarea placeholder="Observaciones adicionales, notas de crédito o detalles operativos..." value={nuevo.observaciones} onChange={e => setNuevo({...nuevo, observaciones: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-4 text-sm outline-none h-24 mb-6 resize-none" />
+            <textarea placeholder="Observaciones..." value={nuevo.observaciones} onChange={e => setNuevo({...nuevo, observaciones: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-4 text-sm outline-none h-24 mb-6" />
 
             <div className="flex justify-end gap-4">
-              <button type="button" onClick={() => setShowForm(false)} className="px-8 py-3 text-sm font-bold text-slate-400 hover:text-slate-800 transition-all">Descartar</button>
-              <button type="submit" className="bg-slate-900 text-white px-12 py-3 rounded-2xl text-sm font-black shadow-lg hover:bg-blue-600 transition-all">FINALIZAR REGISTRO</button>
+              <button type="button" onClick={() => setShowForm(false)} className="px-8 py-3 text-sm font-bold text-slate-400">Cancelar</button>
+              <button type="submit" className="bg-slate-900 text-white px-12 py-3 rounded-2xl text-sm font-black shadow-lg hover:bg-blue-600 transition-all">GUARDAR PROVEEDOR</button>
             </div>
           </form>
         )}
 
-        {/* LISTADO DE TARJETAS (INFO TOTAL) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* LISTADO DE TARJETAS TIPO LISTA EXPANDIBLE */}
+        <div className="space-y-4">
           {filtrados.map((prov) => (
             <div 
               key={prov.id}
-              className="group bg-white border border-slate-100 p-8 rounded-[3rem] hover:shadow-2xl transition-all duration-500 relative overflow-hidden"
+              className="group bg-white border border-slate-100 rounded-[2rem] hover:shadow-xl transition-all duration-300 overflow-hidden"
             >
-              {/* Header Tarjeta */}
-              <div className="flex justify-between items-start mb-6">
-                <div className="space-y-1">
+              {/* VISTA PRINCIPAL (CABECERA) */}
+              <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-6 w-full md:w-auto">
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600 font-black">
+                    {prov.nombre_empresa.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 leading-none mb-2 uppercase">{prov.nombre_empresa}</h3>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold bg-slate-900 text-white px-2 py-0.5 rounded-md uppercase">{prov.categoria}</span>
+                      <span className="text-xs font-mono text-slate-400">{prov.rut_empresa}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end">
+                  <div className="hidden lg:flex flex-col items-end">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Pago</span>
+                    <span className="text-xs font-black text-slate-600">{prov.condiciones_pago || 'No def.'}</span>
+                  </div>
                   <div className="flex items-center gap-2">
-                    <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">{prov.categoria}</span>
-                    <span className="text-slate-300 text-[10px] font-bold">ID: {prov.id.split('-')[0]}</span>
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-800 leading-tight">{prov.nombre_empresa}</h3>
-                  <p className="text-slate-400 font-mono text-xs">{prov.rut_empresa}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => setSeleccionado(prov)} className="p-3 bg-slate-50 text-slate-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all"><Edit3 size={18} /></button>
-                  <button onClick={() => eliminarProveedor(prov.id)} className="p-3 bg-slate-50 text-slate-400 hover:bg-rose-500 hover:text-white rounded-2xl transition-all"><Trash2 size={18} /></button>
-                </div>
-              </div>
-
-              {/* Cuerpo Tarjeta - Info Total */}
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <Phone size={14} className="text-blue-500" /> <span className="text-xs font-bold">{prov.telefono || 'Sin fono'}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <Mail size={14} className="text-blue-500" /> <span className="text-xs font-bold truncate">{prov.email_contacto || 'Sin email'}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-600">
-                    <MapPin size={14} className="text-blue-500" /> <span className="text-xs font-bold">{prov.comuna || 'Sin ubicación'}</span>
-                  </div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-[2rem] space-y-2">
-                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">Info de Pago</p>
-                  <p className="text-xs font-black text-slate-700">{prov.condiciones_pago}</p>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
-                    <Landmark size={12} /> {prov.banco_nombre || 'S/B'}
+                    <button 
+                      onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-500 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-600 transition-all"
+                    >
+                      {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {expandedCard === prov.id ? 'Cerrar' : 'Ver Todo'}
+                    </button>
+                    <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-300 hover:text-blue-600 transition-all"><Edit3 size={18} /></button>
+                    <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all"><Trash2 size={18} /></button>
                   </div>
                 </div>
               </div>
 
-              {/* Observaciones en Tarjeta */}
-              {prov.observaciones && (
-                <div className="mb-6 p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
-                  <p className="text-[10px] text-amber-700 italic font-medium leading-relaxed">"{prov.observaciones}"</p>
+              {/* VISTA DETALLADA (LISTA EXPANDIDA) */}
+              {expandedCard === prov.id && (
+                <div className="p-8 bg-slate-50/50 border-t border-slate-50 animate-in slide-in-from-top-4 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Columna Contacto */}
+                    <div className="space-y-4">
+                      <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><Mail size={14}/> Contacto Directo</h4>
+                      <div className="bg-white p-4 rounded-2xl space-y-3 shadow-sm">
+                        <p className="text-sm font-bold text-slate-700">{prov.nombre_contacto || 'No registrado'}</p>
+                        <p className="text-xs text-slate-500 flex items-center gap-2"><Phone size={12}/> {prov.telefono || 'Sin fono'}</p>
+                        <p className="text-xs text-slate-500 flex items-center gap-2"><Mail size={12}/> {prov.email_contacto || 'Sin email'}</p>
+                        {prov.sitio_web && <p className="text-xs text-blue-500 truncate"><Globe size={12} className="inline mr-2"/>{prov.sitio_web}</p>}
+                      </div>
+                    </div>
+
+                    {/* Columna Ubicación */}
+                    <div className="space-y-4">
+                      <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><Map size={14}/> Localización</h4>
+                      <div className="bg-white p-4 rounded-2xl space-y-3 shadow-sm text-xs text-slate-600 font-medium">
+                        <p>{prov.direccion || 'Sin dirección'}</p>
+                        <p className="font-bold">{prov.comuna}, {prov.ciudad}</p>
+                        <div className="pt-2 flex gap-1">
+                          {[1,2,3,4,5].map(s => (
+                            <Star key={s} size={14} className={prov.calificacion >= s ? "fill-amber-400 text-amber-400" : "text-slate-100"} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Columna Financiera */}
+                    <div className="space-y-4">
+                      <h4 className="flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-widest"><DollarSign size={14}/> Datos de Pago</h4>
+                      <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg space-y-3">
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                          <span className="text-[10px] text-slate-400 uppercase">Banco</span>
+                          <span className="text-xs font-bold">{prov.banco_nombre || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                          <span className="text-[10px] text-slate-400 uppercase">Cuenta</span>
+                          <span className="text-xs font-bold">{prov.cuenta_tipo}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-slate-400 uppercase">Número</span>
+                          <span className="text-xs font-mono font-bold tracking-widest">{prov.cuenta_numero || '****'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {prov.observaciones && (
+                    <div className="mt-8 p-4 bg-white rounded-2xl border border-slate-100 text-xs italic text-slate-500">
+                      <strong>Nota:</strong> {prov.observaciones}
+                    </div>
+                  )}
                 </div>
               )}
-
-              {/* Footer Tarjeta */}
-              <div className="flex justify-between items-center pt-6 border-t border-slate-50">
-                <div className="flex gap-1">
-                  {[1,2,3,4,5].map(s => (
-                    <Star 
-                      key={s} 
-                      size={14} 
-                      className={`${prov.calificacion >= s ? "fill-amber-400 text-amber-400" : "text-slate-100 hover:text-amber-200"} cursor-pointer transition-colors`}
-                      onClick={() => actualizarCampoRapido(prov.id, 'calificacion', s)}
-                    />
-                  ))}
-                </div>
-                <button onClick={() => setSeleccionado(prov)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:mr-2 transition-all">Ver Ficha →</button>
-              </div>
             </div>
           ))}
         </div>
@@ -265,44 +304,74 @@ export default function SeccionProveedores() {
         )}
       </div>
 
-      {/* MODAL DE EDICIÓN (FONDO GRIS EN CAMPOS PARA CONTRASTE) */}
+      {/* MODAL DE EDICIÓN TOTAL CON CONTRASTE GRIS */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-          <div className="w-full max-w-2xl bg-white rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+          <div className="w-full max-w-3xl bg-white rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-2xl font-black text-slate-800">EDITAR EXPEDIENTE</h2>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">EDITAR PROVEEDOR</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Sincronización con Base de Datos</p>
+              </div>
               <button onClick={() => setSeleccionado(null)} className="p-3 bg-white shadow-sm rounded-2xl text-slate-400"><X /></button>
             </div>
 
-            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {/* Sección General */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-100 rounded-2xl">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Razón Social</label>
-                  <input className="w-full bg-transparent font-bold outline-none text-slate-800" value={seleccionado.nombre_empresa} onChange={e => setSeleccionado({...seleccionado, nombre_empresa: e.target.value})} />
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Nombre Empresa</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.nombre_empresa} onChange={e => setSeleccionado({...seleccionado, nombre_empresa: e.target.value})} />
                 </div>
                 <div className="p-4 bg-slate-100 rounded-2xl">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">RUT Empresa</label>
-                  <input className="w-full bg-transparent font-bold outline-none text-slate-800" value={seleccionado.rut_empresa} onChange={e => setSeleccionado({...seleccionado, rut_empresa: e.target.value})} />
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">RUT Empresa</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.rut_empresa} onChange={e => setSeleccionado({...seleccionado, rut_empresa: e.target.value})} />
                 </div>
                 <div className="p-4 bg-slate-100 rounded-2xl">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Email Contacto</label>
-                  <input className="w-full bg-transparent font-bold outline-none text-slate-800" value={seleccionado.email_contacto} onChange={e => setSeleccionado({...seleccionado, email_contacto: e.target.value})} />
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Categoría</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.categoria} onChange={e => setSeleccionado({...seleccionado, categoria: e.target.value})} />
                 </div>
                 <div className="p-4 bg-slate-100 rounded-2xl">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Teléfono</label>
-                  <input className="w-full bg-transparent font-bold outline-none text-slate-800" value={seleccionado.telefono} onChange={e => setSeleccionado({...seleccionado, telefono: e.target.value})} />
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Servicio</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.tipo_servicio} onChange={e => setSeleccionado({...seleccionado, tipo_servicio: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Sección Contacto y Ubicación */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-100 rounded-2xl">
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Nombre Contacto</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.nombre_contacto} onChange={e => setSeleccionado({...seleccionado, nombre_contacto: e.target.value})} />
+                </div>
+                <div className="p-4 bg-slate-100 rounded-2xl">
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Teléfono</label>
+                  <input className="w-full bg-transparent font-bold outline-none" value={seleccionado.telefono} onChange={e => setSeleccionado({...seleccionado, telefono: e.target.value})} />
                 </div>
                 <div className="p-4 bg-slate-100 rounded-2xl col-span-2">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Datos Bancarios (Banco - Tipo - Número)</label>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    <input className="bg-white/50 rounded-lg p-1 text-xs outline-none" value={seleccionado.banco_nombre} onChange={e => setSeleccionado({...seleccionado, banco_nombre: e.target.value})} />
-                    <input className="bg-white/50 rounded-lg p-1 text-xs outline-none" value={seleccionado.cuenta_tipo} onChange={e => setSeleccionado({...seleccionado, cuenta_tipo: e.target.value})} />
-                    <input className="bg-white/50 rounded-lg p-1 text-xs outline-none" value={seleccionado.cuenta_numero} onChange={e => setSeleccionado({...seleccionado, cuenta_numero: e.target.value})} />
+                  <label className="text-[9px] font-black uppercase text-blue-600 block mb-1">Dirección Completa</label>
+                  <div className="flex gap-2">
+                    <input className="flex-[2] bg-white/50 rounded-lg p-2 text-xs outline-none" value={seleccionado.direccion} onChange={e => setSeleccionado({...seleccionado, direccion: e.target.value})} />
+                    <input className="flex-1 bg-white/50 rounded-lg p-2 text-xs outline-none" value={seleccionado.comuna} placeholder="Comuna" onChange={e => setSeleccionado({...seleccionado, comuna: e.target.value})} />
                   </div>
                 </div>
-                <div className="p-4 bg-slate-100 rounded-2xl col-span-2">
-                  <label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Notas Internas</label>
-                  <textarea className="w-full bg-transparent font-medium outline-none text-slate-800 h-20 resize-none" value={seleccionado.observaciones} onChange={e => setNuevo({...seleccionado, observaciones: e.target.value})} />
+              </div>
+
+              {/* Sección Pago */}
+              <div className="p-6 bg-slate-900 rounded-[2rem] text-white">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Información de Transferencia</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-[8px] uppercase text-slate-500 block mb-1">Banco</label>
+                    <input className="w-full bg-slate-800 rounded-lg p-2 text-xs font-bold outline-none" value={seleccionado.banco_nombre} onChange={e => setSeleccionado({...seleccionado, banco_nombre: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-[8px] uppercase text-slate-500 block mb-1">Tipo Cuenta</label>
+                    <input className="w-full bg-slate-800 rounded-lg p-2 text-xs font-bold outline-none" value={seleccionado.cuenta_tipo} onChange={e => setSeleccionado({...seleccionado, cuenta_tipo: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-[8px] uppercase text-slate-500 block mb-1">N° Cuenta</label>
+                    <input className="w-full bg-slate-800 rounded-lg p-2 text-xs font-bold outline-none" value={seleccionado.cuenta_numero} onChange={e => setSeleccionado({...seleccionado, cuenta_numero: e.target.value})} />
+                  </div>
                 </div>
               </div>
 
@@ -310,11 +379,11 @@ export default function SeccionProveedores() {
                 <button 
                   onClick={async () => {
                     const { error } = await supabase.from('proveedores').update(seleccionado).eq('id', seleccionado.id);
-                    if (!error) { showAlert("Expediente Actualizado", "success"); cargarProveedores(); setSeleccionado(null); }
+                    if (!error) { showAlert("Proveedor actualizado en DB", "success"); cargarProveedores(); setSeleccionado(null); }
                   }}
-                  className="flex-1 bg-slate-900 text-white py-5 rounded-[2rem] font-black flex items-center justify-center gap-2 hover:bg-blue-600 transition-all"
+                  className="flex-1 bg-blue-600 text-white py-5 rounded-[2rem] font-black flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-xl shadow-blue-100"
                 >
-                  <Save size={20} /> ACTUALIZAR DATOS
+                  <Save size={20} /> GUARDAR CAMBIOS TOTALES
                 </button>
                 <button 
                   onClick={() => eliminarProveedor(seleccionado.id)}
@@ -330,7 +399,7 @@ export default function SeccionProveedores() {
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
       `}</style>
     </div>
   );
