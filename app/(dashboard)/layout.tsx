@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     {
       title: "Logística", // NUEVA SECCIÓN AGREGADA
-      items: [{ name: "Proveedores Transporte", icon: Truck, path: "/proveedores" }]
+      items: [{ name: "Proveedores", icon: Truck, path: "/proveedores" }]
     },
     {
       title: "Recursos Humanos",
