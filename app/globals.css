@@ -3,8 +3,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  /* Esto fuerza al navegador a ignorar el modo oscuro del sistema */
+  /* Fuerza al navegador a ignorar el modo oscuro del sistema */
   color-scheme: light;
+  
+  /* ESTANDARIZACIÓN DE FUENTE: 16px base para evitar que los inputs se muevan en diferentes PC */
+  font-size: 16px; 
 }
 
 @theme inline {
@@ -14,20 +17,33 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* --- ELIMINAMOS EL BLOQUE @media (prefers-color-scheme: dark) --- */
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased; /* Mejora nitidez en Mac */
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden; /* Evita scrolls horizontales accidentales */
 }
 
-/* --- PARCHE GLOBAL PARA INPUTS (LOGIN, CHAT, PRODUCTOS, ETC) --- */
+/* --- PARCHE GLOBAL PARA INPUTS, SELECTS Y TEXTAREAS --- */
 input, 
 select, 
 textarea {
-  color: #171717 !important; /* Forza el color oscuro del texto */
-  background-color: #ffffff !important; /* Forza el fondo blanco */
+  color: #171717 !important;
+  background-color: #ffffff !important;
+  /* NORMALIZACIÓN PARA TODOS LOS PC: */
+  font-size: 1rem !important; /* Mantiene el texto legible (16px) */
+  appearance: none; /* Elimina estilos nativos de Apple/Android que deforman inputs */
+  -webkit-appearance: none;
+  border-radius: 0.75rem; /* Redondeado estándar si no se define en Tailwind */
+}
+
+/* Forzamos que los inputs tipo fecha tengan una altura mínima consistente */
+input[type="date"] {
+  min-height: 2.8rem;
+  display: flex;
+  align-items: center;
 }
 
 /* Evita que el autocompletado de Chrome ponga letras blancas */
@@ -41,6 +57,31 @@ input:-webkit-autofill:focus {
 
 /* Mejora la visibilidad de los placeholders */
 ::placeholder {
-  color: #64748b !important; /* slate-500 */
+  color: #64748b !important;
   opacity: 1;
+}
+
+/* --- SCROLLBAR MINIMALISTA --- 
+   Para que en Windows la barra de scroll no se vea tosca y mueva el diseño lateralmente */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* --- PREVENCIÓN DE OVERFLOW EN TEXTOS LARGOS --- */
+p, span, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }

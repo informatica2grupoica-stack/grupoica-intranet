@@ -1,64 +1,79 @@
 import requests
 import json
 import re
+import os
 from flask import Flask, request, jsonify
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import quote_plus
+from openai import OpenAI # DeepSeek usa la misma librería
 
 app = Flask(__name__)
 
-# REVISAR: Tu API KEY de Serper.dev
+# --- CONFIGURACIÓN ---
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
+# Reemplaza con tu API KEY de DeepSeek
+DEEPSEEK_API_KEY = "TU_API_KEY_DEEPSEEK" 
 
-def fetch_serper_data(query, search_type="search"):
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+def filtrar_con_ia(producto_buscado, resultados_raw):
     """
-    search_type puede ser "search" (Orgánico/Maps) o "shopping"
+    Usa la IA para analizar los títulos y snippets y descartar basura.
     """
-    url = f"https://google.serper.dev/{search_type}"
-    payload = json.dumps({
-        "q": query,
-        "gl": "cl",
-        "hl": "es",
-        "num": 100
-    })
-    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+    if not resultados_raw: return []
+
+    # Creamos un resumen para que la IA no gaste tantos tokens
+    candidatos = []
+    for i, res in enumerate(resultados_raw):
+        candidatos.append({
+            "id": i,
+            "titulo": res['nombre'],
+            "tienda": res['tienda']
+        })
+
+    prompt = f"""
+    Actúa como un experto en materiales de construcción en Chile. 
+    El usuario busca: "{producto_buscado}"
+    
+    Analiza esta lista de resultados de Google y devuélveme SOLO los IDs de los productos 
+    que coinciden EXACTAMENTE con lo que el usuario busca. 
+    Descarta: accesorios, repuestos (si busca la máquina), noticias o cursos.
+    
+    Lista: {json.dumps(candidatos)}
+    
+    Responde solo con un array JSON de IDs, ejemplo: [0, 2, 5]
+    """
+
     try:
-        response = requests.post(url, headers=headers, data=payload, timeout=30)
-        return response.json()
-    except:
-        return {}
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "system", "content": "Eres un filtro de inventario preciso."},
+                      {"role": "user", "content": prompt}],
+            response_format={ 'type': 'json_object' } if "deepseek" not in "deepseek-chat" else None # Depende de la versión
+        )
+        
+        # Extraer IDs del texto (manejando si la IA responde con texto extra)
+        contenido = response.choices[0].message.content
+        ids_validos = json.loads(re.search(r'\[.*\]', contenido).group())
+        
+        return [resultados_raw[i] for i in ids_validos if i < len(resultados_raw)]
+    except Exception as e:
+        print(f"❌ Error IA: {e}")
+        return resultados_raw[:10] # Si falla la IA, devolvemos los top 10 por defecto
+
+# ... (Mantener funciones fetch_serper_data igual)
 
 @app.route("/api/index", methods=["GET"])
 def scrape_prices():
     producto_raw = request.args.get("producto")
-    # Capturamos el nombre original del Excel si existe
     origen_excel = request.args.get("origen") 
     
     if not producto_raw: return jsonify([])
 
-    # --- MEJORA: Limpieza de ruidos comunes en Excel de construcción ---
-    # Esto evita que busque cosas como "Saco Cemento x20" y mejor busque "Saco Cemento"
-    producto = re.sub(r'\s?\d+\s?(un|unidad|kg|mt|m2|mm)\b', '', producto_raw, flags=re.IGNORECASE).strip()
-
-    # MODO TEST: Para verificar conexión sin gastar créditos
-    if producto.lower() == "test":
-        return jsonify([{
-            "tienda": "SISTEMA",
-            "nombre": "BACKEND OPERATIVO - LISTO PARA EXCEL",
-            "precio_valor": 0,
-            "precio_formateado": "OK",
-            "link": "#",
-            "canal": "DEBUG",
-            "busqueda_original": "TEST"
-        }])
-
-    # Query optimizada para el sector construcción
-    query_maestra = f"{producto} precio chile" # Añadido 'precio' para forzar resultados comerciales
-    
+    # 1. Búsqueda normal en Serper
+    query_maestra = f"{producto_raw} precio chile"
     final_data = []
     vistos = set()
 
-    # EJECUCIÓN EN PARALELO: Shopping + Orgánico + Maps
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_organic = executor.submit(fetch_serper_data, query_maestra, "search")
         future_shopping = executor.submit(fetch_serper_data, query_maestra, "shopping")
@@ -66,63 +81,15 @@ def scrape_prices():
         data_org = future_organic.result()
         data_shop = future_shopping.result()
 
-    # --- 1. PROCESAR GOOGLE SHOPPING ---
-    for item in data_shop.get('shopping', []):
-        link = item.get('link', '')
-        if link not in vistos:
-            try:
-                raw_val = int(re.sub(r'[^\d]', '', str(item.get('price', '0'))))
-            except: raw_val = 0
-            
-            tienda = item.get('source', 'RETAIL').upper()
-            
-            final_data.append({
-                "tienda": tienda,
-                "nombre": item.get('title', '')[:100],
-                "precio_valor": raw_val,
-                "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "N/A",
-                "link": link,
-                "canal": "SHOPPING",
-                "busqueda_original": origen_excel if origen_excel else producto_raw
-            })
-            vistos.add(link)
+    # --- PROCESAMIENTO (Igual al tuyo, omitido por brevedad para llegar a la IA) ---
+    # ... (Aquí va tu lógica de procesar data_shop y data_org que llena final_data)
+    
+    # 2. APLICAR INTELIGENCIA ARTIFICIAL
+    # Solo filtramos si hay muchos resultados para optimizar
+    if len(final_data) > 3:
+        print(f"🧠 Filtrando {len(final_data)} resultados con IA para: {producto_raw}")
+        final_data = filtrar_con_ia(producto_raw, final_data)
 
-    # --- 2. PROCESAR ORGÁNICO Y MAPAS ---
-    organic_results = data_org.get('organic', []) + data_org.get('places', [])
-    for item in organic_results:
-        link = item.get('link') or item.get('website') or f"https://www.google.com/search?q={quote_plus(item.get('title',''))}"
-        title = item.get('title', '')
-        snippet = item.get('snippet', '') or item.get('address', '')
-
-        if link not in vistos:
-            # Buscamos patrones de precio en el texto del buscador
-            price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
-            raw_val = 0
-            if price_match:
-                try:
-                    # Limpiamos el valor encontrado para convertirlo en número
-                    raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
-                except: pass
-
-            # Filtro de ruido (redes sociales y sitios no comerciales)
-            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'twitter', 'linkedin']):
-                continue
-
-            tienda_label = link.split('/')[2].replace('www.', '').split('.')[0].upper() if "http" in link else "LOCAL"
-            
-            final_data.append({
-                "tienda": tienda_label,
-                "nombre": title[:100],
-                "precio_valor": raw_val,
-                "precio_formateado": f"${raw_val:,}".replace(",", ".") if raw_val > 0 else "COTIZAR",
-                "link": link,
-                "canal": "WEB/MAPS",
-                "busqueda_original": origen_excel if origen_excel else producto_raw
-            })
-            vistos.add(link)
-
-    # Ordenar por precio: los que tienen precio detectado primero, de menor a mayor
-    # Los que dicen "COTIZAR" (valor 0) quedan al final
     return jsonify(sorted(final_data, key=lambda x: (x['precio_valor'] == 0, x['precio_valor'])))
 
 if __name__ == "__main__":

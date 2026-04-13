@@ -13,7 +13,8 @@ import {
   Laptop,
   ChevronRight,
   ExternalLink,
-  CheckSquare 
+  CheckSquare,
+  Truck // Importado para Transporte
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -68,6 +69,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "Analisis de productos",
       items: [{ name: "Buscador Productos", icon: Box, path: "/buscador-productos" }]
+    },
+    {
+      title: "Logística", // NUEVA SECCIÓN AGREGADA
+      items: [{ name: "Proveedores Transporte", icon: Truck, path: "/proveedores" }]
     },
     {
       title: "Recursos Humanos",
@@ -140,7 +145,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </>
                   );
 
-                  // Si es externo, usamos <a>, si es interno usamos Link de Next.js
                   return (item as any).external ? (
                     <a 
                       key={item.path} 
