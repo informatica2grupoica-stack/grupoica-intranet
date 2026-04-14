@@ -241,14 +241,26 @@ export default function TareasPage() {
               </select>
               <div className="lg:col-span-4 flex gap-2">
                 <div className="flex-1 min-w-[120px] relative group/input">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <input type="date" title="Fecha Inicio" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none" 
-                         value={form.fecha_inicio} onChange={e => setForm({...form, fecha_inicio: e.target.value})} />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+                  <input 
+                    type="date" 
+                    title="Fecha Inicio" 
+                    className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer relative z-0" 
+                    value={form.fecha_inicio} 
+                    onChange={e => setForm({...form, fecha_inicio: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                  />
                 </div>
                 <div className="flex-1 min-w-[120px] relative group/input">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <input type="date" title="Fecha Límite" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none" 
-                         value={form.fecha_limite} onChange={e => setForm({...form, fecha_limite: e.target.value})} />
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+                  <input 
+                    type="date" 
+                    title="Fecha Límite" 
+                    className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer relative z-0" 
+                    value={form.fecha_limite} 
+                    onChange={e => setForm({...form, fecha_limite: e.target.value})}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                  />
                 </div>
               </div>
             </div>
