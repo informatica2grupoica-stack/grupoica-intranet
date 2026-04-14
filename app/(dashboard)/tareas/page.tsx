@@ -202,7 +202,7 @@ export default function TareasPage() {
         </div>
       )}
 
-      {/* HEADER AJUSTADO */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-100 pb-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -217,7 +217,7 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* FORMULARIO RESPONSIVO */}
+      {/* FORMULARIO */}
       {puedeCrear && (
         <section className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:shadow-blue-900/5">
           <form onSubmit={handleActionTarea} className="space-y-4">
@@ -240,14 +240,14 @@ export default function TareasPage() {
                   {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>)}
               </select>
               <div className="lg:col-span-4 flex gap-2">
-                <div className="flex-1 relative group/input">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="date" title="Fecha Inicio" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-3 py-3 text-[10px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all" 
+                <div className="flex-1 min-w-[120px] relative group/input">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input type="date" title="Fecha Inicio" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none" 
                          value={form.fecha_inicio} onChange={e => setForm({...form, fecha_inicio: e.target.value})} />
                 </div>
-                <div className="flex-1 relative group/input">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="date" title="Fecha Límite" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-3 py-3 text-[10px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all" 
+                <div className="flex-1 min-w-[120px] relative group/input">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input type="date" title="Fecha Límite" className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none" 
                          value={form.fecha_limite} onChange={e => setForm({...form, fecha_limite: e.target.value})} />
                 </div>
               </div>
@@ -274,7 +274,7 @@ export default function TareasPage() {
         </section>
       )}
 
-      {/* TABLA OPTIMIZADA */}
+      {/* TABLA */}
       <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto overflow-y-hidden">
           <table className="w-full text-left border-collapse min-w-[800px]">
@@ -372,7 +372,7 @@ export default function TareasPage() {
         </div>
       </section>
 
-      {/* DRAWER LATERAL OPTIMIZADO PARA ALTURA DE PANTALLA */}
+      {/* DRAWER LATERAL */}
       {tareaExpandida && (
         <>
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] animate-in fade-in duration-300" onClick={() => setTareaExpandida(null)} />
