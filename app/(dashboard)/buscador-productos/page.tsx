@@ -50,14 +50,16 @@ export default function MonitorMasivoICA() {
     }));
   }, [lista]);
 
-  // --- LÓGICA DE REFINADO IA (FILTRO QUIRÚRGICO MEJORADO) ---
+  // --- LÓGICA DE REFINADO IA (FILTRO QUIRÚRGICO OPTIMIZADO) ---
   const filtrarConInteligencia = async (terminoBusqueda: string, resultadosRaw: any[]) => {
     try {
-      // MITIGACIÓN DE ERRORES: Solo enviamos resultados con precio detectado 
-      // y limitamos a los top 40 para que la IA no se maree con el barrido masivo de Python.
-      const candidatosValidos = resultadosRaw
-        .filter(r => r.precio_valor > 0)
-        .slice(0, 40);
+      // 1. Limpieza inicial: Solo con precio
+      const conPrecio = resultadosRaw.filter(r => r.precio_valor > 0);
+      
+      // 2. Mezcla para evitar monopolio de Shopping (máximo 25 totales para velocidad)
+      const organicos = conPrecio.filter(r => r.canal !== 'SHOPPING').slice(0, 15);
+      const shopping = conPrecio.filter(r => r.canal === 'SHOPPING').slice(0, 10);
+      const candidatosValidos = [...organicos, ...shopping];
 
       if (candidatosValidos.length === 0) return [];
 
@@ -65,7 +67,7 @@ export default function MonitorMasivoICA() {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mensaje: `Analiza estos suministros para: "${terminoBusqueda}"`,
+          mensaje: terminoBusqueda,
           datosParaFiltrar: candidatosValidos,
           modo: "buscador_web" 
         })
@@ -73,55 +75,52 @@ export default function MonitorMasivoICA() {
       
       const filtrados = await resIA.json();
       
-      // Si la IA responde correctamente devolvemos su selección, si no, los candidatos originales
-      return Array.isArray(filtrados) ? filtrados : candidatosValidos.slice(0, 10);
+      // Si la IA responde un array vacío o error, devolvemos un fallback controlado
+      return Array.isArray(filtrados) ? filtrados : [];
     } catch (e) {
       console.error("Error en Refinado IA:", e);
-      return resultadosRaw.slice(0, 5); // Fallback mínimo si la IA falla
+      return []; 
     }
   };
 
-  // FUNCIÓN: Búsqueda Individual (Escaneo Profundo)
   const buscarUno = async () => {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
     try {
-      // Llamada al Backend de Python (Búsqueda Triple Masiva)
       const res = await fetch(`/api/index?producto=${encodeURIComponent(inputManual)}&origen=${encodeURIComponent(inputManual)}`);
       const data = await res.json();
       
       if (Array.isArray(data) && data.length > 0) {
-        notify(`REFINANDO HALLAZGOS CON IA...`, 'success');
+        notify(`VALIDANDO ESPECIFICACIONES...`, 'success');
         const dataRefinada = await filtrarConInteligencia(inputManual, data);
         
         if (dataRefinada.length > 0) {
           setLista(prev => [...dataRefinada, ...prev]);
-          notify(`BÚSQUEDA EXITOSA: ${inputManual}`, 'success');
+          notify(`PRODUCTO ENCONTRADO`, 'success');
         } else {
-          notify(`RESULTADOS NO COINCIDEN CON LA MARCA/MEDIDA`, 'error');
+          notify(`MEDIDA O ESPECIFICACIÓN NO DISPONIBLE`, 'error');
         }
       } else {
-        notify(`SIN STOCK DISPONIBLE EN LA WEB`, 'error');
+        notify(`SIN RESULTADOS EN LA WEB`, 'error');
       }
       setInputManual("");
     } catch (e) {
-      notify("ERROR DE CONEXIÓN CON BACKEND", 'error');
+      notify("ERROR DE COMUNICACIÓN", 'error');
     }
     setBuscandoUno(false);
   };
 
-  // FUNCIÓN: Barrido Masivo (Procesamiento por Lotes)
   const iniciarBarrido = async () => {
     const productos = inputMasivo.split('\n').map(p => p.trim()).filter(p => p.length > 2);
     if (productos.length === 0) return;
 
     setProcesando(true);
     setProgreso({ actual: 0, total: productos.length });
-    notify(`INICIANDO RASTREO IA: ${productos.length} ÍTEMS`, 'success');
+    notify(`INICIANDO PROCESAMIENTO: ${productos.length} ÍTEMS`, 'success');
 
     for (let i = 0; i < productos.length; i++) {
       const pActual = productos[i];
-      setProgreso(prev => ({ ...prev, actual: i + 1 }));
+      setProgreso({ actual: i + 1, total: productos.length });
       
       try {
         const res = await fetch(`/api/index?producto=${encodeURIComponent(pActual)}&origen=${encodeURIComponent(pActual)}`);
@@ -133,10 +132,8 @@ export default function MonitorMasivoICA() {
             setLista(prev => [...dataRefinada, ...prev]);
           }
         }
-        
-        // PAUSA DE SEGURIDAD: Evita bloqueos de IP y permite que la IA respire entre consultas
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
+        // Pausa breve para no saturar la API de DeepSeek
+        await new Promise(resolve => setTimeout(resolve, 800));
       } catch (e) {
         console.error(`Fallo en item: ${pActual}`);
       }
@@ -144,7 +141,7 @@ export default function MonitorMasivoICA() {
     
     setProcesando(false);
     setInputMasivo(""); 
-    notify("BARRIDO MASIVO COMPLETADO", 'success');
+    notify("BARRIDO COMPLETADO CON ÉXITO", 'success');
   };
 
   return (
@@ -175,7 +172,7 @@ export default function MonitorMasivoICA() {
               <Search size={16} className="text-slate-400" />
               <input 
                 className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
-                placeholder="Rastreo con precisión IA..."
+                placeholder="Busca medida exacta (ej: 22oz)..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
@@ -189,7 +186,7 @@ export default function MonitorMasivoICA() {
               </button>
             </div>
             <button 
-              onClick={() => { setLista([]); notify("LISTA LIMPIA", "error"); }} 
+              onClick={() => { setLista([]); notify("MEMORIA LIMPIA", "error"); }} 
               className="bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 hover:text-rose-500 hover:border-rose-100 transition-all shadow-sm active:scale-90"
             >
               <Trash2 size={18} />
@@ -199,7 +196,6 @@ export default function MonitorMasivoICA() {
       </header>
 
       <main className="max-w-[1500px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
         <div className="lg:col-span-3">
           <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-200/40 sticky top-32">
             <label className="flex items-center gap-3 mb-5 font-black text-[10px] uppercase text-slate-400 tracking-[0.2em]">
@@ -221,12 +217,12 @@ export default function MonitorMasivoICA() {
               {procesando ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  <span>PROCESANDO {progreso.actual} / {progreso.total}</span>
+                  <span>{progreso.actual} / {progreso.total}</span>
                 </>
               ) : (
                 <>
                   <Sparkles size={16} />
-                  <span>Iniciar Rastreo IA</span>
+                  <span>Analizar Lista</span>
                 </>
               )}
             </button>
@@ -239,7 +235,7 @@ export default function MonitorMasivoICA() {
               <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-slate-200 border border-slate-50 mb-8">
                 <Globe size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
               </div>
-              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Inicia una búsqueda para ver resultados</p>
+              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Esperando ingreso de datos...</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
@@ -255,11 +251,8 @@ export default function MonitorMasivoICA() {
                       </h3>
                     </div>
                     <div className="flex gap-2">
-                       <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-emerald-200">
-                        REFINADO CON IA
-                      </span>
-                      <span className="text-[10px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shadow-slate-200">
-                        {grupo.items.length} HALLAZGOS
+                      <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-emerald-200">
+                        IA VERIFIED
                       </span>
                     </div>
                   </div>
@@ -268,23 +261,23 @@ export default function MonitorMasivoICA() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="text-[10px] uppercase text-slate-400 font-black tracking-[0.2em] border-b border-slate-50">
-                          <th className="px-10 py-5">Fuente</th>
+                          <th className="px-10 py-5">Fuente / Canal</th>
                           <th className="px-10 py-5">Descripción</th>
-                          <th className="px-10 py-5 text-right">Precio Ref.</th>
-                          <th className="px-10 py-5 text-center">Enlace</th>
+                          <th className="px-10 py-5 text-right">Precio</th>
+                          <th className="px-10 py-5 text-center">Ir</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                         {grupo.items.map((item, i) => (
                           <tr key={i} className="hover:bg-slate-50/80 transition-all group/row">
                             <td className="px-10 py-6">
-                              <span className="font-black text-slate-900 text-sm block mb-1 group-hover/row:text-orange-600 transition-colors">{item.tienda}</span>
-                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-md tracking-tighter uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                              <span className="font-black text-slate-900 text-sm block mb-1">{item.tienda}</span>
+                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-md uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                                 {item.canal}
                               </span>
                             </td>
                             <td className="px-10 py-6">
-                              <p className="text-base font-bold text-slate-600 leading-tight max-w-md group-hover/row:text-slate-900 transition-colors line-clamp-2">
+                              <p className="text-base font-bold text-slate-600 leading-tight max-w-md line-clamp-2">
                                 {item.nombre}
                               </p>
                             </td>
@@ -297,7 +290,7 @@ export default function MonitorMasivoICA() {
                               <a 
                                 href={item.link} 
                                 target="_blank" 
-                                className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 hover:bg-orange-600 hover:text-white hover:rotate-12 transition-all shadow-sm active:scale-90"
+                                className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 hover:bg-orange-600 hover:text-white transition-all shadow-sm"
                               >
                                 <ExternalLink size={18} />
                               </a>
