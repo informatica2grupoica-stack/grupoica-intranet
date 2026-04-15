@@ -20,6 +20,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+// --- IMPORTACIÓN DEL COMPONENTE IA ---
+import ChatBot from "@/components/ChatBot"; 
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState("");
@@ -207,6 +210,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </main>
+
+      {/* --- BOT FLOTANTE --- */}
+      <ChatBot />
     </div>
   );
 }
