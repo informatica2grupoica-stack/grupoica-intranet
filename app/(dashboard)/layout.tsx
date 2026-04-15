@@ -14,7 +14,8 @@ import {
   ChevronRight,
   ExternalLink,
   CheckSquare,
-  Truck // Importado para Transporte
+  Truck,
+  TrendingUp // Importado para el Historial de Precios
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -71,10 +72,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     {
       title: "Analisis de productos",
-      items: [{ name: "Buscador Productos", icon: Box, path: "/buscador-productos" }]
+      items: [
+        { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
+        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" } // <--- NUEVA OPCIÓN
+      ]
     },
     {
-      title: "Logística", // NUEVA SECCIÓN AGREGADA
+      title: "Logística",
       items: [{ name: "Proveedores", icon: Truck, path: "/proveedores" }]
     },
     {

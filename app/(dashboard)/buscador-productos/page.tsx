@@ -50,13 +50,23 @@ export default function MonitorMasivoICA() {
     }));
   }, [lista]);
 
-  // --- LÓGICA DE REFINADO IA (FILTRO QUIRÚRGICO OPTIMIZADO) ---
+  // --- PERSISTENCIA EN SUPABASE ---
+  const guardarEnHistorial = async (resultados: any[], termino: string) => {
+    try {
+      await fetch("/api/guardar-precios", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultados, termino })
+      });
+    } catch (e) {
+      console.error("Error al persistir en DB", e);
+    }
+  };
+
+  // --- LÓGICA DE REFINADO IA ---
   const filtrarConInteligencia = async (terminoBusqueda: string, resultadosRaw: any[]) => {
     try {
-      // 1. Limpieza inicial: Solo con precio
       const conPrecio = resultadosRaw.filter(r => r.precio_valor > 0);
-      
-      // 2. Mezcla para evitar monopolio de Shopping (máximo 25 totales para velocidad)
       const organicos = conPrecio.filter(r => r.canal !== 'SHOPPING').slice(0, 15);
       const shopping = conPrecio.filter(r => r.canal === 'SHOPPING').slice(0, 10);
       const candidatosValidos = [...organicos, ...shopping];
@@ -74,8 +84,6 @@ export default function MonitorMasivoICA() {
       });
       
       const filtrados = await resIA.json();
-      
-      // Si la IA responde un array vacío o error, devolvemos un fallback controlado
       return Array.isArray(filtrados) ? filtrados : [];
     } catch (e) {
       console.error("Error en Refinado IA:", e);
@@ -86,22 +94,24 @@ export default function MonitorMasivoICA() {
   const buscarUno = async () => {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
+    const queryActual = inputManual;
     try {
-      const res = await fetch(`/api/index?producto=${encodeURIComponent(inputManual)}&origen=${encodeURIComponent(inputManual)}`);
+      const res = await fetch(`/api/index?producto=${encodeURIComponent(queryActual)}&origen=${encodeURIComponent(queryActual)}`);
       const data = await res.json();
       
       if (Array.isArray(data) && data.length > 0) {
-        notify(`VALIDANDO ESPECIFICACIONES...`, 'success');
-        const dataRefinada = await filtrarConInteligencia(inputManual, data);
+        notify(`REFINANDO CON IA...`, 'success');
+        const dataRefinada = await filtrarConInteligencia(queryActual, data);
         
         if (dataRefinada.length > 0) {
           setLista(prev => [...dataRefinada, ...prev]);
-          notify(`PRODUCTO ENCONTRADO`, 'success');
+          guardarEnHistorial(dataRefinada, queryActual); // <--- GUARDADO EN DB
+          notify(`PRODUCTO LISTO`, 'success');
         } else {
-          notify(`MEDIDA O ESPECIFICACIÓN NO DISPONIBLE`, 'error');
+          notify(`NO HAY COINCIDENCIAS EXACTAS`, 'error');
         }
       } else {
-        notify(`SIN RESULTADOS EN LA WEB`, 'error');
+        notify(`SIN STOCK EN LA WEB`, 'error');
       }
       setInputManual("");
     } catch (e) {
@@ -116,7 +126,7 @@ export default function MonitorMasivoICA() {
 
     setProcesando(true);
     setProgreso({ actual: 0, total: productos.length });
-    notify(`INICIANDO PROCESAMIENTO: ${productos.length} ÍTEMS`, 'success');
+    notify(`ESCANEANDO ${productos.length} ÍTEMS`, 'success');
 
     for (let i = 0; i < productos.length; i++) {
       const pActual = productos[i];
@@ -130,18 +140,18 @@ export default function MonitorMasivoICA() {
           const dataRefinada = await filtrarConInteligencia(pActual, data);
           if (dataRefinada.length > 0) {
             setLista(prev => [...dataRefinada, ...prev]);
+            guardarEnHistorial(dataRefinada, pActual); // <--- GUARDADO EN DB
           }
         }
-        // Pausa breve para no saturar la API de DeepSeek
         await new Promise(resolve => setTimeout(resolve, 800));
       } catch (e) {
-        console.error(`Fallo en item: ${pActual}`);
+        console.error(`Error en ítem: ${pActual}`);
       }
     }
     
     setProcesando(false);
     setInputMasivo(""); 
-    notify("BARRIDO COMPLETADO CON ÉXITO", 'success');
+    notify("BARRIDO MASIVO COMPLETADO", 'success');
   };
 
   return (
@@ -161,8 +171,8 @@ export default function MonitorMasivoICA() {
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tight text-slate-900 leading-none">
-                BUSCADOR <span className="text-orange-600">IA</span> 
-                <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded-full ml-2 font-black tracking-widest uppercase">Deep ICA</span>
+                MONITOR <span className="text-orange-600">ICA</span> 
+                <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded-full ml-2 font-black tracking-widest uppercase">Base de Datos Conectada</span>
               </h1>
             </div>
           </div>
@@ -172,7 +182,7 @@ export default function MonitorMasivoICA() {
               <Search size={16} className="text-slate-400" />
               <input 
                 className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
-                placeholder="Busca medida exacta (ej: 22oz)..."
+                placeholder="Buscar y registrar precio..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
@@ -200,11 +210,11 @@ export default function MonitorMasivoICA() {
           <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-200/40 sticky top-32">
             <label className="flex items-center gap-3 mb-5 font-black text-[10px] uppercase text-slate-400 tracking-[0.2em]">
               <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-              Barrido Masivo Inteligente
+              Rastreador Automático
             </label>
             <textarea 
               className="w-full h-[450px] bg-slate-50 border border-slate-100 rounded-3xl p-5 text-[11px] font-bold text-slate-600 outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/5 transition-all resize-none shadow-inner"
-              placeholder="Pega tu lista de productos aquí..."
+              placeholder="Lista de productos para historial..."
               value={inputMasivo}
               onChange={e => setInputMasivo(e.target.value)}
               disabled={procesando}
@@ -217,12 +227,12 @@ export default function MonitorMasivoICA() {
               {procesando ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  <span>{progreso.actual} / {progreso.total}</span>
+                  <span>PROCESANDO {progreso.actual}/{progreso.total}</span>
                 </>
               ) : (
                 <>
                   <Sparkles size={16} />
-                  <span>Analizar Lista</span>
+                  <span>Sincronizar DB</span>
                 </>
               )}
             </button>
@@ -235,7 +245,7 @@ export default function MonitorMasivoICA() {
               <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-slate-200 border border-slate-50 mb-8">
                 <Globe size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
               </div>
-              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Esperando ingreso de datos...</p>
+              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Inicia una búsqueda para poblar la base de datos</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
@@ -252,7 +262,7 @@ export default function MonitorMasivoICA() {
                     </div>
                     <div className="flex gap-2">
                       <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-emerald-200">
-                        IA VERIFIED
+                        REGISTRADO EN DB
                       </span>
                     </div>
                   </div>
@@ -261,10 +271,10 @@ export default function MonitorMasivoICA() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="text-[10px] uppercase text-slate-400 font-black tracking-[0.2em] border-b border-slate-50">
-                          <th className="px-10 py-5">Fuente / Canal</th>
+                          <th className="px-10 py-5">Tienda / Canal</th>
                           <th className="px-10 py-5">Descripción</th>
-                          <th className="px-10 py-5 text-right">Precio</th>
-                          <th className="px-10 py-5 text-center">Ir</th>
+                          <th className="px-10 py-5 text-right">Precio Actual</th>
+                          <th className="px-10 py-5 text-center">Enlace</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
