@@ -51,16 +51,43 @@ export default function MonitorMasivoICA() {
     }));
   }, [lista]);
 
-  // FUNCIÓN: Búsqueda Individual con Spinner y Alerta
+  // FUNCIÓN INTERNA: Refinado con DeepSeek
+  const refinarConIA = async (termino: string, productosRaw: any[]) => {
+    try {
+      const resIA = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          mensaje: termino,
+          datosParaFiltrar: productosRaw,
+          modo: "buscador"
+        })
+      });
+      const dataFiltrada = await resIA.json();
+      return Array.isArray(dataFiltrada) ? dataFiltrada : [];
+    } catch (e) {
+      console.error("Error en refinado IA:", e);
+      return productosRaw; // Si falla la IA, devolvemos lo original para no perder datos
+    }
+  };
+
+  // FUNCIÓN: Búsqueda Individual con IA
   const buscarUno = async () => {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
     try {
       const res = await fetch(`/api/index?producto=${encodeURIComponent(inputManual)}&origen=${encodeURIComponent(inputManual)}`);
       const data = await res.json();
+      
       if (Array.isArray(data) && data.length > 0) {
-        setLista(prev => [...data, ...prev]);
-        notify(`ENCONTRADO: ${inputManual}`, 'success');
+        notify(`REFINANDO ${inputManual} CON IA...`, 'success');
+        const filtrados = await refinarConIA(inputManual, data);
+        
+        if (filtrados.length > 0) {
+          setLista(prev => [...filtrados, ...prev]);
+          notify(`LISTO: ${inputManual}`, 'success');
+        } else {
+          notify(`IA DESCARTÓ RESULTADOS POR MEDIDA`, 'error');
+        }
       } else {
         notify(`SIN RESULTADOS: ${inputManual}`, 'error');
       }
@@ -71,26 +98,35 @@ export default function MonitorMasivoICA() {
     setBuscandoUno(false);
   };
 
-  // FUNCIÓN: Barrido Masivo
+  // FUNCIÓN: Barrido Masivo con IA
   const iniciarBarrido = async () => {
     const productos = inputMasivo.split('\n').map(p => p.trim()).filter(p => p.length > 2);
     if (productos.length === 0) return;
 
     setProcesando(true);
     setProgreso({ actual: 0, total: productos.length });
-    notify(`INICIANDO RASTREO: ${productos.length} ITEMS`, 'success');
+    notify(`RASTREO IA INICIADO: ${productos.length} ITEMS`, 'success');
 
     for (let i = 0; i < productos.length; i++) {
       setProgreso(prev => ({ ...prev, actual: i + 1 }));
       try {
         const res = await fetch(`/api/index?producto=${encodeURIComponent(productos[i])}&origen=${encodeURIComponent(productos[i])}`);
         const data = await res.json();
-        if (Array.isArray(data)) setLista(prev => [...data, ...prev]);
-      } catch (e) {}
+        
+        if (Array.isArray(data) && data.length > 0) {
+          // Refinamos cada línea del barrido masivo con la IA
+          const filtrados = await refinarConIA(productos[i], data);
+          if (filtrados.length > 0) {
+            setLista(prev => [...filtrados, ...prev]);
+          }
+        }
+      } catch (e) {
+        console.error(`Error en ítem ${productos[i]}:`, e);
+      }
     }
     setProcesando(false);
     setInputMasivo(""); 
-    notify("BARRIDO COMPLETADO", 'success');
+    notify("BARRIDO IA COMPLETADO", 'success');
   };
 
   return (
@@ -124,7 +160,7 @@ export default function MonitorMasivoICA() {
               <Search size={16} className="text-slate-400" />
               <input 
                 className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
-                placeholder="Rastreo express..."
+                placeholder="Rastreo express con IA..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
@@ -154,7 +190,7 @@ export default function MonitorMasivoICA() {
           <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-200/40 sticky top-32">
             <label className="flex items-center gap-3 mb-5 font-black text-[10px] uppercase text-slate-400 tracking-[0.2em]">
               <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-              Importación Masiva
+              Importación Masiva IA
             </label>
             <textarea 
               className="w-full h-[450px] bg-slate-50 border border-slate-100 rounded-3xl p-5 text-[11px] font-bold text-slate-600 outline-none focus:bg-white focus:ring-4 focus:ring-orange-500/5 transition-all resize-none shadow-inner"
@@ -176,7 +212,7 @@ export default function MonitorMasivoICA() {
               ) : (
                 <>
                   <Play size={16} fill="currentColor" />
-                  <span>Iniciar Rastreo</span>
+                  <span>Iniciar Rastreo IA</span>
                 </>
               )}
             </button>
@@ -190,7 +226,7 @@ export default function MonitorMasivoICA() {
               <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-slate-200 border border-slate-50 mb-8">
                 <Globe size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
               </div>
-              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Lista de Productos</p>
+              <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Lista de Productos Refinada por IA</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
@@ -206,7 +242,7 @@ export default function MonitorMasivoICA() {
                       </h3>
                     </div>
                     <span className="text-[10px] font-black bg-slate-900 text-white px-4 py-1.5 rounded-full uppercase tracking-widest shadow-lg shadow-slate-200">
-                      {grupo.items.length} HALLAZGOS
+                      {grupo.items.length} HALLAZGOS IA
                     </span>
                   </div>
                   
@@ -224,15 +260,12 @@ export default function MonitorMasivoICA() {
                         {grupo.items.map((item, i) => (
                           <tr key={i} className="hover:bg-slate-50/80 transition-all group/row">
                             <td className="px-10 py-6">
-                              {/* FUENTE AGRANDADA: text-sm font-black */}
                               <span className="font-black text-slate-900 text-sm block mb-1 group-hover/row:text-orange-600 transition-colors">{item.tienda}</span>
-                              {/* CANAL AGRANDADO: text-[10px] */}
                               <span className={`text-[10px] font-black px-2.5 py-1 rounded-md tracking-tighter uppercase ${item.canal === 'SHOPPING' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                                 {item.canal}
                               </span>
                             </td>
                             <td className="px-10 py-6">
-                              {/* DESCRIPCIÓN AGRANDADA: text-base (era 11px) */}
                               <p className="text-base font-bold text-slate-600 leading-tight max-w-md group-hover/row:text-slate-900 transition-colors line-clamp-2">
                                 {item.nombre}
                               </p>
