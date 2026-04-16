@@ -49,27 +49,14 @@ export default function MonitorMasivoICA() {
     }));
   }, [lista]);
 
-  // --- PERSISTENCIA EN SUPABASE ---
-  const guardarEnHistorial = async (resultados: any[], termino: string) => {
-    try {
-      await fetch("/api/guardar-precios", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resultados, termino })
-      });
-    } catch (e) {
-      console.error("Error al persistir en DB", e);
-    }
-  };
-
-  // --- LÓGICA DE REFINADO CON IA (AHORA USA LA API DEEPSEEK DIRECTO) ---
+  // --- LÓGICA DE REFINADO CON IA + GUARDADO AUTOMÁTICO ---
   const filtrarConInteligencia = async (terminoBusqueda: string, resultadosRaw: any[]) => {
     try {
-      // Tomamos solo los resultados que tienen precio real
       const candidatos = resultadosRaw.filter(r => r.precio_valor > 0).slice(0, 35);
       if (candidatos.length === 0) return [];
 
-      const resIA = await fetch("/api/analizar-con-ia", { // <--- Nueva API que creamos
+      // Esta llamada ahora hace TODO: Filtra con IA y guarda en Supabase
+      const resIA = await fetch("/api/analizar-con-ia", { 
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -79,12 +66,15 @@ export default function MonitorMasivoICA() {
       });
       
       const data = await resIA.json();
-      // Mapeamos para mantener el formato del frontend
+      
+      // Mapeamos para el frontend incluyendo los nuevos campos para la tabla
       return (data.filtrados || []).map((item: any) => ({
         ...item,
-        precio_formateado: `$${item.precio_valor.toLocaleString('es-CL')}`,
+        precio_formateado: `$${(item.precio_valor || 0).toLocaleString('es-CL')}`,
         busqueda_original: terminoBusqueda,
-        canal: item.canal || "WEB"
+        canal: item.canal || "WEB",
+        imagen: item.imagen || "",
+        sku: item.sku || ""
       }));
     } catch (e) {
       console.error("Error en Refinado IA:", e);
@@ -99,14 +89,11 @@ export default function MonitorMasivoICA() {
       const dataCruda = await res.json();
       
       if (Array.isArray(dataCruda) && dataCruda.length > 0) {
-        // 2. Filtramos con DeepSeek
+        // 2. Filtramos con IA y Guardamos en DB (Todo en una sola llamada)
         const dataRefinada = await filtrarConInteligencia(queryActual, dataCruda);
         
         if (dataRefinada.length > 0) {
-          // Actualizamos la tabla de inmediato (Streaming visual)
           setLista(prev => [...dataRefinada, ...prev]);
-          // Guardamos en Supabase
-          guardarEnHistorial(dataRefinada, queryActual);
           return true;
         }
       }
@@ -124,7 +111,7 @@ export default function MonitorMasivoICA() {
     
     const exito = await buscarProducto(inputManual.trim());
     if (exito) {
-      notify(`PRODUCTO REGISTRADO`, 'success');
+      notify(`PRODUCTO REGISTRADO Y GUARDADO`, 'success');
       setInputManual("");
     } else {
       notify(`SIN RESULTADOS RELEVANTES`, 'error');
@@ -146,15 +133,16 @@ export default function MonitorMasivoICA() {
       
       await buscarProducto(pActual);
       
-      // Pequeño respiro para no saturar la API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Respiro para evitar bloqueos
+      await new Promise(resolve => setTimeout(resolve, 600));
     }
     
     setProcesando(false);
     setInputMasivo(""); 
-    notify("BARRIDO COMPLETADO Y GUARDADO EN DB", 'success');
+    notify("BARRIDO COMPLETADO: DATOS ACTUALIZADOS EN DB", 'success');
   };
 
+  // --- EL RESTO DEL RENDER QUEDA IGUAL (SIN CAMBIOS EN EL JSX) ---
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-orange-100">
       
@@ -299,6 +287,7 @@ export default function MonitorMasivoICA() {
                               <a 
                                 href={item.link} 
                                 target="_blank" 
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm"
                               >
                                 <ExternalLink size={14} />
