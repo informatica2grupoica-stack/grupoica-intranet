@@ -5,6 +5,11 @@ import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock }
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
+// Importar componentes de IA
+import SkuSugeridoButton from "@/app/components/deepseek/SkuSugeridoButton";
+import AutocompletarButton from "@/app/components/deepseek/AutocompletarButton";
+import AlertaDuplicado from "@/app/components/deepseek/AlertaDuplicado";
+
 interface Categoria {
   producto_categoria_id: string;
   producto_categoria_nombre: string;
@@ -60,11 +65,13 @@ export default function NuevoProductoForm() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<Subcategoria[]>([]);
   const [form, setForm] = useState<FormState>(initialState);
+  const [productosExistentes, setProductosExistentes] = useState<any[]>([]);
 
   // ESTADOS PARA PERMISOS
   const [perfilLogueado, setPerfilLogueado] = useState<any>(null);
   const [loadingPermisos, setLoadingPermisos] = useState(true);
 
+  // Cargar datos iniciales
   useEffect(() => {
     async function loadData() {
       setLoadingPermisos(true);
@@ -79,14 +86,18 @@ export default function NuevoProductoForm() {
           setPerfilLogueado(miPerfil);
         }
 
-        const [resCat, resSub] = await Promise.all([
+        const [resCat, resSub, resProd] = await Promise.all([
           fetch('/api/obuma/categorias'),
-          fetch('/api/obuma/subcategorias')
+          fetch('/api/obuma/subcategorias'),
+          fetch('/api/obuma/productos/list?limit=1000')
         ]);
         const dataCat = await resCat.json();
         const dataSub = await resSub.json();
+        const dataProd = await resProd.json();
+        
         setCategorias(Array.isArray(dataCat) ? dataCat : []);
         setAllSubcategorias(Array.isArray(dataSub) ? dataSub : []);
+        setProductosExistentes(dataProd.data || []);
       } catch (err) { 
         setStatus({ type: 'error', msg: "Error de conexión con Obuma" });
       } finally {
@@ -96,12 +107,13 @@ export default function NuevoProductoForm() {
     loadData();
   }, []);
 
-  // Lógica de permiso extendida para usar el objeto de permisos de tu base de datos
+  // Lógica de permiso extendida
   const puedeCrear = 
     perfilLogueado?.rol === 'admin' || 
     perfilLogueado?.rol === 'superuser' || 
     perfilLogueado?.permisos?.can_create_products === true;
 
+  // Autocompletar nombre desde c1,c2,c3,c4
   useEffect(() => {
     const limpiar = (t: string) => (t || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     const nombreConstruido = [limpiar(form.c1), limpiar(form.c2), form.c3 ? `${limpiar(form.c3)} MT` : "", limpiar(form.c4)].filter(Boolean).join(" ");
@@ -143,12 +155,20 @@ export default function NuevoProductoForm() {
       if (res.ok) {
         setStatus({ type: 'success', msg: "¡Producto creado en Obuma!" });
         setForm({ ...initialState, categoria_id: form.categoria_id, subcategoria_id: form.subcategoria_id });
+        // Recargar productos existentes para actualizar la lista
+        const resProd = await fetch('/api/obuma/productos/list?limit=1000');
+        const dataProd = await resProd.json();
+        setProductosExistentes(dataProd.data || []);
       } else {
         setStatus({ type: 'error', msg: result.error || "Error al guardar" });
       }
     } catch (error) { setStatus({ type: 'error', msg: "Error crítico de servidor" }); }
     finally { setLoading(false); }
   };
+
+  // Obtener nombre de categoría para el prefijo
+  const categoriaSeleccionada = categorias.find(c => String(c.producto_categoria_id) === form.categoria_id);
+  const subcategoriaSeleccionada = allSubcategorias.find(s => String(s.producto_subcategoria_id) === form.subcategoria_id);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] p-6 lg:p-12 text-slate-700 font-sans">
@@ -172,14 +192,28 @@ export default function NuevoProductoForm() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8">
           
-          {/* BANNER NOMBRE */}
+          {/* BANNER NOMBRE CON BOTÓN AUTOCOMPLETAR */}
           <div className="p-6 bg-[#00338d] rounded-3xl text-white shadow-lg flex justify-between items-center">
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1">
               <label className="text-[9px] font-black uppercase opacity-60">Nombre final Obuma</label>
               <div className="text-xl font-black uppercase italic">{form.nombre_completo || "Esperando datos..."}</div>
             </div>
-            <div className="bg-emerald-400/20 px-5 py-2 rounded-full text-[10px] font-black italic border border-emerald-400/30 uppercase">Chile Marketplace Sync</div>
+            <div className="flex items-center gap-3">
+              <AutocompletarButton
+                nombreCompleto={form.nombre_completo}
+                onAutocompletar={(campos) => setForm(prev => ({ ...prev, ...campos }))}
+              />
+              <div className="bg-emerald-400/20 px-5 py-2 rounded-full text-[10px] font-black italic border border-emerald-400/30 uppercase">
+                Chile Marketplace Sync
+              </div>
+            </div>
           </div>
+
+          {/* ALERTA DE PRODUCTO DUPLICADO */}
+          <AlertaDuplicado
+            nombreProducto={form.nombre_completo}
+            productosExistentes={productosExistentes}
+          />
 
           {/* GRID NOMBRE */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -201,11 +235,25 @@ export default function NuevoProductoForm() {
               </select>
             </div>
             
+            {/* SKU Obuma CON BOTÓN IA */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-[#00338d] uppercase ml-2">SKU Obuma</label>
               <div className="relative">
-                <input readOnly className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-xs font-black italic text-[#00338d] outline-none" value={form.sku || "Auto-generado"} />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">{generatingSku ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <RefreshCcw size={16} className="text-blue-300" />}</div>
+                <input 
+                  readOnly 
+                  className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-2xl text-xs font-black italic text-[#00338d] outline-none pr-12" 
+                  value={form.sku || "Auto-generado"} 
+                />
+                <div className="absolute right-12 top-1/2 -translate-y-1/2">
+                  {generatingSku ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <RefreshCcw size={16} className="text-blue-300" />}
+                </div>
+                <SkuSugeridoButton
+                  nombreProducto={form.nombre_completo}
+                  categoria={categoriaSeleccionada?.producto_categoria_nombre || ""}
+                  subcategoria={subcategoriaSeleccionada?.producto_subcategoria_nombre || ""}
+                  onSkuSugerido={(sku) => setForm(prev => ({ ...prev, sku }))}
+                  productosExistentes={productosExistentes}
+                />
               </div>
             </div>
 

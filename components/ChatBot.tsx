@@ -11,20 +11,54 @@ interface Mensaje {
   timestamp: Date;
 }
 
+interface ProductoReal {
+  nombre: string;
+  sku: string;
+  precio: number;
+  stock: number;
+  categoria?: string;
+}
+
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario. ¿En qué te ayudo?',
+      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario real de Obuma. ¿En qué te ayudo?',
       esUsuario: false,
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [productosReales, setProductosReales] = useState<ProductoReal[]>([]);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
+
+  // Cargar productos reales al iniciar el chat
+  useEffect(() => {
+    const cargarProductos = async () => {
+      try {
+        const response = await fetch('/api/obuma/productos/list?limit=100');
+        const data = await response.json();
+        if (data.data && Array.isArray(data.data)) {
+          const productos = data.data.map((p: any) => ({
+            nombre: p.producto_nombre || '',
+            sku: p.producto_codigo_comercial || '',
+            precio: p.producto_precio_clp_total || 0,
+            stock: p.stock_actual || 0,
+            categoria: p.categoria_nombre || ''
+          }));
+          setProductosReales(productos);
+          console.log(`✅ Cargados ${productos.length} productos reales para el chat`);
+        }
+      } catch (error) {
+        console.error("Error cargando productos para el chat:", error);
+      }
+    };
+    
+    cargarProductos();
+  }, []);
 
   useEffect(() => {
     mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -46,17 +80,30 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
+      // Enviar pregunta junto con productos reales como contexto
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pregunta })
+        body: JSON.stringify({ 
+          pregunta,
+          contexto: {
+            productos: productosReales.slice(0, 50) // Enviamos hasta 50 productos como contexto
+          }
+        })
       });
 
       const data = await response.json();
       
+      let respuestaTexto = data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.";
+      
+      // Si la respuesta es muy larga, formatearla mejor
+      if (respuestaTexto.length > 500 && !respuestaTexto.includes('\n')) {
+        respuestaTexto = respuestaTexto.slice(0, 500) + '...';
+      }
+      
       const botMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
-        texto: data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.",
+        texto: respuestaTexto,
         esUsuario: false,
         timestamp: new Date()
       };
@@ -105,6 +152,11 @@ export default function ChatBot() {
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-bold text-sm">Asistente Obuma IA</span>
+          {productosReales.length > 0 && (
+            <span className="bg-emerald-400/30 text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+              {productosReales.length} productos
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -138,7 +190,9 @@ export default function ChatBot() {
                       : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'
                   }`}
                 >
-                  {msg.texto}
+                  <div className="whitespace-pre-wrap break-words">
+                    {msg.texto}
+                  </div>
                   <div className={`text-[9px] mt-1 ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
@@ -166,7 +220,7 @@ export default function ChatBot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Escribe tu pregunta..."
+                placeholder="Escribe tu pregunta... Ej: '¿Qué productos tengo?' o 'Busca el SKU 50...'"
                 className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
                 rows={1}
                 disabled={cargando}
@@ -179,8 +233,34 @@ export default function ChatBot() {
                 <Send size={20} />
               </button>
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 text-center">
-              🤖 Pregúntame sobre productos, SKUs, precios y stock
+            <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
+              <span>🤖</span>
+              <span>{productosReales.length > 0 ? `${productosReales.length} productos en inventario` : "Conectando con Obuma..."}</span>
+              <button
+                onClick={async () => {
+                  const response = await fetch('/api/obuma/productos/list?limit=100');
+                  const data = await response.json();
+                  if (data.data) {
+                    const productos = data.data.map((p: any) => ({
+                      nombre: p.producto_nombre || '',
+                      sku: p.producto_codigo_comercial || '',
+                      precio: p.producto_precio_clp_total || 0,
+                      stock: p.stock_actual || 0
+                    }));
+                    setProductosReales(productos);
+                    const refreshMsg: Mensaje = {
+                      id: Date.now().toString(),
+                      texto: `🔄 Actualizado: Tengo ${productos.length} productos reales en mi base de datos. ¡Pregúntame sobre ellos!`,
+                      esUsuario: false,
+                      timestamp: new Date()
+                    };
+                    setMensajes(prev => [...prev, refreshMsg]);
+                  }
+                }}
+                className="text-[8px] text-blue-500 hover:text-blue-700 underline"
+              >
+                ↻ actualizar
+              </button>
             </div>
           </div>
         </>
