@@ -1,32 +1,39 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-// IMPORTANTE: Definimos un tiempo de espera extendido para evitar el corte de Vercel
-export const maxDuration = 30; 
+// El máximo en Vercel Free es 10s, pero intentamos forzar estabilidad
+export const maxDuration = 10; 
 
 export async function POST(req: Request) {
-  try {
-    const { resultados, producto } = await req.json();
+  // Guardamos los resultados originales para devolverlos en caso de emergencia
+  let resultadosOriginales: any[] = [];
 
-    // 1. Validación de entrada: Si no hay resultados del buscador, ni molestamos a la IA
-    if (!resultados || resultados.length === 0) {
+  try {
+    const body = await req.json();
+    resultadosOriginales = body.resultados || [];
+    const producto = body.producto || "productos";
+
+    // 1. Validación inicial rápida
+    if (!resultadosOriginales || resultadosOriginales.length === 0) {
       return NextResponse.json({ filtrados: [] });
     }
 
-    // 2. Verificación de API KEY
     if (!process.env.DEEPSEEK_API_KEY) {
-      console.error("Falta DEEPSEEK_API_KEY en variables de entorno");
-      return NextResponse.json({ error: "Error de configuración en el servidor" }, { status: 500 });
+      console.error("Falta DEEPSEEK_API_KEY");
+      return NextResponse.json({ filtrados: resultadosOriginales.slice(0, 15), error: "Config" });
     }
 
-    // 3. COMPRESIÓN EXTREMA: Acortamos nombres y limitamos a 20 resultados. 
-    // Esto hace que la IA lea menos y responda mucho más rápido.
-    const datosReducidos = resultados.slice(0, 20).map((r: any) => ({
+    // 2. COMPRESIÓN AGRESIVA: Solo 12 resultados para asegurar que responda en < 10 segundos
+    const datosReducidos = resultadosOriginales.slice(0, 12).map((r: any) => ({
       t: r.tienda,
-      n: r.nombre?.substring(0, 60), // Cortamos el nombre si es muy largo
+      n: r.nombre?.substring(0, 45), // Nombres ultra cortos
       p: r.precio_valor,
       l: r.link
     }));
+
+    // Usamos AbortController para no quedar colgados si la IA se queda pegada
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8500); // Abortar a los 8.5 segundos
 
     const aiResponse = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
@@ -34,59 +41,53 @@ export async function POST(req: Request) {
         "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
         "Content-Type": "application/json"
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [
           {
             role: "system",
-            content: `Eres un experto en herramientas y construcción en Chile. Tu tarea es filtrar JSON.
-            Producto buscado: "${producto}".
-            Reglas:
-            1. Selecciona máximo 12 resultados que realmente coincidan con el producto.
-            2. Prioriza tiendas oficiales (Sodimac, Easy, Hela, Trentini, Imperial, Construmart).
-            3. Responde estrictamente con este formato JSON: {"filtrados": [{"tienda": "", "nombre": "", "precio_valor": 0, "link": ""}]}`
+            content: `Eres un filtro rápido. Producto: "${producto}". Devuelve SOLO JSON: {"filtrados": []} con los mejores resultados.`
           },
           { 
             role: "user", 
-            content: `Filtra estos datos: ${JSON.stringify(datosReducidos)}` 
+            content: JSON.stringify(datosReducidos) 
           }
         ],
-        temperature: 0.1, 
+        temperature: 0.1,
+        max_tokens: 600,
         response_format: { type: 'json_object' }
       })
-    });
+    }).finally(() => clearTimeout(timeoutId));
 
-    // 4. Manejo de errores de la API de DeepSeek
+    // 3. Si la respuesta no es OK (como el 504 de Vercel), enviamos los datos sin procesar
     if (!aiResponse.ok) {
-      const errorData = await aiResponse.text();
-      console.error("DeepSeek API Error:", errorData);
-      return NextResponse.json({ error: "La IA no respondió a tiempo" }, { status: 503 });
+      console.warn("IA no disponible, enviando datos originales");
+      return NextResponse.json({ filtrados: resultadosOriginales.slice(0, 15) });
     }
 
     const data = await aiResponse.json();
-    
-    // 5. PARSEO SEGURO: A veces la IA devuelve el JSON dentro de bloques de código
     let contenido = data.choices[0].message.content;
     
+    // 4. Parseo con red de seguridad
     try {
-      // Intentamos parsear directamente
       const finalJson = JSON.parse(contenido);
       return NextResponse.json(finalJson);
-    } catch (parseError) {
-      // Si falla, intentamos limpiar la respuesta por si la IA agregó texto extra
-      console.error("Error parseando JSON de la IA, intentando limpiar...", contenido);
+    } catch {
+      // Si el JSON falla, buscamos el objeto dentro del texto
       const jsonMatch = contenido.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return NextResponse.json(JSON.parse(jsonMatch[0]));
       }
-      throw new Error("La IA no devolvió un formato válido.");
+      return NextResponse.json({ filtrados: resultadosOriginales.slice(0, 15) });
     }
 
   } catch (error: any) {
-    console.error("Error crítico en analizar-con-ia:", error.message);
+    // ESTE BLOQUE ES VITAL: Si hay timeout o cualquier error, la web NO se rompe
+    console.error("Error capturado para evitar caída:", error.message);
     return NextResponse.json({ 
-      error: "Error interno en el análisis", 
-      details: error.message 
-    }, { status: 500 });
+      filtrados: resultadosOriginales.slice(0, 15), 
+      error: "Timeout o Error capturado" 
+    });
   }
 }
