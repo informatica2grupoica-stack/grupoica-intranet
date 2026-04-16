@@ -1,8 +1,8 @@
-// components/ChatBot.tsx
+// components/deepseek/ChatWidget.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
+import { MessageCircle, X, Send, Minimize2, Maximize2 } from 'lucide-react';
 
 interface Mensaje {
   id: string;
@@ -11,7 +11,7 @@ interface Mensaje {
   timestamp: Date;
 }
 
-export default function ChatBot() {
+export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([
@@ -26,6 +26,7 @@ export default function ChatBot() {
   const [cargando, setCargando] = useState(false);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll al último mensaje
   useEffect(() => {
     mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
@@ -36,6 +37,7 @@ export default function ChatBot() {
     const pregunta = input.trim();
     setInput('');
     
+    // Agregar mensaje del usuario
     const userMsg: Mensaje = {
       id: Date.now().toString(),
       texto: pregunta,
@@ -88,9 +90,9 @@ export default function ChatBot() {
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 bg-[#00338d] text-white p-4 rounded-full shadow-2xl hover:bg-blue-800 transition-all z-50 group"
       >
-        <Bot size={28} />
-        <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-          IA
+        <MessageCircle size={28} />
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+          1
         </span>
       </button>
     );
@@ -98,13 +100,13 @@ export default function ChatBot() {
 
   return (
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-14' : 'w-96 h-[550px]'
+      isMinimized ? 'w-80 h-14' : 'w-96 h-[500px]'
     }`}>
       {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Bot size={18} />
-          <span className="font-bold text-sm">Asistente Obuma IA</span>
+          <MessageCircle size={18} />
+          <span className="font-bold text-sm">Asistente Obuma</span>
         </div>
         <div className="flex gap-2">
           <button
@@ -180,7 +182,7 @@ export default function ChatBot() {
               </button>
             </div>
             <div className="text-[9px] text-slate-400 mt-2 text-center">
-              🤖 Pregúntame sobre productos, SKUs, precios y stock
+              Puedo ayudarte con productos, SKUs, precios y stock
             </div>
           </div>
         </>
