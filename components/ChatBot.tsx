@@ -39,7 +39,7 @@ export default function ChatBot() {
   useEffect(() => {
     const cargarProductos = async () => {
       try {
-        const response = await fetch('/api/obuma/productos/list?limit=100');
+        const response = await fetch('/api/obuma/productos/list?limit=10000');
         const data = await response.json();
         if (data.data && Array.isArray(data.data)) {
           const productos = data.data.map((p: any) => ({
@@ -238,7 +238,7 @@ export default function ChatBot() {
               <span>{productosReales.length > 0 ? `${productosReales.length} productos en inventario` : "Conectando con Obuma..."}</span>
               <button
                 onClick={async () => {
-                  const response = await fetch('/api/obuma/productos/list?limit=100');
+                  const response = await fetch('/api/obuma/productos/list?limit=10000');
                   const data = await response.json();
                   if (data.data) {
                     const productos = data.data.map((p: any) => ({

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, Package, DollarSign, Globe, Truck, AlertTriangle } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 // --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
@@ -98,7 +98,6 @@ export default function ObumaProductosListado() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
   const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
   
   // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
@@ -116,7 +115,6 @@ export default function ObumaProductosListado() {
       const res = await fetch('/api/obuma/productos/list?limit=500');
       const result = await res.json();
       setProductos(result.data || []);
-      setStats(result.stats || null);
     } catch (err) {
       console.error("Error cargando productos");
     } finally {
@@ -240,41 +238,6 @@ export default function ObumaProductosListado() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
-      {/* --- TARJETAS DE ESTADÍSTICAS --- */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 text-slate-400 mb-1">
-              <Package size={14} />
-              <span className="text-[9px] font-black uppercase">Total Productos</span>
-            </div>
-            <div className="text-2xl font-black text-slate-800">{stats.total_productos}</div>
-            <div className="text-[8px] text-slate-400 mt-1">
-              {stats.productos_sin_stock} sin stock
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-            <div className="flex items-center gap-2 text-slate-400 mb-1">
-              <Truck size={14} />
-              <span className="text-[9px] font-black uppercase">Stock Total</span>
-            </div>
-            <div className="text-2xl font-black text-slate-800">{stats.total_stock}</div>
-            <div className="text-[8px] text-amber-500 mt-1">
-              {stats.productos_con_stock_bajo} con stock bajo
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 col-span-2">
-            <div className="flex items-center gap-2 text-slate-400 mb-1">
-              <DollarSign size={14} />
-              <span className="text-[9px] font-black uppercase">Valor Inventario</span>
-            </div>
-            <div className="text-2xl font-black text-[#00338d]">{formatPrice(stats.total_valor_inventario)}</div>
-          </div>
-        </div>
-      )}
-
       {/* --- HEADER DE CONTROL --- */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
         
@@ -330,16 +293,15 @@ export default function ObumaProductosListado() {
               <th className="px-4 py-5 text-center">Stock</th>
               <th className="px-4 py-5 text-right">Precio Neto</th>
               <th className="px-4 py-5 text-right">Precio Total</th>
-              <th className="px-4 py-5 text-center">Web</th>
               <th className="px-4 py-5 text-center">Tipo</th>
               <th className="px-8 py-5 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={8} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
+              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
             ) : currentItems.length === 0 ? (
-              <tr><td colSpan={8} className="py-20 text-center text-slate-400">No se encontraron productos</td></tr>
+              <tr><td colSpan={7} className="py-20 text-center text-slate-400">No se encontraron productos</td></tr>
             ) : (
               currentItems.map((prod) => (
                 <React.Fragment key={prod.id}>
@@ -374,11 +336,6 @@ export default function ObumaProductosListado() {
                       {formatPrice(prod.precio_total || 0)}
                     </td>
                     <td className="px-4 py-5 text-center">
-                      <div className="flex justify-center">
-                        <div className={`w-2.5 h-2.5 rounded-full ${prod.vender_en_web ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : prod.para_venta ? 'bg-blue-500' : 'bg-slate-200'}`} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-5 text-center">
                       <span className={`text-[9px] font-black px-2 py-1 rounded-full ${prod.tipo === 'Producto' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
                         {prod.tipo || 'Producto'}
                       </span>
@@ -391,7 +348,7 @@ export default function ObumaProductosListado() {
                   </tr>
                   {editingId === prod.id && (
                     <tr className="bg-slate-50/50">
-                      <td colSpan={8} className="px-2 py-4">
+                      <td colSpan={7} className="px-2 py-4">
                         <RenderForm 
                           id={prod.id} 
                           editForm={editForm}
