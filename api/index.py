@@ -1,7 +1,7 @@
 import requests
 import json
 import re
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from concurrent.futures import ThreadPoolExecutor
 
@@ -11,38 +11,47 @@ CORS(app)
 # CONFIGURACIÓN MAESTRA
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
 
-# Listado masivo de proveedores estratégicos en Chile
+# LISTADO EXPANDIDO: Construcción, Herramientas, Asfalto y Clavos
 PROVEEDORES_CHILE = [
-    "trentini.cl", "hela.cl", "sodimac.cl", "easy.cl", "imperial.cl", 
-    "construmart.cl", "yolito.cl", "weitzler.cl", "ferreteriaohiggins.cl",
-    "chilemat.com", "mts.cl", "dabed.cl", "elaguila.cl", "pizarreño.cl",
-    "ferreteriasindustrial.cl", "amanecer.cl", "pernoschile.cl", "indura.cl",
-    "boest.cl", "ferreteriasuma.cl", "duro.cl", "proyectacolor.cl", "sherwin.cl",
-    "vicsa.cl", "steelpro.cl", "3mchile.cl", "bosch-professional.com", "makita.cl",
-    "dewalt.cl", "stanleytools.com", "bahco.com", "irwin.cl", "truper.com"
+    # Grandes Retailers y Ferreterías
+    "sodimac.cl", "easy.cl", "imperial.cl", "construmart.cl", "yolito.cl", 
+    "chilemat.com", "mts.cl", "dabed.cl", "weitzler.cl", "ferreteriaohiggins.cl",
+    # Especialistas en Herramientas y Maquinaria
+    "trentini.cl", "hela.cl", "makita.cl", "bosch-professional.com", "dewalt.cl",
+    "milwaukeetool.cl", "stanleytools.com", "bahco.com", "irwin.cl", "truper.com",
+    "vicsa.cl", "steelpro.cl", "3mchile.cl", "indura.cl", "boest.cl",
+    # Maderas, Clavos y Fijaciones
+    "arauco.cl", "corma.cl", "madepa.cl", "pernoschile.cl", "mamut.cl", 
+    "fijaciones.cl", "api-sa.cl", "pizarreño.cl", "volcan.cl",
+    # Asfaltos, Emulsiones y Químicos
+    "asfaltoschile.cl", "bitumix.cl", "dynal.cl", "sika.com", "cave.cl", 
+    "sipesa.cl", "quimicadalton.cl", "texsa.cl",
+    # Distribuidores Industriales y Otros
+    "ferreteriasindustrial.cl", "amanecer.cl", "ferreteriasuma.cl", "duro.cl",
+    "proyectacolor.cl", "sherwin.cl", "krause.cl", "famae.cl", "disensa.cl"
 ]
 
 def limpiar_nombre_producto(nombre):
-    """Elimina basura común de los títulos de e-commerce"""
+    """Limpia el título de ruidos de e-commerce"""
     if not nombre: return ""
-    basura = [
-        "Despacho a domicilio", "Retiro en tienda", "Stock disponible", 
-        "Precio normal", "Oferta", "Cuotas", "Sin interés", "Sodimac Chile", "Easy Chile"
+    # Eliminamos marcas de agua de texto comunes
+    patrones = [
+        r"(?i)despacho\s?a\s?domicilio", r"(?i)retiro\s?en\s?tienda", 
+        r"(?i)stock\s?disponible", r"(?i)precio\s?normal", r"(?i)oferta",
+        r"(?i)sodimac\s?chile", r"(?i)easy\s?chile", r"\|", r"-"
     ]
-    for b in basura:
-        nombre = re.sub(rf"(?i){b}", "", nombre)
+    for p in patrones:
+        nombre = re.sub(p, "", nombre)
     return re.sub(r'\s+', ' ', nombre).strip()
 
 def extraer_precio(texto):
-    """Busca precios con formatos $1.000, $ 1000, 1.000 CLP, etc."""
+    """Extrae montos numéricos de strings con formato moneda"""
     if not texto: return 0
-    # Busca el patrón de signo peso seguido de números y puntos
     match = re.search(r'\$\s?([\d\.]+)', texto)
     if match:
         try:
             val = int(re.sub(r'[^\d]', '', match.group(1)))
-            # Filtro de seguridad: precios menores a 100 o mayores a 10M suelen ser errores de scraping
-            if 100 < val < 10000000: return val
+            if 100 < val < 15000000: return val
         except: pass
     return 0
 
@@ -52,7 +61,7 @@ def fetch_serper_data(query, search_type="search"):
         "q": query,
         "gl": "cl",
         "hl": "es",
-        "num": 50 # Máximo provecho de la API
+        "num": 50 
     })
     headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     try:
@@ -72,44 +81,38 @@ def scrape_prices():
 
     producto = producto_raw.strip()
     
-    # ESTRATEGIA DE BÚSQUEDA TRIPLE
-    # 1. Búsqueda directa en proveedores VIP
-    query_vip = f'"{producto}" (site:{" OR site:".join(PROVEEDORES_CHILE[:15])})'
-    # 2. Búsqueda técnica (precios y stock)
-    query_tecnica = f'"{producto}" precio stock ferreteria chile'
+    # MEJORA DE QUERY: Forzamos la búsqueda en los dominios de la lista
+    # Usamos bloques de 10 proveedores para no saturar la query de Google
+    query_vip = f'"{producto}" site:{ " OR site:".join(PROVEEDORES_CHILE[:10]) }'
+    query_general = f'"{producto}" comprar precio chile ferreteria'
     
     final_data = []
     vistos = set()
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        # Lanzamos hilos para no bloquear la ejecución
-        future_vip = executor.submit(fetch_serper_data, query_vip, "search")
-        future_tec = executor.submit(fetch_serper_data, query_tecnica, "search")
-        future_shop = executor.submit(fetch_serper_data, producto, "shopping")
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Buscamos en 3 frentes simultáneos
+        f_vip = executor.submit(fetch_serper_data, query_vip, "search")
+        f_gen = executor.submit(fetch_serper_data, query_general, "search")
+        f_shop = executor.submit(fetch_serper_data, producto, "shopping")
         
-        results_list = [
-            future_vip.result(), 
-            future_tec.result(), 
-            future_shop.result()
-        ]
+        results_list = [f_vip.result(), f_gen.result(), f_shop.result()]
 
-    # PROCESAR RESULTADOS
     for data in results_list:
-        # Combinar Shopping + Organic + Places
+        # Consolidamos Shopping, Resultados Orgánicos y Mapas (Places)
         items = data.get('shopping', []) + data.get('organic', []) + data.get('places', [])
         
         for item in items:
             link = item.get('link') or item.get('website', '')
             if not link or link in vistos: continue
 
-            # Filtro de Redes Sociales y Basura
-            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'mercadolibre']):
+            # Filtro de seguridad para no traer basura
+            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia']):
                 continue
 
-            title = item.get('title', item.get('source', 'Tienda'))
+            title = item.get('title', 'Tienda')
             snippet = item.get('snippet', '')
             
-            # Extraer precio (prioriza el campo 'price' de shopping, sino busca en el texto)
+            # Obtención de precio
             raw_price = 0
             if 'price' in item:
                 try: raw_price = int(re.sub(r'[^\d]', '', str(item['price'])))
@@ -118,7 +121,7 @@ def scrape_prices():
             if raw_price == 0:
                 raw_price = extraer_precio(title + " " + snippet)
 
-            # Identificación inteligente de Tienda
+            # Identificar la tienda
             tienda = item.get('source') or item.get('store')
             if not tienda:
                 try:
@@ -132,23 +135,19 @@ def scrape_prices():
                 "precio_valor": raw_price,
                 "precio_formateado": f"${raw_price:,}".replace(",", ".") if raw_price > 0 else "Consultar",
                 "link": link,
-                "canal": "GOOGLE_INDEX",
+                "canal": "BUSCADOR_SISTEMA",
                 "busqueda_original": origen_excel or producto
             })
             vistos.add(link)
 
-    # ORDENAMIENTO INTELIGENTE
-    # 1. Los que tienen precio real primero
-    # 2. Ordenados de menor a mayor precio
-    # 3. Los "Consultar" al final
+    # Orden: Precios válidos de menor a mayor, luego los "Consultar"
     resultados_finales = sorted(
         final_data, 
         key=lambda x: (x['precio_valor'] == 0, x['precio_valor'])
     )
 
-    return jsonify(resultados_finales[:40])
+    return jsonify(resultados_finales[:50])
 
-# Exponer la app para Vercel
 app = app
 
 if __name__ == "__main__":
