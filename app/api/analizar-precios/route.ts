@@ -1,20 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Forzamos a que la ruta sea dinámica para que Vercel no intente 
+// ejecutarla durante el build sin las variables de entorno.
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  // Inicializamos dentro del GET para asegurar que las variables existan al ejecutar
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json(
+      { error: "Faltan las credenciales de Supabase en las variables de entorno." },
+      { status: 500 }
+    );
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
-    // Obtenemos los registros de los últimos 7 días para comparar
+    // Obtenemos los registros para comparar
     const { data, error } = await supabase
       .from('registros_precios')
       .select('*')
       .order('fecha', { ascending: false });
 
     if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return NextResponse.json([]);
+    }
 
     // Lógica para agrupar por producto y tienda y ver la tendencia
     const analisis = data.reduce((acc: any, curr: any) => {
@@ -36,6 +52,7 @@ export async function GET() {
     // Calculamos la tendencia
     const resultadosFinales = Object.values(analisis).map((item: any) => {
       const actual = item.precio_actual;
+      // El anterior es el último del historial (el más viejo registrado)
       const anterior = item.precios_historial[item.precios_historial.length - 1];
       const diferencia = actual - anterior;
       
