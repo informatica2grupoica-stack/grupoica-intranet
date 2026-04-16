@@ -1,17 +1,50 @@
 import requests
 import json
 import re
-from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
 from concurrent.futures import ThreadPoolExecutor
 
-# CONFIGURACIÓN
+app = Flask(__name__)
+CORS(app)
+
+# CONFIGURACIÓN MAESTRA
 SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
+
+# Listado masivo de proveedores estratégicos en Chile
 PROVEEDORES_CHILE = [
     "trentini.cl", "hela.cl", "sodimac.cl", "easy.cl", "imperial.cl", 
     "construmart.cl", "yolito.cl", "weitzler.cl", "ferreteriaohiggins.cl",
-    "chilemat.com", "mts.cl", "dabed.cl", "elaguila.cl", "pizarreño.cl"
+    "chilemat.com", "mts.cl", "dabed.cl", "elaguila.cl", "pizarreño.cl",
+    "ferreteriasindustrial.cl", "amanecer.cl", "pernoschile.cl", "indura.cl",
+    "boest.cl", "ferreteriasuma.cl", "duro.cl", "proyectacolor.cl", "sherwin.cl",
+    "vicsa.cl", "steelpro.cl", "3mchile.cl", "bosch-professional.com", "makita.cl",
+    "dewalt.cl", "stanleytools.com", "bahco.com", "irwin.cl", "truper.com"
 ]
+
+def limpiar_nombre_producto(nombre):
+    """Elimina basura común de los títulos de e-commerce"""
+    if not nombre: return ""
+    basura = [
+        "Despacho a domicilio", "Retiro en tienda", "Stock disponible", 
+        "Precio normal", "Oferta", "Cuotas", "Sin interés", "Sodimac Chile", "Easy Chile"
+    ]
+    for b in basura:
+        nombre = re.sub(rf"(?i){b}", "", nombre)
+    return re.sub(r'\s+', ' ', nombre).strip()
+
+def extraer_precio(texto):
+    """Busca precios con formatos $1.000, $ 1000, 1.000 CLP, etc."""
+    if not texto: return 0
+    # Busca el patrón de signo peso seguido de números y puntos
+    match = re.search(r'\$\s?([\d\.]+)', texto)
+    if match:
+        try:
+            val = int(re.sub(r'[^\d]', '', match.group(1)))
+            # Filtro de seguridad: precios menores a 100 o mayores a 10M suelen ser errores de scraping
+            if 100 < val < 10000000: return val
+        except: pass
+    return 0
 
 def fetch_serper_data(query, search_type="search"):
     url = f"https://google.serper.dev/{search_type}"
@@ -19,120 +52,104 @@ def fetch_serper_data(query, search_type="search"):
         "q": query,
         "gl": "cl",
         "hl": "es",
-        "num": 40
+        "num": 50 # Máximo provecho de la API
     })
     headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     try:
-        response = requests.post(url, headers=headers, data=payload, timeout=10)
+        response = requests.post(url, headers=headers, data=payload, timeout=12)
         return response.json()
     except:
         return {}
 
-def handler(request):
-    """
-    Función principal que Vercel ejecutará
-    """
-    # 1. Obtener parámetros de la URL
-    parsed_url = urlparse(request.url)
-    params = parse_qs(parsed_url.query)
+@app.route("/python/index", methods=["GET"])
+@app.route("/api/index", methods=["GET"])
+def scrape_prices():
+    producto_raw = request.args.get("producto")
+    origen_excel = request.args.get("origen") 
     
-    producto_raw = params.get("producto", [None])[0]
-    origen_excel = params.get("origen", [None])[0]
-    
-    if not producto_raw:
-        return {"statusCode": 400, "body": json.dumps([])}
+    if not producto_raw: 
+        return jsonify([])
 
     producto = producto_raw.strip()
-    query_proveedores = f'"{producto}" (site:{" OR site:".join(PROVEEDORES_CHILE)})'
     
-    queries = [query_proveedores, f'"{producto}" precio chile']
+    # ESTRATEGIA DE BÚSQUEDA TRIPLE
+    # 1. Búsqueda directa en proveedores VIP
+    query_vip = f'"{producto}" (site:{" OR site:".join(PROVEEDORES_CHILE[:15])})'
+    # 2. Búsqueda técnica (precios y stock)
+    query_tecnica = f'"{producto}" precio stock ferreteria chile'
     
     final_data = []
     vistos = set()
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures_web = [executor.submit(fetch_serper_data, q, "search") for q in queries]
-        future_shopping = executor.submit(fetch_serper_data, producto, "shopping")
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        # Lanzamos hilos para no bloquear la ejecución
+        future_vip = executor.submit(fetch_serper_data, query_vip, "search")
+        future_tec = executor.submit(fetch_serper_data, query_tecnica, "search")
+        future_shop = executor.submit(fetch_serper_data, producto, "shopping")
         
-        data_shop = future_shopping.result()
-        results_web = [f.result() for f in futures_web]
+        results_list = [
+            future_vip.result(), 
+            future_tec.result(), 
+            future_shop.result()
+        ]
 
-    # Procesar Shopping
-    for item in data_shop.get('shopping', []):
-        link = item.get('link', '')
-        if link not in vistos:
-            try:
-                raw_val = int(re.sub(r'[^\d]', '', str(item.get('price', '0'))))
-            except: raw_val = 0
-            
-            final_data.append({
-                "tienda": item.get('source', 'RETAIL').upper(),
-                "nombre": item.get('title', ''),
-                "precio_valor": raw_val,
-                "link": link,
-                "canal": "SHOPPING",
-                "busqueda_original": origen_excel or producto
-            })
-            vistos.add(link)
-
-    # Procesar Web
-    for data_org in results_web:
-        organic_results = data_org.get('organic', []) + data_org.get('places', [])
-        for item in organic_results:
-            link = item.get('link') or item.get('website')
+    # PROCESAR RESULTADOS
+    for data in results_list:
+        # Combinar Shopping + Organic + Places
+        items = data.get('shopping', []) + data.get('organic', []) + data.get('places', [])
+        
+        for item in items:
+            link = item.get('link') or item.get('website', '')
             if not link or link in vistos: continue
-            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia']): continue
 
-            title = item.get('title', '')
+            # Filtro de Redes Sociales y Basura
+            if any(x in link.lower() for x in ['facebook', 'instagram', 'youtube', 'wikipedia', 'mercadolibre']):
+                continue
+
+            title = item.get('title', item.get('source', 'Tienda'))
             snippet = item.get('snippet', '')
-            price_match = re.search(r'\$\s?([\d\.]+)', title + " " + snippet)
-            raw_val = 0
-            if price_match:
-                try:
-                    raw_val = int(re.sub(r'[^\d]', '', price_match.group(0)))
-                except: pass
-
-            try:
-                tienda_label = link.split('/')[2].replace('www.', '').split('.')[0].upper()
-            except: tienda_label = "WEB"
             
+            # Extraer precio (prioriza el campo 'price' de shopping, sino busca en el texto)
+            raw_price = 0
+            if 'price' in item:
+                try: raw_price = int(re.sub(r'[^\d]', '', str(item['price'])))
+                except: raw_price = 0
+            
+            if raw_price == 0:
+                raw_price = extraer_precio(title + " " + snippet)
+
+            # Identificación inteligente de Tienda
+            tienda = item.get('source') or item.get('store')
+            if not tienda:
+                try:
+                    tienda = link.split('/')[2].replace('www.', '').split('.')[0].upper()
+                except:
+                    tienda = "WEB"
+
             final_data.append({
-                "tienda": tienda_label,
-                "nombre": title,
-                "precio_valor": raw_val,
+                "tienda": tienda.upper(),
+                "nombre": limpiar_nombre_producto(title),
+                "precio_valor": raw_price,
+                "precio_formateado": f"${raw_price:,}".replace(",", ".") if raw_price > 0 else "Consultar",
                 "link": link,
-                "canal": "WEB/PROVEEDOR",
+                "canal": "GOOGLE_INDEX",
                 "busqueda_original": origen_excel or producto
             })
             vistos.add(link)
 
-    resultados = sorted(final_data, key=lambda x: (x['precio_valor'] == 0, x['precio_valor']))
-    
-    # Respuesta para Vercel
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": json.dumps(resultados[:25])
-    }
-
-# ESTA LÍNEA ES VITAL PARA VERCEL
-# Si usas Flask, Vercel espera un objeto llamado 'app'
-from flask import Flask, request as flask_request, jsonify
-app = Flask(__name__)
-
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def catch_all(path):
-    # Convertimos la petición de Flask al formato que entiende nuestro handler
-    return Response(
-        handler(flask_request)["body"],
-        status=200,
-        mimetype='application/json'
+    # ORDENAMIENTO INTELIGENTE
+    # 1. Los que tienen precio real primero
+    # 2. Ordenados de menor a mayor precio
+    # 3. Los "Consultar" al final
+    resultados_finales = sorted(
+        final_data, 
+        key=lambda x: (x['precio_valor'] == 0, x['precio_valor'])
     )
 
-# Para local
+    return jsonify(resultados_finales[:40])
+
+# Exponer la app para Vercel
+app = app
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
