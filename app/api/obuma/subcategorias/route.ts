@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const response = await fetch(`${process.env.OBUMA_API_URL}/productosSubcategorias.list.json`, {
+    const response = await fetch(`${process.env.OBUMA_API_URL}/productosSubCategorias.list.json`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
