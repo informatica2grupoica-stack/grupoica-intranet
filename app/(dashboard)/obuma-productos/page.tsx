@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, Package, DollarSign, Globe, Truck, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 // --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
@@ -98,6 +98,7 @@ export default function ObumaProductosListado() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
   const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   
   // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
@@ -112,9 +113,10 @@ export default function ObumaProductosListado() {
   const fetchProductos = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/obuma/productos/list');
+      const res = await fetch('/api/obuma/productos/list?limit=500');
       const result = await res.json();
       setProductos(result.data || []);
+      setStats(result.stats || null);
     } catch (err) {
       console.error("Error cargando productos");
     } finally {
@@ -145,8 +147,9 @@ export default function ObumaProductosListado() {
   const filteredProducts = useMemo(() => {
     const term = search.toLowerCase();
     return productos.filter(p => 
-      (p.producto_nombre?.toLowerCase() || "").includes(term) ||
-      (p.producto_codigo_comercial?.toLowerCase() || "").includes(term)
+      (p.nombre?.toLowerCase() || "").includes(term) ||
+      (p.sku?.toLowerCase() || "").includes(term) ||
+      (p.categoria_nombre?.toLowerCase() || "").includes(term)
     );
   }, [productos, search]);
 
@@ -187,30 +190,30 @@ export default function ObumaProductosListado() {
 
   // --- MANEJADORES ---
   const handleEditClick = (prod: any) => {
-    if (editingId === prod.producto_id) {
+    if (editingId === prod.id) {
       setEditingId(null);
       setEditForm({});
       return;
     }
-    const partes = prod.producto_nombre.split(' ');
-    setEditingId(prod.producto_id);
+    const partes = prod.nombre?.split(' ') || [];
+    setEditingId(prod.id);
     setEditForm({
       c1: partes[0] || "", 
       c2: partes[1] || "", 
       c3: partes[2]?.replace("MT", "").trim() || "", 
       c4: partes.slice(3).join(" ") || "",
-      nombre_completo: prod.producto_nombre,
-      sku: prod.producto_codigo_comercial,
-      tipo: prod.producto_tipo === "2" ? "Servicio" : "Producto",
-      categoria_id: String(prod.id_categoria || ""),
-      subcategoria_id: String(prod.id_subcategoria || ""),
-      precio_venta: Math.round(prod.producto_precio_clp_total || 0),
-      precio_costo: Math.round(prod.producto_precio_costo || 0),
+      nombre_completo: prod.nombre,
+      sku: prod.sku,
+      tipo: prod.tipo || "Producto",
+      categoria_id: prod.categoria_id || "",
+      subcategoria_id: prod.subcategoria_id || "",
+      precio_venta: prod.precio_total || 0,
+      precio_costo: prod.precio_costo || 0,
       venta_incluye_iva: true,
       costo_incluye_iva: true,
-      se_puede_vender: prod.producto_para_venta === "1",
-      se_puede_comprar: prod.producto_para_compra === "1",
-      se_mantiene_stock: prod.producto_inventariable === "1",
+      se_puede_vender: prod.para_venta,
+      se_puede_comprar: prod.para_compra,
+      se_mantiene_stock: prod.inventariable,
     });
   };
 
@@ -229,9 +232,49 @@ export default function ObumaProductosListado() {
     } finally { setSaving(null); }
   };
 
+  // Formatear precio
+  const formatPrice = (price: number) => {
+    return `$${price?.toLocaleString('es-CL') || 0}`;
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
+      {/* --- TARJETAS DE ESTADÍSTICAS --- */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 text-slate-400 mb-1">
+              <Package size={14} />
+              <span className="text-[9px] font-black uppercase">Total Productos</span>
+            </div>
+            <div className="text-2xl font-black text-slate-800">{stats.total_productos}</div>
+            <div className="text-[8px] text-slate-400 mt-1">
+              {stats.productos_sin_stock} sin stock
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-center gap-2 text-slate-400 mb-1">
+              <Truck size={14} />
+              <span className="text-[9px] font-black uppercase">Stock Total</span>
+            </div>
+            <div className="text-2xl font-black text-slate-800">{stats.total_stock}</div>
+            <div className="text-[8px] text-amber-500 mt-1">
+              {stats.productos_con_stock_bajo} con stock bajo
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 col-span-2">
+            <div className="flex items-center gap-2 text-slate-400 mb-1">
+              <DollarSign size={14} />
+              <span className="text-[9px] font-black uppercase">Valor Inventario</span>
+            </div>
+            <div className="text-2xl font-black text-[#00338d]">{formatPrice(stats.total_valor_inventario)}</div>
+          </div>
+        </div>
+      )}
+
       {/* --- HEADER DE CONTROL --- */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
         
@@ -240,7 +283,7 @@ export default function ObumaProductosListado() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text"
-              placeholder="Buscar por nombre o SKU..."
+              placeholder="Buscar por nombre, SKU o categoría..."
               className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-[#00338d] transition-all"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -278,71 +321,93 @@ export default function ObumaProductosListado() {
       </div>
 
       {/* --- TABLA DE PRODUCTOS --- */}
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
             <tr>
-              <th className="px-8 py-5">Producto & Categoría</th>
+              <th className="px-8 py-5">Producto</th>
               <th className="px-4 py-5 text-center">SKU</th>
               <th className="px-4 py-5 text-center">Stock</th>
               <th className="px-4 py-5 text-right">Precio Neto</th>
-              <th className="px-4 py-5 text-right">Total (IVA)</th>
+              <th className="px-4 py-5 text-right">Precio Total</th>
               <th className="px-4 py-5 text-center">Web</th>
+              <th className="px-4 py-5 text-center">Tipo</th>
               <th className="px-8 py-5 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
-            ) : currentItems.map((prod) => (
-              <React.Fragment key={prod.producto_id}>
-                <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.producto_id ? 'bg-blue-50/20' : ''}`}>
-                  <td className="px-8 py-5">
-                    <div className="text-sm font-black text-slate-700 uppercase italic leading-tight">{prod.producto_nombre}</div>
-                    <div className="text-[9px] font-black text-blue-500 uppercase mt-1">{prod.categoria_nombre || 'Sin Categoría'}</div>
-                  </td>
-                  <td className="px-4 py-5 text-center font-mono text-[11px] font-bold text-slate-500 italic">{prod.producto_codigo_comercial}</td>
-                  <td className="px-4 py-5 text-center">
-                    <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black ${Number(prod.stock_actual) > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                      {Math.round(prod.stock_actual || 0)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-5 text-right font-bold text-slate-400 text-[11px] italic">
-                    ${Math.round(Number(prod.producto_precio_clp_total || 0) / 1.19).toLocaleString('es-CL')}
-                  </td>
-                  <td className="px-4 py-5 text-right font-black text-[#00338d] text-sm italic">
-                    ${Number(prod.producto_precio_clp_total || 0).toLocaleString('es-CL')}
-                  </td>
-                  <td className="px-4 py-5 text-center">
-                    <div className="flex justify-center">
-                      <div className={`w-2.5 h-2.5 rounded-full ${prod.producto_para_venta === "1" ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]' : 'bg-slate-200'}`} />
-                    </div>
-                  </td>
-                  <td className="px-8 py-5 text-center">
-                    <button onClick={() => handleEditClick(prod)} className="p-2.5 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#00338d] hover:text-white transition-all active:scale-90 shadow-sm">
-                      {editingId === prod.producto_id ? <X size={18} /> : <Edit3 size={18} />}
-                    </button>
-                  </td>
-                </tr>
-                {editingId === prod.producto_id && (
-                  <tr className="bg-slate-50/50">
-                    <td colSpan={7} className="px-2 py-4">
-                      {/* PASAMOS LAS PROPS AL COMPONENTE EXTERNO */}
-                      <RenderForm 
-                        id={prod.producto_id} 
-                        editForm={editForm}
-                        setEditForm={setEditForm}
-                        categorias={categorias}
-                        filteredSubcategorias={filteredSubcategorias}
-                        saving={saving}
-                        handleSave={handleSave}
-                        setEditingId={setEditingId}
-                      />
+              <tr><td colSpan={8} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
+            ) : currentItems.length === 0 ? (
+              <tr><td colSpan={8} className="py-20 text-center text-slate-400">No se encontraron productos</td></tr>
+            ) : (
+              currentItems.map((prod) => (
+                <React.Fragment key={prod.id}>
+                  <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.id ? 'bg-blue-50/20' : ''}`}>
+                    <td className="px-8 py-5">
+                      <div className="text-sm font-black text-slate-700 uppercase italic leading-tight">{prod.nombre}</div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        <span className="text-[8px] font-black text-blue-500 uppercase bg-blue-50 px-1.5 py-0.5 rounded">{prod.categoria_nombre || 'Sin Categoría'}</span>
+                        {prod.subcategoria_nombre && (
+                          <span className="text-[8px] font-black text-slate-400 uppercase bg-slate-100 px-1.5 py-0.5 rounded">{prod.subcategoria_nombre}</span>
+                        )}
+                        {prod.fabricante_nombre && (
+                          <span className="text-[8px] font-black text-emerald-500 uppercase bg-emerald-50 px-1.5 py-0.5 rounded">{prod.fabricante_nombre}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-5 text-center font-mono text-[11px] font-bold text-slate-500 italic">{prod.sku || '-'}</td>
+                    <td className="px-4 py-5 text-center">
+                      <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[10px] font-black ${(prod.stock_actual || 0) > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                        {Math.round(prod.stock_actual || 0)}
+                      </div>
+                      {(prod.stock_minimo > 0 && (prod.stock_actual || 0) <= prod.stock_minimo) && (
+                        <div className="flex items-center justify-center gap-0.5 mt-1 text-[8px] text-amber-500">
+                          <AlertTriangle size={8} /> Stock bajo
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-5 text-right font-bold text-slate-400 text-[11px] italic">
+                      {formatPrice(prod.precio_neto || 0)}
+                    </td>
+                    <td className="px-4 py-5 text-right font-black text-[#00338d] text-sm italic">
+                      {formatPrice(prod.precio_total || 0)}
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <div className="flex justify-center">
+                        <div className={`w-2.5 h-2.5 rounded-full ${prod.vender_en_web ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : prod.para_venta ? 'bg-blue-500' : 'bg-slate-200'}`} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-5 text-center">
+                      <span className={`text-[9px] font-black px-2 py-1 rounded-full ${prod.tipo === 'Producto' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                        {prod.tipo || 'Producto'}
+                      </span>
+                    </td>
+                    <td className="px-8 py-5 text-center">
+                      <button onClick={() => handleEditClick(prod)} className="p-2.5 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#00338d] hover:text-white transition-all active:scale-90 shadow-sm">
+                        {editingId === prod.id ? <X size={18} /> : <Edit3 size={18} />}
+                      </button>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+                  {editingId === prod.id && (
+                    <tr className="bg-slate-50/50">
+                      <td colSpan={8} className="px-2 py-4">
+                        <RenderForm 
+                          id={prod.id} 
+                          editForm={editForm}
+                          setEditForm={setEditForm}
+                          categorias={categorias}
+                          filteredSubcategorias={filteredSubcategorias}
+                          saving={saving}
+                          handleSave={handleSave}
+                          setEditingId={setEditingId}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))
+            )}
           </tbody>
         </table>
       </div>
