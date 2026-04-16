@@ -1,6 +1,6 @@
 // app/api/deepseek/chat/route.ts
 import { NextResponse } from 'next/server';
-import { preguntarDeepSeek } from '@/lib/deepseek/client';
+import { preguntarDeepSeek } from '@/app/lib/deepseek/client';
 
 export async function POST(req: Request) {
   try {
