@@ -39,6 +39,7 @@ export async function GET() {
         acc[key] = {
           producto: curr.termino_busqueda,
           tienda: curr.tienda,
+          link: curr.link, // <--- SE AGREGÓ EL LINK AQUÍ
           precio_actual: curr.precio_valor,
           precios_historial: [curr.precio_valor],
           ultima_fecha: curr.fecha
