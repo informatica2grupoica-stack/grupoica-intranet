@@ -1,17 +1,16 @@
-// app/api/obuma/stock/[id]/route.ts
+// app/api/obuma/stock/sku/[sku]/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ sku: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { sku } = await params;
     const { searchParams } = new URL(request.url);
     const id_bodega = searchParams.get('id_bodega') || '1';
     
-    // Opción 1: Obtener stock por ID de producto
-    const response = await fetch(`${process.env.OBUMA_API_URL}/productosStock.findById.json/${id}?id_bodega=${id_bodega}`, {
+    const response = await fetch(`${process.env.OBUMA_API_URL}/productosStock.findByCodigoSku.json/${sku}?id_bodega=${id_bodega}`, {
       method: 'GET',
       headers: {
         'access-token': process.env.OBUMA_API_TOKEN || '',

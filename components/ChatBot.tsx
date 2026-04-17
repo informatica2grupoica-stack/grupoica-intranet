@@ -36,11 +36,10 @@ interface Usuario {
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [showHistorial, setShowHistorial] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario.\n\n✨ **Nuevo:** También puedo ayudarte a cambiar precios o actualizar stock. Solo dime: "cambia el precio del SKU X a Y" o "actualiza stock del SKU X a Y".\n\n¿En qué te ayudo?',
+      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario.\n\n✨ **Nuevo:** También puedo ayudarte a cambiar precios o actualizar stock. Solo dime:\n• "cambia el precio del SKU 6026423727 a 15000"\n• "actualiza stock del SKU 6026423727 a 50"\n\n¿En qué te ayudo?',
       esUsuario: false,
       timestamp: new Date()
     }
@@ -130,7 +129,7 @@ export default function ChatBot() {
     }
   };
 
-  // Detectar y ejecutar acciones
+  // Detectar y ejecutar acciones (usando endpoints correctos de Obuma)
   const detectarYEjecutarAccion = async (pregunta: string): Promise<{ esAccion: boolean; respuesta: string; exitosa: boolean }> => {
     const preguntaLower = pregunta.toLowerCase();
     
@@ -146,32 +145,54 @@ export default function ChatBot() {
       }
       
       try {
-        const res = await fetch('/api/chatbot/acciones', {
-          method: 'POST',
+        // Obtener producto actual para mantener otros campos
+        const getRes = await fetch(`/api/obuma/productos/list?codigo_sku=${sku}`);
+        const getData = await getRes.json();
+        const productoActual = getData.data?.[0];
+        
+        if (!productoActual) {
+          return { esAccion: true, respuesta: `❌ No se encontraron datos del producto.`, exitosa: false };
+        }
+        
+        // Calcular precios con IVA
+        const nuevoPrecioBruto = Math.round(nuevoPrecio * 1.19);
+        
+        // Actualizar precio usando el endpoint PUT existente
+        const updateRes = await fetch(`/api/obuma/productos/${producto.id}`, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            accion: 'cambiar_precio',
-            producto_id: producto.id,
-            sku: sku,
-            nuevo_precio: nuevoPrecio
+            ...productoActual,
+            precio_venta: nuevoPrecioBruto,
+            precio_neto: nuevoPrecio,
+            venta_incluye_iva: true,
+            nombre_completo: producto.nombre,
+            sku: producto.sku,
+            tipo: productoActual.tipo || 'Producto',
+            categoria_id: productoActual.categoria_id || '',
+            subcategoria_id: productoActual.subcategoria_id || '',
+            se_puede_vender: true,
+            se_puede_comprar: true,
+            se_mantiene_stock: true
           })
         });
         
-        const data = await res.json();
+        const data = await updateRes.json();
         
-        if (data.success) {
+        if (updateRes.ok) {
           // Actualizar producto localmente
           setProductos(prev => prev.map(p => 
-            p.sku === sku ? { ...p, precio: nuevoPrecio * 1.19 } : p
+            p.sku === sku ? { ...p, precio: nuevoPrecioBruto } : p
           ));
           return { 
             esAccion: true, 
-            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${(nuevoPrecio * 1.19).toLocaleString('es-CL')}\n📌 SKU: ${sku}`,
+            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}`,
             exitosa: true 
           };
         }
-        return { esAccion: true, respuesta: `❌ Error al actualizar el precio. Intenta nuevamente.`, exitosa: false };
+        return { esAccion: true, respuesta: `❌ Error al actualizar el precio: ${data.error || 'Intenta nuevamente'}`, exitosa: false };
       } catch (error) {
+        console.error("Error actualizando precio:", error);
         return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el precio.`, exitosa: false };
       }
     }
@@ -182,37 +203,46 @@ export default function ChatBot() {
       const sku = stockMatch[1];
       const nuevoStock = parseInt(stockMatch[2]);
       const producto = productos.find(p => p.sku === sku);
+      const stockActual = producto?.stock || 0;
+      const diferencia = nuevoStock - stockActual;
       
       if (!producto) {
         return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}. Verifica el código.`, exitosa: false };
       }
       
+      if (diferencia === 0) {
+        return { esAccion: true, respuesta: `ℹ️ El producto ya tiene ${nuevoStock} unidades en stock. No se requiere cambio.`, exitosa: true };
+      }
+      
       try {
-        const res = await fetch('/api/chatbot/acciones', {
+        const stockRes = await fetch('/api/obuma/stock', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            accion: 'actualizar_stock',
-            producto_id: producto.id,
             sku: sku,
-            nuevo_stock: nuevoStock
+            cantidad: Math.abs(diferencia),
+            tipo_movimiento: diferencia > 0 ? "ENTRADA" : "SALIDA",
+            concepto: "Actualización por ChatBot",
+            referencia: `Ajuste de stock a ${nuevoStock} unidades`
           })
         });
         
-        const data = await res.json();
+        const data = await stockRes.json();
         
         if (data.success) {
           setProductos(prev => prev.map(p => 
             p.sku === sku ? { ...p, stock: nuevoStock } : p
           ));
+          const direccion = diferencia > 0 ? "aumentado" : "disminuido";
           return { 
             esAccion: true, 
-            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Nuevo stock: ${nuevoStock} unidades\n📌 SKU: ${sku}`,
+            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}`,
             exitosa: true 
           };
         }
-        return { esAccion: true, respuesta: `❌ Error al actualizar el stock. Intenta nuevamente.`, exitosa: false };
+        return { esAccion: true, respuesta: `❌ Error al actualizar el stock: ${data.error || 'Intenta nuevamente'}`, exitosa: false };
       } catch (error) {
+        console.error("Error actualizando stock:", error);
         return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el stock.`, exitosa: false };
       }
     }
@@ -377,6 +407,7 @@ export default function ChatBot() {
       }
       
     } catch (error) {
+      console.error("Error en enviarMensaje:", error);
       const errorMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
         texto: "❌ Error de conexión. Intenta nuevamente.",
