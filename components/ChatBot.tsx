@@ -2,13 +2,15 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot, Package, Hash, DollarSign, Box } from 'lucide-react';
 
 interface Mensaje {
   id: string;
   texto: string;
   esUsuario: boolean;
   timestamp: Date;
+  esLista?: boolean;
+  productos?: any[];
 }
 
 interface ProductoReal {
@@ -25,7 +27,7 @@ export default function ChatBot() {
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario real de Obuma. ¿En qué te ayudo?',
+      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario. ¿En qué te ayudo?',
       esUsuario: false,
       timestamp: new Date()
     }
@@ -35,14 +37,13 @@ export default function ChatBot() {
   const [productosReales, setProductosReales] = useState<ProductoReal[]>([]);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar productos reales al iniciar el chat
+  // Cargar productos desde Supabase
   useEffect(() => {
     const cargarProductos = async () => {
       try {
         const response = await fetch('/api/obuma/productos/list?limit=5000');
         const data = await response.json();
         if (data.data && Array.isArray(data.data)) {
-          // ✅ CORREGIDO: Usar los campos correctos de la API enriquecida
           const productos = data.data.map((p: any) => ({
             nombre: p.nombre || p.producto_nombre || '',
             sku: p.sku || p.producto_codigo_comercial || '',
@@ -51,10 +52,10 @@ export default function ChatBot() {
             categoria: p.categoria_nombre || ''
           }));
           setProductosReales(productos);
-          console.log(`✅ Cargados ${productos.length} productos reales para el chat`);
+          console.log(`✅ ChatBot: ${productos.length} productos cargados`);
         }
       } catch (error) {
-        console.error("Error cargando productos para el chat:", error);
+        console.error("Error cargando productos:", error);
       }
     };
     
@@ -64,6 +65,15 @@ export default function ChatBot() {
   useEffect(() => {
     mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
+
+  // Formatear respuesta en lista si es necesario
+  const formatearRespuesta = (respuesta: string, productos?: any[]) => {
+    // Si la respuesta es muy larga y parece una lista, la formateamos
+    if (respuesta.includes('\n') && respuesta.length > 300) {
+      return respuesta.replace(/\n/g, '<br/>');
+    }
+    return respuesta;
+  };
 
   const enviarMensaje = async () => {
     if (!input.trim() || cargando) return;
@@ -81,14 +91,13 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
-      // ✅ CORREGIDO: Enviar TODOS los productos, no solo 50
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           pregunta,
           contexto: {
-            productos: productosReales // Enviamos TODOS los productos
+            productos: productosReales
           }
         })
       });
@@ -96,10 +105,6 @@ export default function ChatBot() {
       const data = await response.json();
       
       let respuestaTexto = data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.";
-      
-      if (respuestaTexto.length > 500 && !respuestaTexto.includes('\n')) {
-        respuestaTexto = respuestaTexto.slice(0, 500) + '...';
-      }
       
       const botMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
@@ -129,6 +134,34 @@ export default function ChatBot() {
     }
   };
 
+  // Renderizar mensaje con formato mejorado
+  const renderMensaje = (msg: Mensaje) => {
+    let contenido = msg.texto;
+    
+    // Mejorar formato de listas
+    contenido = contenido.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    contenido = contenido.replace(/\n/g, '<br/>');
+    contenido = contenido.replace(/^\d+\. /gm, '• ');
+    
+    return (
+      <div
+        className={`max-w-[85%] p-3 rounded-2xl text-sm ${
+          msg.esUsuario
+            ? 'bg-[#00338d] text-white rounded-br-none'
+            : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
+        }`}
+      >
+        <div 
+          className="whitespace-pre-wrap break-words"
+          dangerouslySetInnerHTML={{ __html: contenido }}
+        />
+        <div className={`text-[9px] mt-1 ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
+          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+    );
+  };
+
   if (!isOpen) {
     return (
       <button
@@ -145,15 +178,16 @@ export default function ChatBot() {
 
   return (
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-14' : 'w-96 h-[550px]'
+      isMinimized ? 'w-80 h-14' : 'w-[450px] h-[600px]'
     }`}>
+      {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-bold text-sm">Asistente Obuma IA</span>
           {productosReales.length > 0 && (
-            <span className="bg-emerald-400/30 text-[8px] font-bold px-1.5 py-0.5 rounded-full">
-              {productosReales.length} productos
+            <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
+              📦 {productosReales.length}
             </span>
           )}
         </div>
@@ -175,31 +209,19 @@ export default function ChatBot() {
 
       {!isMinimized && (
         <>
+          {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {mensajes.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex ${msg.esUsuario ? 'justify-end' : 'justify-start'}`}
               >
-                <div
-                  className={`max-w-[80%] p-3 rounded-2xl text-sm ${
-                    msg.esUsuario
-                      ? 'bg-[#00338d] text-white rounded-br-none'
-                      : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'
-                  }`}
-                >
-                  <div className="whitespace-pre-wrap break-words">
-                    {msg.texto}
-                  </div>
-                  <div className={`text-[9px] mt-1 ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
+                {renderMensaje(msg)}
               </div>
             ))}
             {cargando && (
               <div className="flex justify-start">
-                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none">
+                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none shadow-sm">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100" />
@@ -211,13 +233,32 @@ export default function ChatBot() {
             <div ref={mensajesEndRef} />
           </div>
 
+          {/* Sugerencias rápidas */}
+          <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
+            <div className="flex flex-wrap gap-1">
+              {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU"].map((sug) => (
+                <button
+                  key={sug}
+                  onClick={() => {
+                    setInput(sug);
+                    enviarMensaje();
+                  }}
+                  className="text-[8px] bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-1 rounded-full transition-colors"
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Input */}
           <div className="p-4 border-t border-slate-200 bg-white rounded-b-2xl">
             <div className="flex gap-2">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Escribe tu pregunta... Ej: '¿Cuántos productos tenemos?' o 'Busca el SKU...'"
+                placeholder="Escribe tu pregunta..."
                 className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
                 rows={1}
                 disabled={cargando}
@@ -232,7 +273,7 @@ export default function ChatBot() {
             </div>
             <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
               <span>🤖</span>
-              <span>{productosReales.length > 0 ? `${productosReales.length} productos en inventario` : "Conectando con Obuma..."}</span>
+              <span>{productosReales.length > 0 ? `${productosReales.length} productos disponibles` : "Cargando..."}</span>
               <button
                 onClick={async () => {
                   const response = await fetch('/api/obuma/productos/list?limit=5000');
@@ -247,7 +288,7 @@ export default function ChatBot() {
                     setProductosReales(productos);
                     const refreshMsg: Mensaje = {
                       id: Date.now().toString(),
-                      texto: `🔄 Actualizado: Tengo ${productos.length} productos reales en mi base de datos. ¡Pregúntame sobre ellos!`,
+                      texto: `🔄 Actualizado: ${productos.length} productos en mi base de datos.`,
                       esUsuario: false,
                       timestamp: new Date()
                     };
