@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Minimize2, Maximize2, Bot, Search, Package, TrendingUp, AlertTriangle } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot, History, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Mensaje {
@@ -13,10 +13,13 @@ interface Mensaje {
   detalles?: {
     productosEncontrados?: number;
     criterio?: string;
+    esAccion?: boolean;
+    accionExitosa?: boolean;
   };
 }
 
 interface ProductoReal {
+  id: string;
   nombre: string;
   sku: string;
   precio: number;
@@ -24,13 +27,20 @@ interface ProductoReal {
   categoria?: string;
 }
 
+interface Usuario {
+  id: string;
+  email: string;
+  nombre: string;
+}
+
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showHistorial, setShowHistorial] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario. ¿En qué te ayudo?',
+      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario.\n\n✨ **Nuevo:** También puedo ayudarte a cambiar precios o actualizar stock. Solo dime: "cambia el precio del SKU X a Y" o "actualiza stock del SKU X a Y".\n\n¿En qué te ayudo?',
       esUsuario: false,
       timestamp: new Date()
     }
@@ -39,7 +49,27 @@ export default function ChatBot() {
   const [cargando, setCargando] = useState(false);
   const [productos, setProductos] = useState<ProductoReal[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
+
+  // Obtener usuario actual
+  useEffect(() => {
+    const getUsuario = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUsuario({
+            id: session.user.id,
+            email: session.user.email || '',
+            nombre: session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || 'Usuario'
+          });
+        }
+      } catch (error) {
+        console.error("Error obteniendo usuario:", error);
+      }
+    };
+    getUsuario();
+  }, []);
 
   // Cargar productos desde Supabase
   useEffect(() => {
@@ -47,14 +77,15 @@ export default function ChatBot() {
       try {
         const { data, error } = await supabase
           .from('productos_obuma')
-          .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+          .select('id, nombre, sku, precio_total, stock_actual, categoria_nombre')
           .eq('activo', true)
           .order('nombre');
 
         if (error) throw error;
 
         if (data && data.length > 0) {
-          const productosMap = data.map((p: any) => ({
+          const productosMap: ProductoReal[] = data.map((p: any) => ({
+            id: p.id,
             nombre: p.nombre,
             sku: p.sku,
             precio: p.precio_total,
@@ -78,28 +109,178 @@ export default function ChatBot() {
     mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
 
-  // Búsqueda local rápida (para respuestas inmediatas)
-  const buscarLocalmente = (pregunta: string): ProductoReal[] => {
-    const preguntaLower = pregunta.toLowerCase();
-    const palabrasClave = preguntaLower.split(' ').filter(p => p.length > 2);
+  // Guardar mensaje en historial
+  const guardarEnHistorial = async (pregunta: string, respuesta: string, productosEncontrados: number = 0) => {
+    if (!usuario) return;
     
-    // Buscar por SKU exacto (prioridad máxima)
-    const skuMatch = /\d{7,}/.exec(pregunta);
-    if (skuMatch) {
-      const exacto = productos.filter(p => p.sku === skuMatch[0]);
-      if (exacto.length > 0) return exacto;
+    try {
+      await fetch('/api/chatbot/historial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario_id: usuario.id,
+          usuario_nombre: usuario.nombre,
+          pregunta,
+          respuesta,
+          productos_encontrados: productosEncontrados
+        })
+      });
+    } catch (error) {
+      console.error("Error guardando historial:", error);
+    }
+  };
+
+  // Detectar y ejecutar acciones
+  const detectarYEjecutarAccion = async (pregunta: string): Promise<{ esAccion: boolean; respuesta: string; exitosa: boolean }> => {
+    const preguntaLower = pregunta.toLowerCase();
+    
+    // Detectar cambio de precio
+    const precioMatch = preguntaLower.match(/(?:cambia|actualiza|modifica|setea).*?precio.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+(?:\.\d+)?)/i);
+    if (precioMatch) {
+      const sku = precioMatch[1];
+      const nuevoPrecio = parseInt(precioMatch[2]);
+      const producto = productos.find(p => p.sku === sku);
+      
+      if (!producto) {
+        return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}. Verifica el código.`, exitosa: false };
+      }
+      
+      try {
+        const res = await fetch('/api/chatbot/acciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'cambiar_precio',
+            producto_id: producto.id,
+            sku: sku,
+            nuevo_precio: nuevoPrecio
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          // Actualizar producto localmente
+          setProductos(prev => prev.map(p => 
+            p.sku === sku ? { ...p, precio: nuevoPrecio * 1.19 } : p
+          ));
+          return { 
+            esAccion: true, 
+            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${(nuevoPrecio * 1.19).toLocaleString('es-CL')}\n📌 SKU: ${sku}`,
+            exitosa: true 
+          };
+        }
+        return { esAccion: true, respuesta: `❌ Error al actualizar el precio. Intenta nuevamente.`, exitosa: false };
+      } catch (error) {
+        return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el precio.`, exitosa: false };
+      }
     }
     
-    // Buscar coincidencias
-    return productos.filter(p => {
-      const textoBusqueda = `${p.nombre} ${p.sku} ${p.categoria || ''}`.toLowerCase();
+    // Detectar actualización de stock
+    const stockMatch = preguntaLower.match(/(?:cambia|actualiza|modifica|setea).*?stock.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+)/i);
+    if (stockMatch) {
+      const sku = stockMatch[1];
+      const nuevoStock = parseInt(stockMatch[2]);
+      const producto = productos.find(p => p.sku === sku);
       
-      // Coincidencia exacta de la frase
-      if (textoBusqueda.includes(preguntaLower)) return true;
+      if (!producto) {
+        return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}. Verifica el código.`, exitosa: false };
+      }
       
-      // Coincidencia por palabras clave
-      return palabrasClave.every(palabra => textoBusqueda.includes(palabra));
-    });
+      try {
+        const res = await fetch('/api/chatbot/acciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'actualizar_stock',
+            producto_id: producto.id,
+            sku: sku,
+            nuevo_stock: nuevoStock
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          setProductos(prev => prev.map(p => 
+            p.sku === sku ? { ...p, stock: nuevoStock } : p
+          ));
+          return { 
+            esAccion: true, 
+            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Nuevo stock: ${nuevoStock} unidades\n📌 SKU: ${sku}`,
+            exitosa: true 
+          };
+        }
+        return { esAccion: true, respuesta: `❌ Error al actualizar el stock. Intenta nuevamente.`, exitosa: false };
+      } catch (error) {
+        return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el stock.`, exitosa: false };
+      }
+    }
+    
+    return { esAccion: false, respuesta: '', exitosa: false };
+  };
+
+  // Cargar historial
+  const cargarHistorial = async () => {
+    if (!usuario) {
+      const noUserMsg: Mensaje = {
+        id: Date.now().toString(),
+        texto: "🔐 Inicia sesión para ver tu historial de conversaciones.",
+        esUsuario: false,
+        timestamp: new Date()
+      };
+      setMensajes(prev => [...prev, noUserMsg]);
+      return;
+    }
+    
+    setCargando(true);
+    try {
+      const res = await fetch(`/api/chatbot/historial?usuario_id=${usuario.id}&limit=15`);
+      const data = await res.json();
+      
+      if (data.historial && data.historial.length > 0) {
+        const historialTexto = data.historial.map((h: any, i: number) => 
+          `${i + 1}. ❓ **${h.pregunta.length > 60 ? h.pregunta.substring(0, 60) + '...' : h.pregunta}**\n   💡 ${h.respuesta.substring(0, 100)}...`
+        ).join('\n\n');
+        
+        const historialMsg: Mensaje = {
+          id: Date.now().toString(),
+          texto: `📜 **Tus últimas conversaciones:**\n\n${historialTexto}\n\n---\n💡 *Pregúntame "ver historial" para actualizar*`,
+          esUsuario: false,
+          timestamp: new Date()
+        };
+        setMensajes(prev => [...prev, historialMsg]);
+      } else {
+        const emptyMsg: Mensaje = {
+          id: Date.now().toString(),
+          texto: "📜 No hay conversaciones previas en tu historial. ¡Empieza a preguntarme sobre productos!",
+          esUsuario: false,
+          timestamp: new Date()
+        };
+        setMensajes(prev => [...prev, emptyMsg]);
+      }
+    } catch (error) {
+      console.error("Error cargando historial:", error);
+      const errorMsg: Mensaje = {
+        id: Date.now().toString(),
+        texto: "❌ Error al cargar el historial. Intenta nuevamente.",
+        esUsuario: false,
+        timestamp: new Date()
+      };
+      setMensajes(prev => [...prev, errorMsg]);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  // Sugerencias proactivas basadas en stock bajo
+  const sugerirStockBajo = async (): Promise<string> => {
+    const productosBajoStock = productos.filter(p => p.stock > 0 && p.stock <= 5);
+    if (productosBajoStock.length > 0) {
+      const lista = productosBajoStock.slice(0, 3).map(p => `• **${p.nombre}** (Stock: ${p.stock})`).join('\n');
+      return `⚠️ **Alerta de stock bajo:**\n\n${lista}\n\n${productosBajoStock.length > 3 ? `... y ${productosBajoStock.length - 3} más.` : ''}\n\n¿Necesitas reabastecer alguno?`;
+    }
+    return '';
   };
 
   const enviarMensaje = async () => {
@@ -118,9 +299,40 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
-      // Búsqueda local primero
-      const resultadosLocales = buscarLocalmente(pregunta);
+      // Verificar si es una acción (cambiar precio, stock)
+      const { esAccion, respuesta: accionRespuesta, exitosa } = await detectarYEjecutarAccion(pregunta);
       
+      if (esAccion) {
+        const botMsg: Mensaje = {
+          id: (Date.now() + 1).toString(),
+          texto: accionRespuesta,
+          esUsuario: false,
+          timestamp: new Date(),
+          detalles: { esAccion: true, accionExitosa: exitosa }
+        };
+        setMensajes(prev => [...prev, botMsg]);
+        await guardarEnHistorial(pregunta, accionRespuesta, 0);
+        setCargando(false);
+        
+        // Sugerencia proactiva después de acción exitosa
+        if (exitosa) {
+          const sugerencia = await sugerirStockBajo();
+          if (sugerencia) {
+            setTimeout(() => {
+              const sugerenciaMsg: Mensaje = {
+                id: (Date.now() + 2).toString(),
+                texto: sugerencia,
+                esUsuario: false,
+                timestamp: new Date()
+              };
+              setMensajes(prev => [...prev, sugerenciaMsg]);
+            }, 1000);
+          }
+        }
+        return;
+      }
+      
+      // Si no es acción, consultar a DeepSeek
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,8 +343,10 @@ export default function ChatBot() {
       });
 
       const data = await response.json();
-      
       let respuestaTexto = data.respuesta || "Lo siento, no pude procesar tu pregunta.";
+      
+      // Guardar en historial
+      await guardarEnHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
       
       const botMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
@@ -145,6 +359,22 @@ export default function ChatBot() {
         }
       };
       setMensajes(prev => [...prev, botMsg]);
+      
+      // Sugerencia proactiva si la pregunta era sobre productos
+      if (pregunta.toLowerCase().includes('producto') || pregunta.toLowerCase().includes('tienes')) {
+        const sugerencia = await sugerirStockBajo();
+        if (sugerencia) {
+          setTimeout(() => {
+            const sugerenciaMsg: Mensaje = {
+              id: (Date.now() + 2).toString(),
+              texto: sugerencia,
+              esUsuario: false,
+              timestamp: new Date()
+            };
+            setMensajes(prev => [...prev, sugerenciaMsg]);
+          }, 1500);
+        }
+      }
       
     } catch (error) {
       const errorMsg: Mensaje = {
@@ -169,27 +399,24 @@ export default function ChatBot() {
   const renderMensaje = (msg: Mensaje) => {
     let contenido = msg.texto;
     
-    // Mejorar formato
     contenido = contenido.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     contenido = contenido.replace(/\n/g, '<br/>');
     contenido = contenido.replace(/^\d+\. /gm, '• ');
-    contenido = contenido.replace(/└/g, '&nbsp;&nbsp;&nbsp;↳');
+    contenido = contenido.replace(/•/g, '<span class="text-blue-500 mr-1">•</span>');
     contenido = contenido.replace(/---/g, '<hr class="my-2 border-slate-200"/>');
-    
-    // Resaltar SKUs
-    contenido = contenido.replace(/\b(\d{7,})\b/g, '<code class="bg-slate-100 px-1 rounded text-xs">$1</code>');
-    
-    // Resaltar precios
+    contenido = contenido.replace(/\b(\d{7,})\b/g, '<code class="bg-slate-100 px-1 rounded text-xs font-mono">$1</code>');
     contenido = contenido.replace(/\$\d{1,3}(?:\.\d{3})*/g, match => `<span class="font-bold text-emerald-600">${match}</span>`);
     
+    const bgColor = msg.esUsuario 
+      ? 'bg-[#00338d] text-white rounded-br-none'
+      : msg.detalles?.esAccion 
+        ? msg.detalles.accionExitosa 
+          ? 'bg-emerald-50 border border-emerald-200 text-slate-700 rounded-bl-none'
+          : 'bg-amber-50 border border-amber-200 text-slate-700 rounded-bl-none'
+        : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm';
+    
     return (
-      <div
-        className={`max-w-[85%] p-3 rounded-2xl text-sm ${
-          msg.esUsuario
-            ? 'bg-[#00338d] text-white rounded-br-none'
-            : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
-        }`}
-      >
+      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${bgColor}`}>
         <div 
           className="whitespace-pre-wrap break-words"
           dangerouslySetInnerHTML={{ __html: contenido }}
@@ -199,6 +426,11 @@ export default function ChatBot() {
           {msg.detalles?.productosEncontrados !== undefined && msg.detalles.productosEncontrados > 0 && (
             <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">
               🎯 {msg.detalles.productosEncontrados} resultados
+            </span>
+          )}
+          {msg.detalles?.esAccion && msg.detalles.accionExitosa && (
+            <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">
+              ✅ Acción completada
             </span>
           )}
         </div>
@@ -222,7 +454,7 @@ export default function ChatBot() {
 
   return (
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-14' : 'w-[500px] h-[650px]'
+      isMinimized ? 'w-80 h-14' : 'w-[550px] h-[680px]'
     }`}>
       {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
@@ -236,6 +468,13 @@ export default function ChatBot() {
           )}
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={cargarHistorial}
+            className="hover:bg-blue-700 p-1 rounded transition-colors"
+            title="Ver historial"
+          >
+            <History size={16} />
+          </button>
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="hover:bg-blue-700 p-1 rounded transition-colors"
@@ -292,12 +531,16 @@ export default function ChatBot() {
           {/* Sugerencias rápidas */}
           <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
             <div className="flex flex-wrap gap-1">
-              {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU"].map((sug) => (
+              {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU", "Ver mi historial"].map((sug) => (
                 <button
                   key={sug}
                   onClick={() => {
-                    setInput(sug);
-                    enviarMensaje();
+                    if (sug === "Ver mi historial") {
+                      cargarHistorial();
+                    } else {
+                      setInput(sug);
+                      enviarMensaje();
+                    }
                   }}
                   className="text-[8px] bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-1 rounded-full transition-colors"
                 >
@@ -314,7 +557,7 @@ export default function ChatBot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ej: 'busca film plastico' o 'tienes copla pvc' o 'SKU 6026423727'"
+                placeholder="Ej: 'busca film plastico' o 'cambia el precio del SKU 6026423727 a 15000' o 'actualiza stock del SKU 6026423727 a 50'"
                 className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
                 rows={1}
                 disabled={cargando}
@@ -327,8 +570,15 @@ export default function ChatBot() {
                 <Send size={20} />
               </button>
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 text-center">
-              🔍 Búsqueda precisa por nombre, SKU o categoría | {productos.length} productos indexados
+            <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
+              <span>🤖</span>
+              <span>{productos.length > 0 ? `${productos.length} productos indexados` : "Cargando..."}</span>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-[8px] text-blue-500 hover:text-blue-700 underline"
+              >
+                ↻ actualizar
+              </button>
             </div>
           </div>
         </>
