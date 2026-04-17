@@ -20,7 +20,7 @@ export default function TareasPage() {
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -31,29 +31,26 @@ export default function TareasPage() {
             Organiza, asigna y da seguimiento
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <button
             onClick={() => setVista('tabla')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
-              vista === 'tabla' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'tabla' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+              }`}
           >
             <LayoutList size={14} /> Tabla
           </button>
           <button
             onClick={() => setVista('gantt')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
-              vista === 'gantt' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'gantt' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+              }`}
           >
             <GanttChartSquare size={14} /> Gantt
           </button>
           <button
             onClick={() => setVista('kanban')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
-              vista === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+              }`}
           >
             <KanbanSquare size={14} /> Kanban
           </button>
@@ -75,22 +72,22 @@ export default function TareasPage() {
 
       {/* Vista seleccionada */}
       {vista === 'tabla' && (
-        <VistaTabla 
-          tareas={tareas} 
+        <VistaTabla
+          tareas={tareas}
           usuarios={usuarios}
           perfilUsuario={perfilUsuario}
           onTaskClick={setTareaExpandida}
           onTaskUpdate={fetchTareas}
         />
       )}
-      
+
       {vista === 'gantt' && (
         <VistaGantt tareas={tareas} onTaskClick={setTareaExpandida} />
       )}
-      
+
       {vista === 'kanban' && (
-        <VistaKanban 
-          tareas={tareas} 
+        <VistaKanban
+          tareas={tareas}
           onTaskUpdate={fetchTareas}
           onTaskClick={setTareaExpandida}
         />

@@ -14,6 +14,16 @@ interface FormularioTareaProps {
 export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSuccess, tareaEdit }: FormularioTareaProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // ✅ Verificar permisos para crear/editar
+  const puedeCrear = perfilUsuario?.rol === 'admin' || 
+                     perfilUsuario?.rol === 'superuser' || 
+                     perfilUsuario?.permisos?.can_create_tasks === true;
+  
+  const puedeEditar = perfilUsuario?.rol === 'admin' || 
+                      perfilUsuario?.rol === 'superuser' || 
+                      perfilUsuario?.permisos?.can_edit_all_tasks === true;
+
   const [form, setForm] = useState({
     titulo: tareaEdit?.titulo || '',
     descripcion: tareaEdit?.descripcion || '',
@@ -27,6 +37,16 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (tareaEdit && !puedeEditar) {
+      setError("No tienes permisos para editar esta tarea");
+      return;
+    }
+    
+    if (!tareaEdit && !puedeCrear) {
+      setError("No tienes permisos para crear tareas");
+      return;
+    }
     
     if (!form.titulo.trim()) {
       setError("El título es requerido");
@@ -85,11 +105,31 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
     }
   };
 
+  // Si no tiene permisos, mostrar mensaje
+  if (!puedeCrear && !tareaEdit) {
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <AlertCircle size={32} className="text-amber-500" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">Sin Permisos</h3>
+          <p className="text-sm text-slate-500 mt-2">No tienes permisos para crear tareas</p>
+          <button
+            onClick={onClose}
+            className="mt-6 px-6 py-2 bg-slate-200 rounded-xl text-sm font-bold"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
         
-        {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-100 p-5 flex justify-between items-center">
           <div>
             <h2 className="text-lg font-black text-slate-800 uppercase italic">
@@ -107,7 +147,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           </button>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
           {error && (
@@ -117,7 +156,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             </div>
           )}
 
-          {/* Título */}
           <div>
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
               Título de la tarea *
@@ -132,7 +170,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             />
           </div>
 
-          {/* Descripción */}
           <div>
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
               Descripción
@@ -146,9 +183,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             />
           </div>
 
-          {/* Grid 2 columnas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Prioridad */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Prioridad
@@ -164,7 +199,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               </select>
             </div>
 
-            {/* Responsable */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Responsable *
@@ -187,7 +221,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               </div>
             </div>
 
-            {/* Proyecto */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Proyecto
@@ -204,7 +237,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               </div>
             </div>
 
-            {/* Horas estimadas */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Horas estimadas
@@ -220,7 +252,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               />
             </div>
 
-            {/* Fecha inicio */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Fecha inicio
@@ -236,7 +267,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               </div>
             </div>
 
-            {/* Fecha límite */}
             <div>
               <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
                 Fecha límite
@@ -253,7 +283,6 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             </div>
           </div>
 
-          {/* Botones */}
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"

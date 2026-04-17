@@ -21,6 +21,11 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [notificacion, setNotificacion] = useState<{msg: string, tipo: 'success' | 'error'} | null>(null);
 
+  // ✅ Permisos
+  const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
+  const puedeEditarCualquierTarea = esAdmin || perfilUsuario?.permisos?.can_edit_all_tasks === true;
+  const puedeEliminarCualquierTarea = esAdmin || perfilUsuario?.permisos?.can_delete_all_tasks === true;
+
   const formatFecha = (fechaStr: string) => {
     if (!fechaStr) return '--/--';
     const date = new Date(fechaStr);
@@ -44,26 +49,60 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
     }
   };
 
+  const puedeActualizarEstado = (tarea: any) => {
+    // El admin puede siempre
+    if (esAdmin) return true;
+    // El asignado puede cambiar estado
+    if (String(perfilUsuario?.id) === String(tarea.asignado_a)) return true;
+    return false;
+  };
+
+  const puedeEditarTarea = (tarea: any) => {
+    if (puedeEditarCualquierTarea) return true;
+    if (esAdmin) return true;
+    if (String(perfilUsuario?.id) === String(tarea.asignado_a)) return true;
+    if (String(perfilUsuario?.id) === String(tarea.creado_por)) return true;
+    return false;
+  };
+
+  const puedeEliminarTarea = (tarea: any) => {
+    if (puedeEliminarCualquierTarea) return true;
+    if (esAdmin) return true;
+    if (String(perfilUsuario?.id) === String(tarea.creado_por)) return true;
+    return false;
+  };
+
   const actualizarEstado = async (id: string, nuevoEstado: string) => {
+    const tarea = tareas.find(t => t.id === id);
+    if (!puedeActualizarEstado(tarea)) {
+      setNotificacion({ msg: "No tienes permisos para cambiar el estado de esta tarea", tipo: 'error' });
+      setTimeout(() => setNotificacion(null), 3000);
+      return;
+    }
+
     try {
       const { error } = await supabase.from('tareas').update({ estado: nuevoEstado }).eq('id', id);
-      if (error) {
-        setNotificacion({ msg: "Sin permisos para actualizar", tipo: 'error' });
-        return;
-      }
-      setNotificacion({ msg: `Estado actualizado`, tipo: 'success' });
+      if (error) throw error;
+      setNotificacion({ msg: `Estado actualizado a ${nuevoEstado}`, tipo: 'success' });
       onTaskUpdate();
       setTimeout(() => setNotificacion(null), 3000);
     } catch (err: any) {
-      setNotificacion({ msg: "Error inesperado", tipo: 'error' });
+      setNotificacion({ msg: "Error al actualizar", tipo: 'error' });
       setTimeout(() => setNotificacion(null), 3000);
     }
   };
 
   const eliminarTarea = async (id: string) => {
+    const tarea = tareas.find(t => t.id === id);
+    if (!puedeEliminarTarea(tarea)) {
+      setNotificacion({ msg: "No tienes permisos para eliminar esta tarea", tipo: 'error' });
+      setTimeout(() => setNotificacion(null), 3000);
+      return;
+    }
+
     const { error } = await supabase.from('tareas').delete().eq('id', id);
     if (error) {
-      setNotificacion({ msg: "No puedes eliminar esta tarea", tipo: 'error' });
+      setNotificacion({ msg: "Error al eliminar", tipo: 'error' });
     } else {
       setNotificacion({ msg: "Tarea eliminada", tipo: 'success' });
     }
@@ -73,6 +112,11 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
   };
 
   const iniciarEdicion = (tarea: any) => {
+    if (!puedeEditarTarea(tarea)) {
+      setNotificacion({ msg: "No tienes permisos para editar esta tarea", tipo: 'error' });
+      setTimeout(() => setNotificacion(null), 3000);
+      return;
+    }
     setEditandoTarea(tarea.id);
     setFormEdit({
       titulo: tarea.titulo,
@@ -117,9 +161,6 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
     }
   };
 
-  const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
-  const esAsignado = (tarea: any) => String(perfilUsuario?.id) === String(tarea.asignado_a);
-
   if (notificacion) {
     return (
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[150] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-md border animate-in slide-in-from-top-full ${
@@ -149,7 +190,9 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
             {tareas.map((t) => {
               const status = getEstadoConfig(t);
               const prioridad = getPrioridadConfig(t.prioridad);
-              const puedeEditar = esAdmin || esAsignado(t);
+              const puedeEditar = puedeEditarTarea(t);
+              const puedeEliminar = puedeEliminarTarea(t);
+              const puedeCambiarEstado = puedeActualizarEstado(t);
 
               if (editandoTarea === t.id) {
                 return (
@@ -295,7 +338,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         )}
                       </button>
                       
-                      {(puedeEditar) && (
+                      {puedeCambiarEstado && (
                         <>
                           {t.estado === 'pendiente' && (
                             <button 
@@ -318,23 +361,24 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         </>
                       )}
                       
-                      {esAdmin && (
-                        <>
-                          <button 
-                            onClick={() => iniciarEdicion(t)} 
-                            className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all" 
-                            title="Editar"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button 
-                            onClick={() => setConfirmarEliminar(t.id)} 
-                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" 
-                            title="Eliminar"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
+                      {puedeEditar && (
+                        <button 
+                          onClick={() => iniciarEdicion(t)} 
+                          className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all" 
+                          title="Editar"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                      )}
+                      
+                      {puedeEliminar && (
+                        <button 
+                          onClick={() => setConfirmarEliminar(t.id)} 
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" 
+                          title="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
 
