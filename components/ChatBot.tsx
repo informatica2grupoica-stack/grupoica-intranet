@@ -49,6 +49,7 @@ export default function ChatBot() {
   const [productos, setProductos] = useState<ProductoReal[]>([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [recargandoLista, setRecargandoLista] = useState(false);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
   // Obtener usuario actual
@@ -71,37 +72,44 @@ export default function ChatBot() {
   }, []);
 
   // Cargar productos desde Supabase
-  useEffect(() => {
-    const cargarProductos = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('productos_obuma')
-          .select('id, nombre, sku, precio_total, stock_actual, categoria_nombre')
-          .eq('activo', true)
-          .order('nombre');
+  const cargarProductos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('productos_obuma')
+        .select('id, nombre, sku, precio_total, stock_actual, categoria_nombre')
+        .eq('activo', true)
+        .order('nombre');
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data && data.length > 0) {
-          const productosMap: ProductoReal[] = data.map((p: any) => ({
-            id: p.id,
-            nombre: p.nombre,
-            sku: p.sku,
-            precio: p.precio_total,
-            stock: p.stock_actual,
-            categoria: p.categoria_nombre
-          }));
-          setProductos(productosMap);
-          console.log(`✅ ChatBot: ${productosMap.length} productos cargados`);
-        }
-      } catch (error) {
-        console.error("Error cargando productos:", error);
-      } finally {
-        setCargandoProductos(false);
+      if (data && data.length > 0) {
+        const productosMap: ProductoReal[] = data.map((p: any) => ({
+          id: p.id,
+          nombre: p.nombre,
+          sku: p.sku,
+          precio: p.precio_total,
+          stock: p.stock_actual,
+          categoria: p.categoria_nombre
+        }));
+        setProductos(productosMap);
+        console.log(`✅ ChatBot: ${productosMap.length} productos cargados`);
+        return productosMap.length;
       }
+      return 0;
+    } catch (error) {
+      console.error("Error cargando productos:", error);
+      return 0;
+    }
+  };
+
+  // Cargar productos al inicio
+  useEffect(() => {
+    const inicializar = async () => {
+      setCargandoProductos(true);
+      await cargarProductos();
+      setCargandoProductos(false);
     };
-    
-    cargarProductos();
+    inicializar();
   }, []);
 
   useEffect(() => {
@@ -129,7 +137,15 @@ export default function ChatBot() {
     }
   };
 
-  // Detectar y ejecutar acciones (usando endpoints correctos de Obuma)
+  // Recargar lista de productos después de una acción
+  const recargarListaProductos = async (): Promise<boolean> => {
+    setRecargandoLista(true);
+    const count = await cargarProductos();
+    setRecargandoLista(false);
+    return count > 0;
+  };
+
+  // Detectar y ejecutar acciones
   const detectarYEjecutarAccion = async (pregunta: string): Promise<{ esAccion: boolean; respuesta: string; exitosa: boolean }> => {
     const preguntaLower = pregunta.toLowerCase();
     
@@ -145,7 +161,6 @@ export default function ChatBot() {
       }
       
       try {
-        // Obtener producto actual para mantener otros campos
         const getRes = await fetch(`/api/obuma/productos/list?codigo_sku=${sku}`);
         const getData = await getRes.json();
         const productoActual = getData.data?.[0];
@@ -154,10 +169,8 @@ export default function ChatBot() {
           return { esAccion: true, respuesta: `❌ No se encontraron datos del producto.`, exitosa: false };
         }
         
-        // Calcular precios con IVA
         const nuevoPrecioBruto = Math.round(nuevoPrecio * 1.19);
         
-        // Actualizar precio usando el endpoint PUT existente
         const updateRes = await fetch(`/api/obuma/productos/${producto.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -180,13 +193,11 @@ export default function ChatBot() {
         const data = await updateRes.json();
         
         if (updateRes.ok) {
-          // Actualizar producto localmente
-          setProductos(prev => prev.map(p => 
-            p.sku === sku ? { ...p, precio: nuevoPrecioBruto } : p
-          ));
+          // Recargar productos desde Supabase para actualizar la lista
+          await recargarListaProductos();
           return { 
             esAccion: true, 
-            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}`,
+            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}\n\n🔄 La lista de productos se ha actualizado.`,
             exitosa: true 
           };
         }
@@ -230,13 +241,12 @@ export default function ChatBot() {
         const data = await stockRes.json();
         
         if (data.success) {
-          setProductos(prev => prev.map(p => 
-            p.sku === sku ? { ...p, stock: nuevoStock } : p
-          ));
+          // Recargar productos desde Supabase para actualizar la lista
+          await recargarListaProductos();
           const direccion = diferencia > 0 ? "aumentado" : "disminuido";
           return { 
             esAccion: true, 
-            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}`,
+            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}\n\n🔄 La lista de productos se ha actualizado.`,
             exitosa: true 
           };
         }
@@ -329,7 +339,6 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
-      // Verificar si es una acción (cambiar precio, stock)
       const { esAccion, respuesta: accionRespuesta, exitosa } = await detectarYEjecutarAccion(pregunta);
       
       if (esAccion) {
@@ -344,7 +353,6 @@ export default function ChatBot() {
         await guardarEnHistorial(pregunta, accionRespuesta, 0);
         setCargando(false);
         
-        // Sugerencia proactiva después de acción exitosa
         if (exitosa) {
           const sugerencia = await sugerirStockBajo();
           if (sugerencia) {
@@ -362,7 +370,6 @@ export default function ChatBot() {
         return;
       }
       
-      // Si no es acción, consultar a DeepSeek
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,7 +382,6 @@ export default function ChatBot() {
       const data = await response.json();
       let respuestaTexto = data.respuesta || "Lo siento, no pude procesar tu pregunta.";
       
-      // Guardar en historial
       await guardarEnHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
       
       const botMsg: Mensaje = {
@@ -390,7 +396,6 @@ export default function ChatBot() {
       };
       setMensajes(prev => [...prev, botMsg]);
       
-      // Sugerencia proactiva si la pregunta era sobre productos
       if (pregunta.toLowerCase().includes('producto') || pregunta.toLowerCase().includes('tienes')) {
         const sugerencia = await sugerirStockBajo();
         if (sugerencia) {
@@ -464,6 +469,11 @@ export default function ChatBot() {
               ✅ Acción completada
             </span>
           )}
+          {recargandoLista && (
+            <span className="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">
+              🔄 Actualizando...
+            </span>
+          )}
         </div>
       </div>
     );
@@ -487,7 +497,6 @@ export default function ChatBot() {
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
       isMinimized ? 'w-80 h-14' : 'w-[550px] h-[680px]'
     }`}>
-      {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bot size={18} />
@@ -495,6 +504,11 @@ export default function ChatBot() {
           {!cargandoProductos && productos.length > 0 && (
             <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
               📦 {productos.length}
+            </span>
+          )}
+          {recargandoLista && (
+            <span className="bg-blue-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+              🔄
             </span>
           )}
         </div>
@@ -505,6 +519,24 @@ export default function ChatBot() {
             title="Ver historial"
           >
             <History size={16} />
+          </button>
+          <button
+            onClick={async () => {
+              setRecargandoLista(true);
+              await cargarProductos();
+              setRecargandoLista(false);
+              const refreshMsg: Mensaje = {
+                id: Date.now().toString(),
+                texto: `🔄 Lista actualizada: ${productos.length} productos en inventario.`,
+                esUsuario: false,
+                timestamp: new Date()
+              };
+              setMensajes(prev => [...prev, refreshMsg]);
+            }}
+            className="hover:bg-blue-700 p-1 rounded transition-colors"
+            title="Recargar productos"
+          >
+            <RefreshCw size={16} className={recargandoLista ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={() => setIsMinimized(!isMinimized)}
@@ -523,7 +555,6 @@ export default function ChatBot() {
 
       {!isMinimized && (
         <>
-          {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {cargandoProductos ? (
               <div className="flex justify-center items-center h-32">
@@ -559,7 +590,6 @@ export default function ChatBot() {
             <div ref={mensajesEndRef} />
           </div>
 
-          {/* Sugerencias rápidas */}
           <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
             <div className="flex flex-wrap gap-1">
               {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU", "Ver mi historial"].map((sug) => (
@@ -581,7 +611,6 @@ export default function ChatBot() {
             </div>
           </div>
 
-          {/* Input */}
           <div className="p-4 border-t border-slate-200 bg-white rounded-b-2xl">
             <div className="flex gap-2">
               <textarea
@@ -605,7 +634,18 @@ export default function ChatBot() {
               <span>🤖</span>
               <span>{productos.length > 0 ? `${productos.length} productos indexados` : "Cargando..."}</span>
               <button
-                onClick={() => window.location.reload()}
+                onClick={async () => {
+                  setRecargandoLista(true);
+                  await cargarProductos();
+                  setRecargandoLista(false);
+                  const refreshMsg: Mensaje = {
+                    id: Date.now().toString(),
+                    texto: `🔄 Actualizado: ${productos.length} productos en mi base de datos.`,
+                    esUsuario: false,
+                    timestamp: new Date()
+                  };
+                  setMensajes(prev => [...prev, refreshMsg]);
+                }}
                 className="text-[8px] text-blue-500 hover:text-blue-700 underline"
               >
                 ↻ actualizar
