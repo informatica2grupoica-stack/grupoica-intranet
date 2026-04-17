@@ -1,477 +1,118 @@
-"use client";
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { 
-  Plus, Loader2, CheckCircle2, PlayCircle, Trash2, AlertCircle, X, 
-  MessageSquare, Send, Briefcase, Calendar, Clock, LayoutList, Info, User, Edit3
-} from "lucide-react";
+'use client';
+import { useState } from 'react';
+import { LayoutList, KanbanSquare, GanttChartSquare } from 'lucide-react';
+import { useTareas } from './hooks/useTareas';
+import MetricasTareas from './components/MetricasTareas';
+import VistaTabla from './components/VistaTabla';
+import VistaGantt from './components/VistaGantt';
+import VistaKanban from './components/VistaKanban';
+import FormularioTarea from './components/FormularioTarea';
+
+type Vista = 'tabla' | 'gantt' | 'kanban';
 
 export default function TareasPage() {
-  const [tareas, setTareas] = useState<any[]>([]);
-  const [usuarios, setUsuarios] = useState<any[]>([]);
-  const [perfilUsuario, setPerfilUsuario] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null);
-  const [notificacion, setNotificacion] = useState<{msg: string, tipo: 'success' | 'error'} | null>(null);
-  
+  const [vista, setVista] = useState<Vista>('tabla');
   const [tareaExpandida, setTareaExpandida] = useState<string | null>(null);
-  const [comentarios, setComentarios] = useState<any[]>([]);
-  const [nuevoComentario, setNuevoComentario] = useState("");
-  const [enviandoComentario, setEnviandoComentario] = useState(false);
-  const [editandoTarea, setEditandoTarea] = useState<string | null>(null);
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const { tareas, usuarios, perfilUsuario, loading, estadisticas, fetchTareas } = useTareas();
 
-  const [form, setForm] = useState({ 
-    titulo: "", descripcion: "", prioridad: "media", asignado_a: "", proyecto: "", 
-    fecha_inicio: "", fecha_limite: "" 
-  });
-
-  const formatFecha = (fechaStr: string) => {
-    if (!fechaStr) return '--/--';
-    const date = new Date(fechaStr);
-    return date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
-
-  const puedeCrear = 
-    perfilUsuario?.rol === 'admin' || 
-    perfilUsuario?.rol === 'superuser' || 
-    perfilUsuario?.permisos?.can_create_tasks === true;
-
-  useEffect(() => {
-    if (notificacion) {
-      const timer = setTimeout(() => setNotificacion(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [notificacion]);
-
-  useEffect(() => {
-    fetchData();
-    const channel = supabase.channel('cambios-tareas')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comentarios_tareas' }, () => {
-          if (tareaExpandida) fetchComentarios(tareaExpandida);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [tareaExpandida]);
-
-  async function fetchData() {
-    const { data: { session } } = await supabase.auth.getSession();
-    let perfilActual = null;
-    if (session) {
-      const { data: p } = await supabase.from('perfiles').select('*').eq('user_id', session.user.id).single();
-      setPerfilUsuario(p);
-      perfilActual = p;
-    }
-    if (!perfilActual) return;
-
-    let query = supabase.from('tareas').select(`
-        *,
-        responsable:perfiles!tareas_asignado_a_fkey(id, nombre, apellido),
-        creador:perfiles!tareas_creado_por_fkey(id, nombre, apellido),
-        comentarios:comentarios_tareas(count)
-      `);
-
-    if (perfilActual.rol === 'user') {
-      query = query.or(`asignado_a.eq.${perfilActual.id},creado_por.eq.${perfilActual.id}`);
-    }
-    const { data: t } = await query.order('created_at', { ascending: false });
-    const { data: users } = await supabase.from('perfiles').select('id, nombre, apellido').eq('activo', true);
-    if (t) setTareas(t);
-    if (users) setUsuarios(users);
-  }
-
-  async function fetchComentarios(tareaId: string) {
-    const { data } = await supabase
-      .from('comentarios_tareas')
-      .select('*, autor:perfiles(nombre, apellido)')
-      .eq('tarea_id', tareaId)
-      .order('created_at', { ascending: true });
-    if (data) setComentarios(data);
-  }
-
-  async function enviarComentario(tareaId: string) {
-    if (!nuevoComentario.trim()) return;
-    setEnviandoComentario(true);
-    const { error } = await supabase.from('comentarios_tareas').insert([
-      { tarea_id: tareaId, perfil_id: perfilUsuario.id, contenido: nuevoComentario }
-    ]);
-    if (!error) {
-      setNuevoComentario("");
-      fetchComentarios(tareaId);
-    }
-    setEnviandoComentario(false);
-  }
-
-  async function handleActionTarea(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.asignado_a) {
-        setNotificacion({ msg: "Selecciona un responsable", tipo: 'error' });
-        return;
-    }
-    setLoading(true);
-    try {
-      if (editandoTarea) {
-        const { error } = await supabase.from('tareas').update({
-          ...form,
-          fecha_inicio: form.fecha_inicio || null,
-          fecha_limite: form.fecha_limite || null,
-          proyecto: form.proyecto || null
-        }).eq('id', editandoTarea);
-        if (error) throw error;
-        setNotificacion({ msg: "Tarea actualizada", tipo: 'success' });
-      } else {
-        const { error } = await supabase.from('tareas').insert([{ 
-          ...form, 
-          creado_por: perfilUsuario.id, 
-          estado: 'pendiente',
-          fecha_inicio: form.fecha_inicio || null,
-          fecha_limite: form.fecha_limite || null,
-          proyecto: form.proyecto || null
-        }]);
-        if (error) throw error;
-        setNotificacion({ msg: "Tarea asignada correctamente", tipo: 'success' });
-      }
-      
-      setForm({ titulo: "", descripcion: "", prioridad: "media", asignado_a: "", proyecto: "", fecha_inicio: "", fecha_limite: "" });
-      setEditandoTarea(null);
-      fetchData();
-    } catch (error: any) { 
-        setNotificacion({ msg: "Error: " + error.message, tipo: 'error' });
-    } finally { setLoading(false); }
-  }
-
-  const cargarEdicion = (t: any) => {
-    setEditandoTarea(t.id);
-    setForm({
-      titulo: t.titulo,
-      descripcion: t.descripcion || "",
-      prioridad: t.prioridad || "media",
-      asignado_a: t.asignado_a,
-      proyecto: t.proyecto || "",
-      fecha_inicio: t.fecha_inicio || "",
-      fecha_limite: t.fecha_limite || ""
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  async function actualizarEstado(id: string, nuevoEstado: string) {
-    try {
-      const { error } = await supabase.from('tareas').update({ estado: nuevoEstado }).eq('id', id).select();
-      if (error) {
-        setNotificacion({ msg: "Sin permisos para actualizar", tipo: 'error' });
-        return;
-      }
-      setNotificacion({ msg: `Estado actualizado`, tipo: 'success' });
-      await fetchData();
-    } catch (err: any) {
-      setNotificacion({ msg: "Error inesperado", tipo: 'error' });
-    }
-  }
-
-  async function eliminarTarea(id: string) {
-    const { error } = await supabase.from('tareas').delete().eq('id', id);
-    if (error) {
-        setNotificacion({ msg: "No puedes eliminar esta tarea", tipo: 'error' });
-    } else {
-        setNotificacion({ msg: "Tarea eliminada", tipo: 'success' });
-    }
-    setConfirmarEliminar(null);
-    fetchData();
-  }
-
-  const getEstadoConfig = (tarea: any) => {
-    const hoy = new Date();
-    const limite = tarea.fecha_limite ? new Date(tarea.fecha_limite) : null;
-    if (tarea.estado === 'completada') return { label: 'Completado', css: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
-    if (limite && limite < hoy && tarea.estado !== 'completada') return { label: 'Atrasado', css: 'bg-rose-100 text-rose-700 border-rose-200 animate-pulse' };
-    if (tarea.estado === 'en_proceso') return { label: 'En Proceso', css: 'bg-amber-100 text-amber-700 border-amber-200' };
-    return { label: 'Pendiente', css: 'bg-slate-100 text-slate-600 border-slate-200' };
-  };
-
-  const tareaSeleccionada = tareas.find(t => t.id === tareaExpandida);
+  const puedeCrear = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-2 md:px-6 py-4 md:py-10 space-y-6 md:space-y-10 animate-in fade-in duration-700">
+    <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
       
-      {notificacion && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[150] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-md border animate-in slide-in-from-top-full ${
-          notificacion.tipo === 'success' ? 'bg-emerald-600/90 border-emerald-400 text-white' : 'bg-rose-600/90 border-rose-400 text-white'
-        }`}>
-          {notificacion.tipo === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-          <span className="text-xs font-bold uppercase tracking-wider">{notificacion.msg}</span>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-100 pb-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-200">
-              <LayoutList size={20} />
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase italic">
-              Operaciones <span className="text-blue-600">Hub</span>
-            </h1>
-          </div>
-          <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-[0.3em]">Gestión de flujo de trabajo técnico</p>
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase italic">
+            Gestión de <span className="text-blue-600">Tareas</span>
+          </h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
+            Organiza, asigna y da seguimiento
+          </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={() => setVista('tabla')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
+              vista === 'tabla' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            }`}
+          >
+            <LayoutList size={14} /> Tabla
+          </button>
+          <button
+            onClick={() => setVista('gantt')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
+              vista === 'gantt' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            }`}
+          >
+            <GanttChartSquare size={14} /> Gantt
+          </button>
+          <button
+            onClick={() => setVista('kanban')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${
+              vista === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            }`}
+          >
+            <KanbanSquare size={14} /> Kanban
+          </button>
         </div>
       </div>
 
-      {/* FORMULARIO */}
+      {/* Métricas */}
+      <MetricasTareas estadisticas={estadisticas} />
+
+      {/* Botón nueva tarea */}
       {puedeCrear && (
-        <section className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:shadow-blue-900/5">
-          <form onSubmit={handleActionTarea} className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest">
-                {editandoTarea ? "Modificar Tarea" : "Nueva Asignación"}
-              </span>
-              {editandoTarea && (
-                <button type="button" onClick={() => {setEditandoTarea(null); setForm({titulo:"", descripcion:"", prioridad:"media", asignado_a:"", proyecto:"", fecha_inicio:"", fecha_limite:""})}} className="text-[10px] font-bold text-rose-500 uppercase">Cancelar Edición</button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
-              <input 
-                className="lg:col-span-5 bg-slate-50 border-transparent focus:border-blue-500 focus:bg-white border rounded-2xl px-5 py-3 text-sm font-bold transition-all outline-none"
-                placeholder="Nombre de la tarea..." required
-                value={form.titulo} onChange={e => setForm({...form, titulo: e.target.value})}
-              />
-              <select required className="lg:col-span-3 bg-slate-50 border-transparent focus:border-blue-500 focus:bg-white border rounded-2xl px-4 py-3 text-sm font-bold outline-none cursor-pointer" value={form.asignado_a} onChange={e => setForm({...form, asignado_a: e.target.value})}>
-                  <option value="">Responsable...</option>
-                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>)}
-              </select>
-              <div className="lg:col-span-4 flex gap-2">
-                <div className="flex-1 min-w-[120px] relative group/input">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
-                  <input 
-                    type="date" 
-                    title="Fecha Inicio" 
-                    className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer relative z-0" 
-                    value={form.fecha_inicio} 
-                    onChange={e => setForm({...form, fecha_inicio: e.target.value})}
-                    onClick={(e) => (e.target as any).showPicker?.()}
-                  />
-                </div>
-                <div className="flex-1 min-w-[120px] relative group/input">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
-                  <input 
-                    type="date" 
-                    title="Fecha Límite" 
-                    className="w-full bg-slate-50 border-transparent border rounded-2xl pl-9 pr-2 py-3 text-[11px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer relative z-0" 
-                    value={form.fecha_limite} 
-                    onChange={e => setForm({...form, fecha_limite: e.target.value})}
-                    onClick={(e) => (e.target as any).showPicker?.()}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-               <textarea 
-                className="lg:col-span-7 bg-slate-50 border-transparent focus:border-blue-500 focus:bg-white border rounded-2xl px-5 py-3 text-sm font-bold outline-none h-14 lg:h-14 resize-none transition-all"
-                placeholder="Escribe aquí el detalle de lo que se debe hacer..."
-                value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})}
-              />
-              <div className="lg:col-span-3 relative group/input">
-                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  className="w-full bg-slate-50 border-transparent focus:border-blue-500 focus:bg-white border rounded-2xl pl-10 pr-5 py-3 text-sm font-bold outline-none transition-all"
-                  placeholder="Proyecto..."
-                  value={form.proyecto} onChange={e => setForm({...form, proyecto: e.target.value})}
-                />
-              </div>
-              <button type="submit" disabled={loading} className={`lg:col-span-2 ${editandoTarea ? 'bg-amber-500' : 'bg-blue-600'} text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg`}>
-                  {loading ? <Loader2 className="animate-spin w-4 h-4" /> : (editandoTarea ? <Edit3 size={18}/> : <Plus size={18}/>)} {editandoTarea ? 'Guardar' : 'Asignar'}
-              </button>
-            </div>
-          </form>
-        </section>
+        <button
+          onClick={() => setMostrarFormulario(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
+        >
+          + Nueva Tarea
+        </button>
       )}
 
-      {/* TABLA */}
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto overflow-y-hidden">
-          <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tarea & Proyecto</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Cronograma</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Estado</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {tareas.map((t) => {
-                const esAsignado = String(perfilUsuario?.id || "").trim() === String(t.asignado_a || "").trim();
-                const esAdmin = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
-                const status = getEstadoConfig(t);
+      {/* Vista seleccionada */}
+      {vista === 'tabla' && (
+        <VistaTabla 
+          tareas={tareas} 
+          usuarios={usuarios}
+          perfilUsuario={perfilUsuario}
+          onTaskClick={setTareaExpandida}
+          onTaskUpdate={fetchTareas}
+        />
+      )}
+      
+      {vista === 'gantt' && (
+        <VistaGantt tareas={tareas} onTaskClick={setTareaExpandida} />
+      )}
+      
+      {vista === 'kanban' && (
+        <VistaKanban 
+          tareas={tareas} 
+          onTaskUpdate={fetchTareas}
+          onTaskClick={setTareaExpandida}
+        />
+      )}
 
-                return (
-                  <tr key={t.id} className="group hover:bg-blue-50/30 transition-colors relative">
-                    <td className="px-6 py-4 cursor-pointer" onClick={() => { setTareaExpandida(t.id); fetchComentarios(t.id); }}>
-                      <div className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-700 transition-colors">{t.titulo}</div>
-                      {t.proyecto && (
-                        <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-blue-500 uppercase bg-blue-50 px-2 py-0.5 rounded-md italic">
-                          <Briefcase size={8}/> {t.proyecto}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white text-[10px] font-black shadow-inner flex-shrink-0">
-                              {t.responsable?.nombre?.[0]}{t.responsable?.apellido?.[0]}
-                          </div>
-                          <div className="flex flex-col truncate">
-                            <span className="text-[11px] font-black text-slate-700 uppercase leading-none truncate">{t.responsable?.nombre}</span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Operativo</span>
-                          </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg w-fit">
-                          <Calendar size={10} /> {formatFecha(t.fecha_inicio)}
-                        </div>
-                        <div className={`flex items-center gap-2 text-[9px] font-bold px-2 py-0.5 rounded-lg w-fit ${status.label === 'Atrasado' ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-500'}`}>
-                          <Clock size={10} /> {formatFecha(t.fecha_limite)}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${status.css}`}>
-                          {status.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1.5">
-                          <button onClick={() => { setTareaExpandida(t.id); fetchComentarios(t.id); }} className="p-2 bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-all relative">
-                              <MessageSquare size={14} />
-                              {t.comentarios?.[0]?.count > 0 && <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{t.comentarios[0].count}</span>}
-                          </button>
-                          
-                          {(esAsignado || esAdmin) && (
-                              <>
-                                  {t.estado === 'pendiente' && (
-                                      <button onClick={() => actualizarEstado(t.id, 'en_proceso')} className="p-2 bg-blue-600 text-white hover:bg-slate-900 rounded-xl shadow-md transition-all" title="Iniciar"><PlayCircle size={14} /></button>
-                                  )}
-                                  {t.estado === 'en_proceso' && (
-                                      <button onClick={() => actualizarEstado(t.id, 'completada')} className="p-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl shadow-md transition-all" title="Finalizar"><CheckCircle2 size={14} /></button>
-                                  )}
-                              </>
-                          )}
-                          {esAdmin && (
-                            <>
-                              <button onClick={() => cargarEdicion(t)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all" title="Editar"><Edit3 size={14} /></button>
-                              <button onClick={() => setConfirmarEliminar(t.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Eliminar"><Trash2 size={14} /></button>
-                            </>
-                          )}
-                      </div>
+      {/* Modal de formulario */}
+      {mostrarFormulario && (
+        <FormularioTarea
+          usuarios={usuarios}
+          perfilUsuario={perfilUsuario}
+          onClose={() => setMostrarFormulario(false)}
+          onSuccess={() => {
+            fetchTareas();
+            setMostrarFormulario(false);
+          }}
+        />
+      )}
 
-                      {confirmarEliminar === t.id && (
-                          <div className="absolute inset-0 z-20 bg-slate-900/95 backdrop-blur-sm flex items-center justify-center gap-4 animate-in zoom-in-95 duration-200">
-                              <span className="text-white text-[10px] font-black uppercase tracking-widest">¿Eliminar?</span>
-                              <div className="flex gap-2">
-                                <button onClick={() => setConfirmarEliminar(null)} className="px-3 py-1.5 text-white text-[9px] font-black border border-white/20 rounded-lg">No</button>
-                                <button onClick={() => eliminarTarea(t.id)} className="px-3 py-1.5 bg-rose-500 text-white text-[9px] font-black rounded-lg">Sí, Borrar</button>
-                              </div>
-                          </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* DRAWER LATERAL */}
+      {/* Drawer de detalle (implementar después) */}
       {tareaExpandida && (
-        <>
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] animate-in fade-in duration-300" onClick={() => setTareaExpandida(null)} />
-          <div className="fixed inset-y-0 right-0 w-full sm:w-[400px] md:w-[450px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[120] flex flex-col animate-in slide-in-from-right duration-500">
-              
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white flex-shrink-0">
-                  <div className="flex flex-col truncate">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Detalle de Tarea</span>
-                      <h3 className="text-lg font-black text-slate-900 uppercase italic tracking-tight leading-tight truncate">
-                        {tareaSeleccionada?.titulo}
-                      </h3>
-                  </div>
-                  <button onClick={() => setTareaExpandida(null)} className="w-10 h-10 flex-shrink-0 flex items-center justify-center hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-2xl transition-all"><X size={20}/></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-slate-200">
-                  <section className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-2 text-slate-400">
-                      <Info size={14} />
-                      <span className="text-[9px] font-black uppercase tracking-widest">Requerimientos</span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-600 leading-relaxed whitespace-pre-wrap break-words">
-                      {tareaSeleccionada?.descripcion || "Sin descripción."}
-                    </p>
-                  </section>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex items-center gap-2 text-slate-400 mb-1"><Briefcase size={12}/> <span className="text-[8px] font-black uppercase">Proyecto</span></div>
-                      <div className="text-[10px] font-bold text-slate-800 uppercase truncate">{tareaSeleccionada?.proyecto || 'General'}</div>
-                    </div>
-                    <div className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex items-center gap-2 text-slate-400 mb-1"><User size={12}/> <span className="text-[8px] font-black uppercase">Origen</span></div>
-                      <div className="text-[10px] font-bold text-slate-800 uppercase truncate">{tareaSeleccionada?.creador?.nombre}</div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-slate-100 w-full" />
-
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-slate-400 mb-2">
-                      <MessageSquare size={14} />
-                      <span className="text-[9px] font-black uppercase tracking-widest">Actualizaciones</span>
-                    </div>
-
-                    {comentarios.length === 0 && (
-                      <div className="text-center py-6 opacity-20 flex flex-col items-center">
-                        <MessageSquare size={24} className="mb-2" />
-                        <p className="text-[9px] font-black uppercase">Sin mensajes</p>
-                      </div>
-                    )}
-
-                    <div className="space-y-4">
-                      {comentarios.map(c => (
-                          <div key={c.id} className="flex flex-col w-full">
-                              <div className={`max-w-[90%] p-3 rounded-2xl border shadow-sm ${
-                                c.perfil_id === perfilUsuario.id 
-                                ? 'bg-blue-600 text-white border-blue-500 self-end rounded-tr-none' 
-                                : 'bg-slate-50 text-slate-800 border-slate-100 self-start rounded-tl-none'
-                              }`}>
-                                  <div className="flex items-center gap-2 mb-1 opacity-70">
-                                    <span className="text-[7px] font-black uppercase">{c.autor?.nombre} {c.autor?.apellido}</span>
-                                    <span className="text-[7px] font-bold">{formatFecha(c.created_at)}</span>
-                                  </div>
-                                  <p className="text-[10px] font-bold leading-relaxed break-words">{c.contenido}</p>
-                              </div>
-                          </div>
-                      ))}
-                    </div>
-                  </div>
-              </div>
-
-              <div className="p-4 md:p-6 bg-white border-t border-slate-100 flex-shrink-0">
-                  <div className="relative flex gap-2">
-                    <input 
-                        value={nuevoComentario} onChange={(e) => setNuevoComentario(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && enviarComentario(tareaExpandida)}
-                        placeholder="Mensaje..."
-                        className="flex-1 bg-slate-50 border border-transparent rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
-                    />
-                    <button disabled={enviandoComentario} onClick={() => enviarComentario(tareaExpandida)} className="w-11 h-11 bg-blue-600 text-white rounded-2xl flex items-center justify-center hover:bg-slate-900 transition-all shadow-lg flex-shrink-0">
-                        {enviandoComentario ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send size={16} />}
-                    </button>
-                  </div>
-              </div>
-          </div>
-        </>
+        // Aquí iría el drawer de detalle de tarea
+        <div>Drawer de detalle - Pendiente implementar</div>
       )}
     </div>
   );
