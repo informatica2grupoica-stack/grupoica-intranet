@@ -15,7 +15,8 @@ import {
   ExternalLink,
   CheckSquare,
   Truck,
-  TrendingUp // Importado para el Historial de Precios
+  TrendingUp,
+  BarChart3  // Agregado para el Dashboard
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -73,8 +74,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "Analisis de productos",
       items: [
+        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },  // ← NUEVO DASHBOARD
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
-        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" } // <--- NUEVA OPCIÓN
+        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" }
       ]
     },
     {
