@@ -2,15 +2,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Minimize2, Maximize2, Bot, Package, Hash, DollarSign, Box } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface Mensaje {
   id: string;
   texto: string;
   esUsuario: boolean;
   timestamp: Date;
-  esLista?: boolean;
-  productos?: any[];
 }
 
 interface ProductoReal {
@@ -19,6 +18,7 @@ interface ProductoReal {
   precio: number;
   stock: number;
   categoria?: string;
+  fuente?: 'supabase' | 'obuma';
 }
 
 export default function ChatBot() {
@@ -35,27 +35,75 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [cargando, setCargando] = useState(false);
   const [productosReales, setProductosReales] = useState<ProductoReal[]>([]);
+  const [fuenteDatos, setFuenteDatos] = useState<'supabase' | 'obuma'>('supabase');
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar productos desde Supabase
+  // Cargar productos desde Supabase (principal)
+  const cargarDesdeSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('productos_obuma')
+        .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+        .eq('activo', true)
+        .order('nombre');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const productos = data.map((p: any) => ({
+          nombre: p.nombre,
+          sku: p.sku,
+          precio: p.precio_total,
+          stock: p.stock_actual,
+          categoria: p.categoria_nombre,
+          fuente: 'supabase' as const
+        }));
+        setProductosReales(productos);
+        setFuenteDatos('supabase');
+        console.log(`✅ ChatBot: ${productos.length} productos desde Supabase`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error cargando desde Supabase:", error);
+      return false;
+    }
+  };
+
+  // Fallback: Cargar desde Obuma API
+  const cargarDesdeObuma = async () => {
+    try {
+      const response = await fetch('/api/obuma/productos/list?limit=5000');
+      const data = await response.json();
+      
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        const productos = data.data.map((p: any) => ({
+          nombre: p.nombre || p.producto_nombre || '',
+          sku: p.sku || p.producto_codigo_comercial || '',
+          precio: p.precio_total || p.producto_precio_clp_total || 0,
+          stock: p.stock_actual || 0,
+          categoria: p.categoria_nombre || '',
+          fuente: 'obuma' as const
+        }));
+        setProductosReales(productos);
+        setFuenteDatos('obuma');
+        console.log(`✅ ChatBot: ${productos.length} productos desde Obuma API (fallback)`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error cargando desde Obuma:", error);
+      return false;
+    }
+  };
+
+  // Cargar productos: primero Supabase, si falla Obuma
   useEffect(() => {
     const cargarProductos = async () => {
-      try {
-        const response = await fetch('/api/obuma/productos/list?limit=5000');
-        const data = await response.json();
-        if (data.data && Array.isArray(data.data)) {
-          const productos = data.data.map((p: any) => ({
-            nombre: p.nombre || p.producto_nombre || '',
-            sku: p.sku || p.producto_codigo_comercial || '',
-            precio: p.precio_total || p.producto_precio_clp_total || 0,
-            stock: p.stock_actual || 0,
-            categoria: p.categoria_nombre || ''
-          }));
-          setProductosReales(productos);
-          console.log(`✅ ChatBot: ${productos.length} productos cargados`);
-        }
-      } catch (error) {
-        console.error("Error cargando productos:", error);
+      const success = await cargarDesdeSupabase();
+      if (!success) {
+        console.log("⚠️ Supabase no disponible, usando Obuma API...");
+        await cargarDesdeObuma();
       }
     };
     
@@ -65,15 +113,6 @@ export default function ChatBot() {
   useEffect(() => {
     mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
-
-  // Formatear respuesta en lista si es necesario
-  const formatearRespuesta = (respuesta: string, productos?: any[]) => {
-    // Si la respuesta es muy larga y parece una lista, la formateamos
-    if (respuesta.includes('\n') && respuesta.length > 300) {
-      return respuesta.replace(/\n/g, '<br/>');
-    }
-    return respuesta;
-  };
 
   const enviarMensaje = async () => {
     if (!input.trim() || cargando) return;
@@ -97,7 +136,8 @@ export default function ChatBot() {
         body: JSON.stringify({ 
           pregunta,
           contexto: {
-            productos: productosReales
+            productos: productosReales,
+            fuente: fuenteDatos
           }
         })
       });
@@ -105,6 +145,11 @@ export default function ChatBot() {
       const data = await response.json();
       
       let respuestaTexto = data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.";
+      
+      // Agregar nota de fuente si viene de Obuma (fallback)
+      if (fuenteDatos === 'obuma' && !respuestaTexto.includes('Obuma')) {
+        respuestaTexto += '\n\n📌 *Nota: Consultando directamente desde Obuma API*';
+      }
       
       const botMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
@@ -134,11 +179,22 @@ export default function ChatBot() {
     }
   };
 
-  // Renderizar mensaje con formato mejorado
+  const recargarProductos = async () => {
+    const success = await cargarDesdeSupabase();
+    if (!success) {
+      await cargarDesdeObuma();
+    }
+    const refreshMsg: Mensaje = {
+      id: Date.now().toString(),
+      texto: `🔄 Actualizado: ${productosReales.length} productos (fuente: ${fuenteDatos === 'supabase' ? 'Supabase' : 'Obuma API'}).`,
+      esUsuario: false,
+      timestamp: new Date()
+    };
+    setMensajes(prev => [...prev, refreshMsg]);
+  };
+
   const renderMensaje = (msg: Mensaje) => {
     let contenido = msg.texto;
-    
-    // Mejorar formato de listas
     contenido = contenido.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     contenido = contenido.replace(/\n/g, '<br/>');
     contenido = contenido.replace(/^\d+\. /gm, '• ');
@@ -180,14 +236,17 @@ export default function ChatBot() {
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
       isMinimized ? 'w-80 h-14' : 'w-[450px] h-[600px]'
     }`}>
-      {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-bold text-sm">Asistente Obuma IA</span>
           {productosReales.length > 0 && (
-            <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
-              📦 {productosReales.length}
+            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+              fuenteDatos === 'supabase' 
+                ? 'bg-emerald-400/30' 
+                : 'bg-amber-400/30'
+            }`}>
+              {fuenteDatos === 'supabase' ? '📦' : '⚠️'} {productosReales.length}
             </span>
           )}
         </div>
@@ -209,7 +268,6 @@ export default function ChatBot() {
 
       {!isMinimized && (
         <>
-          {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {mensajes.map((msg) => (
               <div
@@ -233,7 +291,6 @@ export default function ChatBot() {
             <div ref={mensajesEndRef} />
           </div>
 
-          {/* Sugerencias rápidas */}
           <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
             <div className="flex flex-wrap gap-1">
               {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU"].map((sug) => (
@@ -251,7 +308,6 @@ export default function ChatBot() {
             </div>
           </div>
 
-          {/* Input */}
           <div className="p-4 border-t border-slate-200 bg-white rounded-b-2xl">
             <div className="flex gap-2">
               <textarea
@@ -273,28 +329,13 @@ export default function ChatBot() {
             </div>
             <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
               <span>🤖</span>
-              <span>{productosReales.length > 0 ? `${productosReales.length} productos disponibles` : "Cargando..."}</span>
+              <span>
+                {productosReales.length > 0 
+                  ? `${productosReales.length} productos (${fuenteDatos === 'supabase' ? 'Supabase' : 'Obuma API'})` 
+                  : "Cargando..."}
+              </span>
               <button
-                onClick={async () => {
-                  const response = await fetch('/api/obuma/productos/list?limit=5000');
-                  const data = await response.json();
-                  if (data.data) {
-                    const productos = data.data.map((p: any) => ({
-                      nombre: p.nombre || p.producto_nombre || '',
-                      sku: p.sku || p.producto_codigo_comercial || '',
-                      precio: p.precio_total || p.producto_precio_clp_total || 0,
-                      stock: p.stock_actual || 0
-                    }));
-                    setProductosReales(productos);
-                    const refreshMsg: Mensaje = {
-                      id: Date.now().toString(),
-                      texto: `🔄 Actualizado: ${productos.length} productos en mi base de datos.`,
-                      esUsuario: false,
-                      timestamp: new Date()
-                    };
-                    setMensajes(prev => [...prev, refreshMsg]);
-                  }
-                }}
+                onClick={recargarProductos}
                 className="text-[8px] text-blue-500 hover:text-blue-700 underline"
               >
                 ↻ actualizar
