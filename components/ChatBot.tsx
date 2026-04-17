@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot } from 'lucide-react';
 
 interface Mensaje {
   id: string;
@@ -39,13 +39,14 @@ export default function ChatBot() {
   useEffect(() => {
     const cargarProductos = async () => {
       try {
-        const response = await fetch('/api/obuma/productos/list?limit=10000');
+        const response = await fetch('/api/obuma/productos/list?limit=5000');
         const data = await response.json();
         if (data.data && Array.isArray(data.data)) {
+          // ✅ CORREGIDO: Usar los campos correctos de la API enriquecida
           const productos = data.data.map((p: any) => ({
-            nombre: p.producto_nombre || '',
-            sku: p.producto_codigo_comercial || '',
-            precio: p.producto_precio_clp_total || 0,
+            nombre: p.nombre || p.producto_nombre || '',
+            sku: p.sku || p.producto_codigo_comercial || '',
+            precio: p.precio_total || p.producto_precio_clp_total || 0,
             stock: p.stock_actual || 0,
             categoria: p.categoria_nombre || ''
           }));
@@ -80,14 +81,14 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
-      // Enviar pregunta junto con productos reales como contexto
+      // ✅ CORREGIDO: Enviar TODOS los productos, no solo 50
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           pregunta,
           contexto: {
-            productos: productosReales.slice(0, 50) // Enviamos hasta 50 productos como contexto
+            productos: productosReales // Enviamos TODOS los productos
           }
         })
       });
@@ -96,7 +97,6 @@ export default function ChatBot() {
       
       let respuestaTexto = data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.";
       
-      // Si la respuesta es muy larga, formatearla mejor
       if (respuestaTexto.length > 500 && !respuestaTexto.includes('\n')) {
         respuestaTexto = respuestaTexto.slice(0, 500) + '...';
       }
@@ -147,7 +147,6 @@ export default function ChatBot() {
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
       isMinimized ? 'w-80 h-14' : 'w-96 h-[550px]'
     }`}>
-      {/* Header */}
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bot size={18} />
@@ -176,7 +175,6 @@ export default function ChatBot() {
 
       {!isMinimized && (
         <>
-          {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
             {mensajes.map((msg) => (
               <div
@@ -213,14 +211,13 @@ export default function ChatBot() {
             <div ref={mensajesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="p-4 border-t border-slate-200 bg-white rounded-b-2xl">
             <div className="flex gap-2">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Escribe tu pregunta... Ej: '¿Qué productos tengo?' o 'Busca el SKU 50...'"
+                placeholder="Escribe tu pregunta... Ej: '¿Cuántos productos tenemos?' o 'Busca el SKU...'"
                 className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
                 rows={1}
                 disabled={cargando}
@@ -238,13 +235,13 @@ export default function ChatBot() {
               <span>{productosReales.length > 0 ? `${productosReales.length} productos en inventario` : "Conectando con Obuma..."}</span>
               <button
                 onClick={async () => {
-                  const response = await fetch('/api/obuma/productos/list?limit=10000');
+                  const response = await fetch('/api/obuma/productos/list?limit=5000');
                   const data = await response.json();
                   if (data.data) {
                     const productos = data.data.map((p: any) => ({
-                      nombre: p.producto_nombre || '',
-                      sku: p.producto_codigo_comercial || '',
-                      precio: p.producto_precio_clp_total || 0,
+                      nombre: p.nombre || p.producto_nombre || '',
+                      sku: p.sku || p.producto_codigo_comercial || '',
+                      precio: p.precio_total || p.producto_precio_clp_total || 0,
                       stock: p.stock_actual || 0
                     }));
                     setProductosReales(productos);
