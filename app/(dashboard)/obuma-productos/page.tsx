@@ -123,6 +123,21 @@ export default function ObumaProductosListado() {
     }
   };
 
+  // --- Detectar si venimos de crear un producto ---
+  useEffect(() => {
+    const fromCreate = sessionStorage.getItem('fromCreate');
+    if (fromCreate === 'true') {
+      sessionStorage.removeItem('fromCreate');
+      fetchProductos();
+    }
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('created') === 'true') {
+      fetchProductos();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // --- Sincronización con Supabase ---
   const sincronizarProductos = async () => {
     setSincronizando(true);
@@ -251,7 +266,6 @@ export default function ObumaProductosListado() {
     } finally { setSaving(null); }
   };
 
-  // Formatear precio
   const formatPrice = (price: number) => {
     return `$${price?.toLocaleString('es-CL') || 0}`;
   };
@@ -259,7 +273,6 @@ export default function ObumaProductosListado() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
-      {/* --- HEADER DE CONTROL --- */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
         
         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
@@ -275,13 +288,13 @@ export default function ObumaProductosListado() {
           </div>
 
           <Link 
-            href="/obuma-productos/nuevo" 
+            href="/obuma-productos/nuevo"
+            onClick={() => sessionStorage.setItem('fromCreate', 'true')}
             className="bg-[#00338d] hover:bg-[#00266b] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
           >
             <Plus size={24} />
           </Link>
 
-          {/* Botón de sincronización */}
           <button
             onClick={sincronizarProductos}
             disabled={sincronizando}
@@ -314,7 +327,6 @@ export default function ObumaProductosListado() {
         </div>
       </div>
 
-      {/* --- TABLA DE PRODUCTOS --- */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[800px]">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">

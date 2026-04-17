@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 // Importar componentes de IA
@@ -59,6 +60,7 @@ const initialState: FormState = {
 };
 
 export default function NuevoProductoForm() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [generatingSku, setGeneratingSku] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
@@ -154,16 +156,19 @@ export default function NuevoProductoForm() {
       const result = await res.json();
       if (res.ok) {
         setStatus({ type: 'success', msg: "¡Producto creado en Obuma!" });
-        setForm({ ...initialState, categoria_id: form.categoria_id, subcategoria_id: form.subcategoria_id });
-        // Recargar productos existentes para actualizar la lista
-        const resProd = await fetch('/api/obuma/productos/list?limit=1000');
-        const dataProd = await resProd.json();
-        setProductosExistentes(dataProd.data || []);
+        
+        // Redirigir al listado después de 1.5 segundos
+        setTimeout(() => {
+          router.push('/obuma-productos?created=true');
+        }, 1500);
       } else {
         setStatus({ type: 'error', msg: result.error || "Error al guardar" });
       }
-    } catch (error) { setStatus({ type: 'error', msg: "Error crítico de servidor" }); }
-    finally { setLoading(false); }
+    } catch (error) { 
+      setStatus({ type: 'error', msg: "Error crítico de servidor" }); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   // Obtener nombre de categoría para el prefijo
@@ -174,7 +179,6 @@ export default function NuevoProductoForm() {
     <div className="min-h-screen bg-[#f8fafc] p-6 lg:p-12 text-slate-700 font-sans">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* AVISO DE SIN PERMISOS */}
         {!loadingPermisos && !puedeCrear && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-700 mb-2 shadow-sm animate-in fade-in slide-in-from-top-2">
             <Lock size={16} />
@@ -192,7 +196,6 @@ export default function NuevoProductoForm() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8">
           
-          {/* BANNER NOMBRE CON BOTÓN AUTOCOMPLETAR */}
           <div className="p-6 bg-[#00338d] rounded-3xl text-white shadow-lg flex justify-between items-center">
             <div className="space-y-1 flex-1">
               <label className="text-[9px] font-black uppercase opacity-60">Nombre final Obuma</label>
@@ -209,13 +212,11 @@ export default function NuevoProductoForm() {
             </div>
           </div>
 
-          {/* ALERTA DE PRODUCTO DUPLICADO */}
           <AlertaDuplicado
             nombreProducto={form.nombre_completo}
             productosExistentes={productosExistentes}
           />
 
-          {/* GRID NOMBRE */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(['c1', 'c2', 'c3', 'c4'] as const).map((f, i) => (
               <div key={f} className="flex flex-col gap-1">
@@ -225,7 +226,6 @@ export default function NuevoProductoForm() {
             ))}
           </div>
 
-          {/* DATOS MAESTROS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo de Item</label>
@@ -235,7 +235,6 @@ export default function NuevoProductoForm() {
               </select>
             </div>
             
-            {/* SKU Obuma CON BOTÓN IA */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-[#00338d] uppercase ml-2">SKU Obuma</label>
               <div className="relative">
@@ -266,7 +265,6 @@ export default function NuevoProductoForm() {
             </div>
           </div>
 
-          {/* PRECIOS CON LOGICA DE IVA */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Subcategoria *</label>
@@ -276,7 +274,6 @@ export default function NuevoProductoForm() {
               </select>
             </div>
 
-            {/* PRECIO COSTO */}
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase italic">Precio Costo</label>
@@ -290,7 +287,6 @@ export default function NuevoProductoForm() {
               </div>
             </div>
 
-            {/* PRECIO VENTA */}
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
                 <label className="text-[10px] font-black text-[#00338d] uppercase italic">Precio Venta</label>
@@ -305,7 +301,6 @@ export default function NuevoProductoForm() {
             </div>
           </div>
 
-          {/* OPCIONES STOCK Y WEB */}
           <div className="flex flex-wrap items-center gap-8 py-4 px-2 border-t border-slate-100">
             {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
               <label key={key} className={`flex items-center gap-3 cursor-pointer group ${!puedeCrear ? 'pointer-events-none opacity-40' : ''}`}>
@@ -346,7 +341,6 @@ export default function NuevoProductoForm() {
                 {loading ? <Loader2 className="animate-spin" size={20} /> : (puedeCrear ? <Save size={20} /> : <Lock size={20} />)} 
                 {puedeCrear ? "Crear en Obuma" : "Sin Permisos"}
               </button>
-
             </div>
           </div>
         </form>

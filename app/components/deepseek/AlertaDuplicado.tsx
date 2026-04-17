@@ -7,6 +7,8 @@ import { AlertTriangle, X } from 'lucide-react';
 interface ProductoSimilar {
   producto_nombre: string;
   producto_codigo_comercial: string;
+  sku?: string;
+  nombre?: string;
 }
 
 interface AlertaDuplicadoProps {
@@ -21,77 +23,77 @@ export default function AlertaDuplicado({
   onClose
 }: AlertaDuplicadoProps) {
   const [duplicados, setDuplicados] = useState<ProductoSimilar[]>([]);
-  const [cargando, setCargando] = useState(false);
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (!nombreProducto || nombreProducto.length < 5) {
+    if (!nombreProducto || nombreProducto.length < 3) {
       setDuplicados([]);
       return;
     }
 
-    const verificar = async () => {
-      setCargando(true);
-      try {
-        const response = await fetch('/api/deepseek/verificar-producto', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nombreProducto,
-            productosExistentes
-          })
-        });
-        const data = await response.json();
+    // Búsqueda local inmediata (sin llamar a la API)
+    const buscarLocalmente = () => {
+      const nombreLower = nombreProducto.toLowerCase();
+      const similares = productosExistentes.filter(p => {
+        const nombreExistente = (p.nombre || p.producto_nombre || '').toLowerCase();
+        const skuExistente = (p.sku || p.producto_codigo_comercial || '').toLowerCase();
         
-        if (data.existe && data.productosSimilares?.length > 0) {
-          setDuplicados(data.productosSimilares);
-          setVisible(true);
-        } else {
-          setDuplicados([]);
+        // Buscar coincidencia parcial (al menos 3 caracteres coincidentes)
+        if (nombreLower.length >= 3) {
+          return nombreExistente.includes(nombreLower) || 
+                 nombreLower.includes(nombreExistente) ||
+                 skuExistente === nombreLower;
         }
-      } catch (error) {
-        console.error("Error verificando duplicados:", error);
-      } finally {
-        setCargando(false);
+        return false;
+      }).slice(0, 5);
+      
+      if (similares.length > 0) {
+        const duplicadosMap = similares.map(p => ({
+          producto_nombre: p.nombre || p.producto_nombre || 'Sin nombre',
+          producto_codigo_comercial: p.sku || p.producto_codigo_comercial || 'Sin SKU'
+        }));
+        setDuplicados(duplicadosMap);
+        setVisible(true);
+      } else {
+        setDuplicados([]);
       }
     };
 
-    const timeout = setTimeout(verificar, 800); // Debounce
+    const timeout = setTimeout(buscarLocalmente, 500);
     return () => clearTimeout(timeout);
   }, [nombreProducto, productosExistentes]);
 
-  if (!visible || duplicados.length === 0 || !nombreProducto) {
+  if (!visible || duplicados.length === 0 || !nombreProducto || nombreProducto.length < 3) {
     return null;
   }
 
   return (
-    <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-3 mb-4 relative">
+    <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-3 mb-4 relative shadow-sm">
       <button
         onClick={() => setVisible(false)}
-        className="absolute top-2 right-2 text-amber-400 hover:text-amber-600"
+        className="absolute top-2 right-2 text-amber-400 hover:text-amber-600 transition-colors"
       >
         <X size={14} />
       </button>
       
       <div className="flex items-start gap-2">
-        <AlertTriangle size={16} className="text-amber-500 mt-0.5" />
+        <AlertTriangle size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1">
-          <p className="text-xs font-bold text-amber-700 uppercase">Posible duplicado</p>
+          <p className="text-xs font-bold text-amber-700 uppercase">⚠️ Posible producto duplicado</p>
           <p className="text-[10px] text-amber-600 mt-1">
-            Ya existe un producto similar:
+            Ya existe un producto con nombre similar:
           </p>
-          <ul className="mt-1 space-y-0.5">
-            {duplicados.slice(0, 2).map((p, i) => (
-              <li key={i} className="text-[9px] text-amber-700">
-                • {p.producto_nombre} (SKU: {p.producto_codigo_comercial})
+          <ul className="mt-1 space-y-1">
+            {duplicados.map((p, i) => (
+              <li key={i} className="text-[10px] text-amber-700 font-mono">
+                • <span className="font-bold">{p.producto_nombre}</span> 
+                <span className="text-amber-500"> (SKU: {p.producto_codigo_comercial})</span>
               </li>
             ))}
           </ul>
-          {duplicados.length > 2 && (
-            <p className="text-[8px] text-amber-500 mt-1">
-              +{duplicados.length - 2} más
-            </p>
-          )}
+          <p className="text-[9px] text-amber-500 mt-2">
+            💡 Revisa si deseas continuar con la creación o editar el producto existente.
+          </p>
         </div>
       </div>
     </div>
