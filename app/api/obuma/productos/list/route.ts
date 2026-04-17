@@ -1,7 +1,6 @@
 // app/api/obuma/productos/list/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 
-// Interfaz para el producto enriquecido
 interface ProductoEnriquecido {
   id: string;
   sku: string;
@@ -44,7 +43,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Obtener productos
     const response = await fetch(obumaUrl.toString(), {
       method: 'GET',
       headers: {
@@ -76,7 +74,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 2. Obtener stock si se solicita
     let stockMap = new Map();
     
     if (incluirStock) {
@@ -98,10 +95,14 @@ export async function GET(request: NextRequest) {
           stocks.forEach((stock: any) => {
             const productoId = stock.producto_id || stock.id_producto;
             if (productoId) {
+              // ✅ Asegurar que stock_actual sea número
+              let stockActual = parseInt(stock.stock_actual) || 0;
+              if (isNaN(stockActual)) stockActual = 0;
+              
               stockMap.set(String(productoId), {
-                stock_actual: stock.stock_actual || stock.cantidad || 0,
-                stock_minimo: stock.stock_minimo || 0,
-                stock_maximo: stock.stock_maximo || 0,
+                stock_actual: stockActual,
+                stock_minimo: parseInt(stock.stock_minimo) || 0,
+                stock_maximo: parseInt(stock.stock_maximo) || 0,
                 bodega_nombre: stock.bodega_nombre || '',
                 ultima_actualizacion: stock.updated_at || stock.fecha_actualizacion
               });
@@ -113,13 +114,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. Enriquecer productos con información adicional
     const productosEnriquecidos: ProductoEnriquecido[] = productos.map((producto: any) => {
       const stockInfo = stockMap.get(String(producto.producto_id)) || {};
       
       const precioTotal = Number(producto.producto_precio_clp_total) || 0;
       const precioNeto = Math.round(precioTotal / 1.19);
       const iva = precioTotal - precioNeto;
+      
+      // ✅ Asegurar que stock_actual sea número
+      let stockActual = stockInfo.stock_actual;
+      if (typeof stockActual === 'string') {
+        stockActual = parseInt(stockActual) || 0;
+      }
+      if (isNaN(stockActual)) stockActual = 0;
       
       return {
         id: producto.producto_id,
@@ -133,7 +140,7 @@ export async function GET(request: NextRequest) {
         precio_neto: precioNeto,
         precio_iva: iva,
         precio_total: precioTotal,
-        stock_actual: stockInfo.stock_actual || 0,
+        stock_actual: stockActual,
         stock_minimo: stockInfo.stock_minimo || 0,
         inventariable: producto.producto_inventariable === '1',
         activo: producto.producto_activo === '1',
@@ -147,13 +154,25 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 4. Calcular estadísticas (con tipos correctos)
+    // ✅ Calcular estadísticas correctamente (sumando números)
     const stats = {
       total_productos: productosEnriquecidos.length,
-      total_stock: productosEnriquecidos.reduce((sum: number, p: ProductoEnriquecido) => sum + (p.stock_actual || 0), 0),
-      total_valor_inventario: productosEnriquecidos.reduce((sum: number, p: ProductoEnriquecido) => sum + ((p.precio_total || 0) * (p.stock_actual || 0)), 0),
-      productos_con_stock_bajo: productosEnriquecidos.filter((p: ProductoEnriquecido) => p.stock_actual > 0 && p.stock_actual <= (p.stock_minimo || 5)).length,
-      productos_sin_stock: productosEnriquecidos.filter((p: ProductoEnriquecido) => p.stock_actual === 0 && p.inventariable).length
+      total_stock: productosEnriquecidos.reduce((sum: number, p: ProductoEnriquecido) => {
+        const stock = typeof p.stock_actual === 'number' ? p.stock_actual : 0;
+        return sum + stock;
+      }, 0),
+      total_valor_inventario: productosEnriquecidos.reduce((sum: number, p: ProductoEnriquecido) => {
+        const stock = typeof p.stock_actual === 'number' ? p.stock_actual : 0;
+        return sum + ((p.precio_total || 0) * stock);
+      }, 0),
+      productos_con_stock_bajo: productosEnriquecidos.filter((p: ProductoEnriquecido) => {
+        const stock = typeof p.stock_actual === 'number' ? p.stock_actual : 0;
+        return stock > 0 && stock <= (p.stock_minimo || 5);
+      }).length,
+      productos_sin_stock: productosEnriquecidos.filter((p: ProductoEnriquecido) => {
+        const stock = typeof p.stock_actual === 'number' ? p.stock_actual : 0;
+        return stock === 0 && p.inventariable;
+      }).length
     };
 
     return NextResponse.json({
