@@ -34,11 +34,12 @@ export default function ChatBot() {
   ]);
   const [input, setInput] = useState('');
   const [cargando, setCargando] = useState(false);
-  const [productosReales, setProductosReales] = useState<ProductoReal[]>([]);
-  const [fuenteDatos, setFuenteDatos] = useState<'supabase' | 'obuma'>('supabase');
+  const [productosSupabase, setProductosSupabase] = useState<ProductoReal[]>([]);
+  const [productosObuma, setProductosObuma] = useState<ProductoReal[]>([]);
+  const [usandoSupabase, setUsandoSupabase] = useState(true);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cargar productos desde Supabase (principal)
+  // Cargar productos desde Supabase
   const cargarDesdeSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -58,19 +59,18 @@ export default function ChatBot() {
           categoria: p.categoria_nombre,
           fuente: 'supabase' as const
         }));
-        setProductosReales(productos);
-        setFuenteDatos('supabase');
-        console.log(`✅ ChatBot: ${productos.length} productos desde Supabase`);
-        return true;
+        setProductosSupabase(productos);
+        console.log(`✅ Supabase: ${productos.length} productos`);
+        return productos;
       }
-      return false;
+      return [];
     } catch (error) {
       console.error("Error cargando desde Supabase:", error);
-      return false;
+      return [];
     }
   };
 
-  // Fallback: Cargar desde Obuma API
+  // Cargar productos desde Obuma API
   const cargarDesdeObuma = async () => {
     try {
       const response = await fetch('/api/obuma/productos/list?limit=5000');
@@ -85,29 +85,34 @@ export default function ChatBot() {
           categoria: p.categoria_nombre || '',
           fuente: 'obuma' as const
         }));
-        setProductosReales(productos);
-        setFuenteDatos('obuma');
-        console.log(`✅ ChatBot: ${productos.length} productos desde Obuma API (fallback)`);
-        return true;
+        setProductosObuma(productos);
+        console.log(`✅ Obuma API: ${productos.length} productos`);
+        return productos;
       }
-      return false;
+      return [];
     } catch (error) {
       console.error("Error cargando desde Obuma:", error);
-      return false;
+      return [];
     }
   };
 
-  // Cargar productos: primero Supabase, si falla Obuma
+  // Cargar ambas fuentes en paralelo
   useEffect(() => {
-    const cargarProductos = async () => {
-      const success = await cargarDesdeSupabase();
-      if (!success) {
-        console.log("⚠️ Supabase no disponible, usando Obuma API...");
-        await cargarDesdeObuma();
+    const cargarAmbasFuentes = async () => {
+      const [supa, obuma] = await Promise.all([
+        cargarDesdeSupabase(),
+        cargarDesdeObuma()
+      ]);
+      
+      // Priorizar Supabase si tiene datos
+      if (supa.length > 0) {
+        setUsandoSupabase(true);
+      } else if (obuma.length > 0) {
+        setUsandoSupabase(false);
       }
     };
     
-    cargarProductos();
+    cargarAmbasFuentes();
   }, []);
 
   useEffect(() => {
@@ -130,14 +135,38 @@ export default function ChatBot() {
     setCargando(true);
 
     try {
+      // Determinar qué productos enviar según la pregunta
+      let productosAEnviar = [];
+      let fuenteUsada = '';
+      
+      // Si pregunta por stock o información específica, usar Supabase (más rápido)
+      if (pregunta.toLowerCase().includes('stock') || pregunta.toLowerCase().includes('inventario')) {
+        productosAEnviar = productosSupabase;
+        fuenteUsada = 'Supabase (stock actualizado)';
+      } 
+      // Si pregunta por productos nuevos o búsqueda amplia, usar Obuma (más completo)
+      else if (pregunta.toLowerCase().includes('todos') || pregunta.toLowerCase().includes('listar')) {
+        productosAEnviar = productosObuma;
+        fuenteUsada = 'Obuma API (todos los productos)';
+      }
+      // Por defecto, usar la que tenga más datos
+      else {
+        productosAEnviar = productosSupabase.length > 0 ? productosSupabase : productosObuma;
+        fuenteUsada = productosSupabase.length > 0 ? 'Supabase' : 'Obuma API';
+      }
+
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           pregunta,
           contexto: {
-            productos: productosReales,
-            fuente: fuenteDatos
+            productos: productosAEnviar,
+            fuente: fuenteUsada,
+            stats: {
+              total_supabase: productosSupabase.length,
+              total_obuma: productosObuma.length
+            }
           }
         })
       });
@@ -146,10 +175,8 @@ export default function ChatBot() {
       
       let respuestaTexto = data.respuesta || data.error || "Lo siento, no pude procesar tu pregunta.";
       
-      // Agregar nota de fuente si viene de Obuma (fallback)
-      if (fuenteDatos === 'obuma' && !respuestaTexto.includes('Obuma')) {
-        respuestaTexto += '\n\n📌 *Nota: Consultando directamente desde Obuma API*';
-      }
+      // Agregar nota de fuente
+      respuestaTexto += `\n\n---\n📊 *Fuente: ${fuenteUsada}* | 📦 Supabase: ${productosSupabase.length} | 🌐 Obuma: ${productosObuma.length}`;
       
       const botMsg: Mensaje = {
         id: (Date.now() + 1).toString(),
@@ -179,14 +206,17 @@ export default function ChatBot() {
     }
   };
 
-  const recargarProductos = async () => {
-    const success = await cargarDesdeSupabase();
-    if (!success) {
-      await cargarDesdeObuma();
-    }
+  const recargarAmbasFuentes = async () => {
+    setCargando(true);
+    await Promise.all([
+      cargarDesdeSupabase(),
+      cargarDesdeObuma()
+    ]);
+    setCargando(false);
+    
     const refreshMsg: Mensaje = {
       id: Date.now().toString(),
-      texto: `🔄 Actualizado: ${productosReales.length} productos (fuente: ${fuenteDatos === 'supabase' ? 'Supabase' : 'Obuma API'}).`,
+      texto: `🔄 Actualizado: Supabase (${productosSupabase.length}) | Obuma API (${productosObuma.length})`,
       esUsuario: false,
       timestamp: new Date()
     };
@@ -198,6 +228,7 @@ export default function ChatBot() {
     contenido = contenido.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     contenido = contenido.replace(/\n/g, '<br/>');
     contenido = contenido.replace(/^\d+\. /gm, '• ');
+    contenido = contenido.replace(/---/g, '<hr class="my-2 border-slate-200"/>');
     
     return (
       <div
@@ -234,23 +265,34 @@ export default function ChatBot() {
 
   return (
     <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-14' : 'w-[450px] h-[600px]'
+      isMinimized ? 'w-80 h-14' : 'w-[480px] h-[650px]'
     }`}>
       <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-bold text-sm">Asistente Obuma IA</span>
-          {productosReales.length > 0 && (
-            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-              fuenteDatos === 'supabase' 
-                ? 'bg-emerald-400/30' 
-                : 'bg-amber-400/30'
-            }`}>
-              {fuenteDatos === 'supabase' ? '📦' : '⚠️'} {productosReales.length}
-            </span>
-          )}
+          <div className="flex gap-1 ml-2">
+            {productosSupabase.length > 0 && (
+              <span className="bg-emerald-400/30 text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+                📦 S:{productosSupabase.length}
+              </span>
+            )}
+            {productosObuma.length > 0 && (
+              <span className="bg-amber-400/30 text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+                🌐 O:{productosObuma.length}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={recargarAmbasFuentes}
+            disabled={cargando}
+            className="hover:bg-blue-700 p-1 rounded transition-colors text-[10px]"
+            title="Recargar ambas fuentes"
+          >
+            ↻
+          </button>
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="hover:bg-blue-700 p-1 rounded transition-colors"
@@ -293,7 +335,7 @@ export default function ChatBot() {
 
           <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
             <div className="flex flex-wrap gap-1">
-              {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU"].map((sug) => (
+              {["¿Cuántos productos tenemos?", "Stock total", "Productos más caros", "Buscar por SKU", "Comparar fuentes"].map((sug) => (
                 <button
                   key={sug}
                   onClick={() => {
@@ -327,19 +369,8 @@ export default function ChatBot() {
                 <Send size={20} />
               </button>
             </div>
-            <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
-              <span>🤖</span>
-              <span>
-                {productosReales.length > 0 
-                  ? `${productosReales.length} productos (${fuenteDatos === 'supabase' ? 'Supabase' : 'Obuma API'})` 
-                  : "Cargando..."}
-              </span>
-              <button
-                onClick={recargarProductos}
-                className="text-[8px] text-blue-500 hover:text-blue-700 underline"
-              >
-                ↻ actualizar
-              </button>
+            <div className="text-[9px] text-slate-400 mt-2 text-center">
+              🤖 Consultando ambas fuentes: Supabase (rápido) + Obuma (completo)
             </div>
           </div>
         </>
