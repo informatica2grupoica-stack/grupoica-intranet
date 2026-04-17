@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, AlertTriangle } from "lucide-react";
+import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, AlertTriangle, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 
 // --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
@@ -98,6 +98,7 @@ export default function ObumaProductosListado() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [allSubcategorias, setAllSubcategorias] = useState<any[]>([]);
   const [filteredSubcategorias, setFilteredSubcategorias] = useState<any[]>([]);
+  const [sincronizando, setSincronizando] = useState(false);
   
   // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
@@ -119,6 +120,26 @@ export default function ObumaProductosListado() {
       console.error("Error cargando productos");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- Sincronización con Supabase ---
+  const sincronizarProductos = async () => {
+    setSincronizando(true);
+    try {
+      const res = await fetch('/api/obuma/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Sincronización completada!\n📦 Productos: ${data.sincronizados}\n❌ Errores: ${data.errores}\n⏱️ Duración: ${data.duracion_ms}ms`);
+        await fetchProductos();
+      } else {
+        alert(`❌ Error en sincronización: ${data.error}`);
+      }
+    } catch (error) {
+      console.error("Error sincronizando:", error);
+      alert("❌ Error al conectar con el servidor");
+    } finally {
+      setSincronizando(false);
     }
   };
 
@@ -259,6 +280,16 @@ export default function ObumaProductosListado() {
           >
             <Plus size={24} />
           </Link>
+
+          {/* Botón de sincronización */}
+          <button
+            onClick={sincronizarProductos}
+            disabled={sincronizando}
+            className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            title="Sincronizar productos con Obuma"
+          >
+            {sincronizando ? <Loader2 size={24} className="animate-spin" /> : <RefreshCcw size={24} />}
+          </button>
         </div>
 
         <div className="flex items-center gap-4">
