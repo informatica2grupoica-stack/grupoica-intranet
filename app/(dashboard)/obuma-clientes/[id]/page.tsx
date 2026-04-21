@@ -79,6 +79,7 @@ export default function EditarClientePage() {
       if (data.success && data.cliente) {
         const c = data.cliente;
         
+        // Actualizar el formulario con los datos recibidos
         setForm({
           razon_social: c.razon_social || '',
           rut: c.rut || '',

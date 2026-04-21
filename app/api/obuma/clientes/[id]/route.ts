@@ -29,19 +29,13 @@ export async function GET(
     }
     
     const clienteData = await clienteRes.json();
-    console.log("📦 Cliente raw:", JSON.stringify(clienteData).substring(0, 300));
+    console.log("📦 Cliente raw:", JSON.stringify(clienteData).substring(0, 500));
     
-    // Extraer cliente de la respuesta (puede venir en diferentes formatos)
-    let cliente = null;
-    if (clienteData.data) {
-      cliente = clienteData.data;
-    } else if (clienteData.cliente) {
-      cliente = clienteData.cliente;
-    } else if (clienteData.id || clienteData.cliente_id) {
-      cliente = clienteData;
-    }
+    // IMPORTANTE: La API devuelve los datos DIRECTAMENTE en el objeto raíz
+    // No dentro de 'data' o 'cliente'
+    const cliente = clienteData;
     
-    if (!cliente) {
+    if (!cliente || !cliente.cliente_id) {
       console.error("❌ Cliente no encontrado");
       return NextResponse.json(
         { error: 'Cliente no encontrado' },
@@ -49,7 +43,7 @@ export async function GET(
       );
     }
     
-    console.log(`📦 Cliente encontrado: ${cliente.cliente_razon_social || cliente.razon_social}`);
+    console.log(`📦 Cliente encontrado: ${cliente.cliente_razon_social}`);
     
     // 2. Obtener contactos
     let contactos = [];
@@ -79,9 +73,9 @@ export async function GET(
       console.warn("Error obteniendo direcciones:", error);
     }
     
-    // 4. Construir respuesta
+    // 4. Construir respuesta - Usando los campos CORRECTOS de la API
     const clienteFormateado = {
-      id: cliente.cliente_id || cliente.id,
+      id: cliente.cliente_id,
       rut: cliente.cliente_rut || '',
       razon_social: cliente.cliente_razon_social || '',
       email: cliente.cliente_email || '',
