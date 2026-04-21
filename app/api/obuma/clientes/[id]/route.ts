@@ -8,22 +8,28 @@ export async function GET(
   try {
     const { id } = await params;
     
-    console.log(`📡 Obteniendo cliente ID: ${id}`);
+    console.log(`📡 API Route - Obteniendo cliente ID: ${id}`);
     
-    // Construir URL de Obuma
+    if (!id) {
+      return NextResponse.json(
+        { error: 'ID no proporcionado' },
+        { status: 400 }
+      );
+    }
+    
+    // Llamar a Obuma
     const obumaUrl = `${process.env.OBUMA_API_URL}/clientes.findById.json/${id}`;
     console.log(`📡 URL: ${obumaUrl}`);
     
     const response = await fetch(obumaUrl, {
-      method: 'GET',
       headers: {
         'access-token': process.env.OBUMA_API_TOKEN || '',
-        'Content-Type': 'application/json'
       }
     });
     
+    console.log(`📡 Response status: ${response.status}`);
+    
     if (!response.ok) {
-      console.error(`❌ Error HTTP: ${response.status}`);
       return NextResponse.json(
         { error: `Cliente no encontrado (${response.status})` },
         { status: response.status }
@@ -31,74 +37,47 @@ export async function GET(
     }
     
     const data = await response.json();
-    console.log("📦 Datos recibidos:", JSON.stringify(data).substring(0, 500));
+    console.log("📦 Datos recibidos:", JSON.stringify(data).substring(0, 300));
     
-    // La API devuelve los datos directamente en el objeto raíz
-    const cliente = data;
+    // Extraer cliente (la API devuelve directamente el objeto)
+    const clienteRaw = data;
     
-    if (!cliente || !cliente.cliente_id) {
-      console.error("❌ Cliente no encontrado en la respuesta");
+    // Verificar que tenemos datos
+    if (!clienteRaw || !clienteRaw.cliente_id) {
       return NextResponse.json(
-        { error: 'Cliente no encontrado' },
+        { error: 'Cliente no encontrado en respuesta' },
         { status: 404 }
       );
     }
     
     // Formatear respuesta
-    const clienteFormateado = {
-      id: cliente.cliente_id,
-      rut: cliente.cliente_rut || '',
-      razon_social: cliente.cliente_razon_social || '',
-      email: cliente.cliente_email || '',
-      telefono: cliente.cliente_telefono || '',
-      direccion: cliente.cliente_direccion || '',
-      comuna: cliente.cliente_comuna || '',
-      ciudad: cliente.cliente_ciudad || '',
-      estado: cliente.estado === '1' || cliente.estado === 1,
-      es_extranjero: cliente.cliente_extranjero === '1',
-      extranjero_id: cliente.cliente_extranjero_id || '',
-      created_at: cliente.created_at,
+    const cliente = {
+      id: clienteRaw.cliente_id,
+      rut: clienteRaw.cliente_rut || '',
+      razon_social: clienteRaw.cliente_razon_social || '',
+      email: clienteRaw.cliente_email || '',
+      telefono: clienteRaw.cliente_telefono || '',
+      direccion: clienteRaw.cliente_direccion || '',
+      comuna: clienteRaw.cliente_comuna || '',
+      ciudad: clienteRaw.cliente_ciudad || '',
+      estado: clienteRaw.estado === '1',
+      es_extranjero: clienteRaw.cliente_extranjero === '1',
+      extranjero_id: clienteRaw.cliente_extranjero_id || '',
       contactos: [],
       direcciones: []
     };
     
-    // Obtener contactos (opcional, si no funciona, ignorar)
-    try {
-      const contactosRes = await fetch(`${process.env.OBUMA_API_URL}/clientesContactos.list.json/${id}`, {
-        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
-      });
-      if (contactosRes.ok) {
-        const contactosData = await contactosRes.json();
-        clienteFormateado.contactos = contactosData.data || contactosData.contactos || [];
-      }
-    } catch (error) {
-      console.warn("Error obteniendo contactos:", error);
-    }
-    
-    // Obtener direcciones (opcional)
-    try {
-      const direccionesRes = await fetch(`${process.env.OBUMA_API_URL}/clientesDirecciones.list.json/${id}`, {
-        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
-      });
-      if (direccionesRes.ok) {
-        const direccionesData = await direccionesRes.json();
-        clienteFormateado.direcciones = direccionesData.data || direccionesData.direcciones || [];
-      }
-    } catch (error) {
-      console.warn("Error obteniendo direcciones:", error);
-    }
-    
-    console.log(`✅ Cliente encontrado: ${clienteFormateado.razon_social}`);
+    console.log(`✅ Cliente encontrado: ${cliente.razon_social}`);
     
     return NextResponse.json({
       success: true,
-      cliente: clienteFormateado
+      cliente: cliente
     });
     
   } catch (error: any) {
-    console.error("❌ Error en GET cliente:", error);
+    console.error("❌ Error:", error);
     return NextResponse.json(
-      { error: 'Error al obtener cliente', details: error.message },
+      { error: 'Error interno del servidor', details: error.message },
       { status: 500 }
     );
   }
@@ -114,9 +93,8 @@ export async function PUT(
     
     console.log(`📡 Actualizando cliente ${id}:`, body);
     
-    const payload: any = {
+    const payload = {
       cliente_id: id,
-      cliente_rut: body.rut || '',
       cliente_razon_social: body.razon_social,
       cliente_email: body.email,
       cliente_telefono: body.telefono || '',
@@ -125,11 +103,6 @@ export async function PUT(
       cliente_ciudad: body.ciudad || '',
       estado: body.estado ? '1' : '0'
     };
-    
-    if (body.es_extranjero) {
-      payload.cliente_extranjero = '1';
-      payload.cliente_extranjero_id = body.extranjero_id || '';
-    }
     
     const response = await fetch(`${process.env.OBUMA_API_URL}/clientes.update.json`, {
       method: 'POST',
@@ -142,9 +115,9 @@ export async function PUT(
     
     const result = await response.json();
     
-    if (result.success === false || result.status === false) {
+    if (!response.ok || result.success === false) {
       return NextResponse.json(
-        { error: result.message || 'Error al actualizar cliente' },
+        { error: result.message || 'Error al actualizar' },
         { status: 400 }
       );
     }
@@ -155,9 +128,9 @@ export async function PUT(
     });
     
   } catch (error: any) {
-    console.error("❌ Error en PUT cliente:", error);
+    console.error("❌ Error en PUT:", error);
     return NextResponse.json(
-      { error: 'Error interno del servidor', details: error.message },
+      { error: 'Error interno del servidor' },
       { status: 500 }
     );
   }

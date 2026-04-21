@@ -62,6 +62,7 @@ export default function EditarClientePage() {
   const [contactos, setContactos] = useState<Contacto[]>([]);
   const [direcciones, setDirecciones] = useState<Direccion[]>([]);
 
+  // Función para cargar cliente
   const cargarCliente = useCallback(async (forceRefresh = false) => {
     if (!id) return;
     
@@ -73,13 +74,10 @@ export default function EditarClientePage() {
       console.log(`📡 Cargando cliente ID: ${id}`);
       const res = await fetch(`/api/obuma/clientes/${id}${refreshParam}`);
       const data = await res.json();
-      
       console.log("📦 Datos recibidos:", data);
       
       if (data.success && data.cliente) {
         const c = data.cliente;
-        
-        // Actualizar el formulario con los datos recibidos
         setForm({
           razon_social: c.razon_social || '',
           rut: c.rut || '',
@@ -94,14 +92,12 @@ export default function EditarClientePage() {
         });
         setContactos(c.contactos || []);
         setDirecciones(c.direcciones || []);
-        
-        console.log(`✅ Cliente cargado: ${c.razon_social || 'Sin nombre'}`);
+        console.log(`✅ Cliente cargado: ${c.razon_social}`);
       } else {
-        console.error("❌ Cliente no encontrado:", data);
         setStatus({ type: 'error', msg: data.error || 'Cliente no encontrado' });
       }
     } catch (error) {
-      console.error("❌ Error cargando cliente:", error);
+      console.error("Error cargando cliente:", error);
       setStatus({ type: 'error', msg: 'Error de conexión al cargar el cliente' });
     } finally {
       setCargandoDatos(false);
@@ -109,6 +105,7 @@ export default function EditarClientePage() {
     }
   }, [id]);
 
+  // Cargar datos del cliente al montar el componente
   useEffect(() => {
     cargarCliente();
   }, [cargarCliente]);
@@ -140,9 +137,14 @@ export default function EditarClientePage() {
 
       if (res.ok) {
         setStatus({ type: 'success', msg: '¡Cliente actualizado exitosamente!' });
+        // Recargar datos para mostrar cambios
+        setTimeout(() => {
+          cargarCliente();
+        }, 500);
+        // Redirigir después de 2 segundos
         setTimeout(() => {
           router.push('/obuma-clientes');
-        }, 1500);
+        }, 2000);
       } else {
         setStatus({ type: 'error', msg: data.error || 'Error al actualizar cliente' });
       }
@@ -191,7 +193,10 @@ export default function EditarClientePage() {
             >
               {refreshing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
             </button>
-            <Link href="/obuma-clientes" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#00338d] transition-all shadow-sm">
+            <Link 
+              href="/obuma-clientes" 
+              className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#00338d] transition-all shadow-sm"
+            >
               <ArrowLeft size={20} />
             </Link>
           </div>
@@ -208,6 +213,11 @@ export default function EditarClientePage() {
               {status.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
               {status.msg}
             </div>
+            {status.type === 'success' && (
+              <Link href="/obuma-clientes" className="text-[10px] underline">
+                Volver al listado
+              </Link>
+            )}
           </div>
         )}
 
@@ -386,7 +396,10 @@ export default function EditarClientePage() {
           </div>
 
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-100">
-            <Link href="/obuma-clientes" className="px-6 py-3 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 transition-all">
+            <Link 
+              href="/obuma-clientes" 
+              className="px-6 py-3 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-100 transition-all"
+            >
               Cancelar
             </Link>
             <button
