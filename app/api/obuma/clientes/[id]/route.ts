@@ -10,7 +10,6 @@ export async function GET(
     
     console.log(`📡 API GET /api/obuma/clientes/${id}`);
     
-    // Construir URL de Obuma
     const obumaUrl = `${process.env.OBUMA_API_URL}/clientes.findById.json/${id}`;
     console.log(`📡 Llamando a Obuma: ${obumaUrl}`);
     
@@ -20,40 +19,32 @@ export async function GET(
       }
     });
     
-    console.log(`📡 Respuesta Obuma status: ${response.status}`);
-    
     const data = await response.json();
+    console.log("📦 Respuesta completa:", JSON.stringify(data, null, 2));
     
-    // 🔍 LOG COMPLETO - Ver qué devuelve Obuma exactamente
-    console.log("📦 RESPUESTA COMPLETA DE OBUMA:");
-    console.log(JSON.stringify(data, null, 2));
-    
-    // Verificar si la respuesta tiene éxito
-    if (data.success === false || data.status === false) {
-      console.log("❌ Obuma devolvió error:", data.message);
+    // Verificar si la respuesta indica error
+    if (data.result?.result === "0") {
+      console.log("❌ Obuma devolvió error:", data.result?.result_detail);
       return NextResponse.json(
-        { error: data.message || 'Cliente no encontrado en Obuma' },
+        { error: data.result?.result_detail || 'Cliente no encontrado' },
         { status: 404 }
       );
     }
     
-    // La API de Obuma puede devolver los datos en diferentes formatos
+    // Extraer cliente de data.data (es un array)
     let clienteData = null;
-    
-    if (data.data) {
-      clienteData = data.data;
+    if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+      clienteData = data.data[0];
     } else if (data.cliente) {
       clienteData = data.cliente;
     } else if (data.cliente_id) {
       clienteData = data;
-    } else if (Array.isArray(data) && data.length > 0) {
-      clienteData = data[0];
     }
     
     if (!clienteData || !clienteData.cliente_id) {
       console.log("❌ No se pudo extraer cliente de la respuesta");
       return NextResponse.json(
-        { error: 'Cliente no encontrado en respuesta', raw: data },
+        { error: 'Cliente no encontrado', raw: data },
         { status: 404 }
       );
     }
@@ -86,6 +77,59 @@ export async function GET(
     console.error("❌ Error:", error);
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    
+    console.log(`📡 API PUT /api/obuma/clientes/${id}`, body);
+    
+    const payload = {
+      cliente_id: id,
+      cliente_razon_social: body.razon_social,
+      cliente_email: body.email,
+      cliente_telefono: body.telefono || '',
+      cliente_direccion: body.direccion || '',
+      cliente_comuna: body.comuna || '',
+      cliente_ciudad: body.ciudad || '',
+      estado: body.estado ? '1' : '0'
+    };
+    
+    const response = await fetch(`${process.env.OBUMA_API_URL}/clientes.update.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'access-token': process.env.OBUMA_API_TOKEN || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok || result.success === false) {
+      return NextResponse.json(
+        { error: result.message || 'Error al actualizar cliente' },
+        { status: 400 }
+      );
+    }
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Cliente actualizado exitosamente'
+    });
+    
+  } catch (error: any) {
+    console.error("❌ Error en PUT:", error);
+    return NextResponse.json(
+      { error: 'Error interno del servidor' },
       { status: 500 }
     );
   }
