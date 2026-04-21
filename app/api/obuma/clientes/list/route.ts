@@ -20,15 +20,6 @@ interface ClienteEnriquecido {
   total_direcciones: number;
 }
 
-// Interfaz para estadísticas
-interface Estadisticas {
-  total_clientes: number;
-  clientes_activos: number;
-  clientes_inactivos: number;
-  total_contactos: number;
-  total_direcciones: number;
-}
-
 // Caché simple en memoria
 let cache: {
   data: any;
@@ -37,47 +28,36 @@ let cache: {
 } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  
-  const page = searchParams.get('page') || '1';
-  const filter = searchParams.get('filter') || searchParams.get('search') || '';
-  const limit = searchParams.get('limit') || '100';
-  const estado = searchParams.get('estado') || 'todos';
-  const forceRefresh = searchParams.get('refresh') === 'true';
+// Función para traer todas las páginas de clientes
+async function obtenerTodosLosClientes(estado: string, filter: string): Promise<any[]> {
+  let todosLosClientes: any[] = [];
+  let pagina = 1;
+  const limitePorPagina = 200;
+  let hayMas = true;
 
-  // Verificar caché
-  const cacheKey = `${estado}-${filter}-${page}`;
-  if (!forceRefresh && cache && cache.filtro === cacheKey && (Date.now() - cache.timestamp) < CACHE_DURATION) {
-    console.log("📦 Usando caché de clientes");
-    return NextResponse.json(cache.data);
-  }
-
-  const obumaUrl = new URL(`${process.env.OBUMA_API_URL}/clientes.list.json`);
-  obumaUrl.searchParams.append('page', page);
-  obumaUrl.searchParams.append('limit', limit);
-  
-  if (filter) {
-    obumaUrl.searchParams.append('cliente_razon_social', filter.trim());
-  }
-  
-  if (estado === 'activo') {
-    obumaUrl.searchParams.append('estado', '1');
-  } else if (estado === 'inactivo') {
-    obumaUrl.searchParams.append('estado', '0');
-  }
-
-  try {
-    console.log("📡 Consultando Obuma clientes...");
+  while (hayMas) {
+    const obumaUrl = new URL(`${process.env.OBUMA_API_URL}/clientes.list.json`);
+    obumaUrl.searchParams.append('page', pagina.toString());
+    obumaUrl.searchParams.append('limit', limitePorPagina.toString());
     
-    // 1. Obtener clientes
+    if (filter) {
+      obumaUrl.searchParams.append('cliente_razon_social', filter.trim());
+    }
+    
+    if (estado === 'activo') {
+      obumaUrl.searchParams.append('estado', '1');
+    } else if (estado === 'inactivo') {
+      obumaUrl.searchParams.append('estado', '0');
+    }
+
+    console.log(`📡 Consultando página ${pagina} de clientes...`);
+    
     const response = await fetch(obumaUrl.toString(), {
       method: 'GET',
       headers: {
         'access-token': process.env.OBUMA_API_TOKEN || '',
         'Content-Type': 'application/json'
-      },
-      next: { revalidate: 60 }
+      }
     });
 
     if (!response.ok) {
@@ -85,9 +65,47 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    let clientes = data.data || data.clientes || [];
-
+    const clientes = data.data || data.clientes || [];
+    
     if (clientes.length === 0) {
+      hayMas = false;
+    } else {
+      todosLosClientes.push(...clientes);
+      console.log(`📦 Página ${pagina}: ${clientes.length} clientes (total acumulado: ${todosLosClientes.length})`);
+      pagina++;
+      
+      // Si la página actual tiene menos del límite, es la última
+      if (clientes.length < limitePorPagina) {
+        hayMas = false;
+      }
+    }
+  }
+
+  return todosLosClientes;
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  
+  const filter = searchParams.get('filter') || searchParams.get('search') || '';
+  const estado = searchParams.get('estado') || 'todos';
+  const forceRefresh = searchParams.get('refresh') === 'true';
+
+  // Verificar caché
+  const cacheKey = `${estado}-${filter}`;
+  if (!forceRefresh && cache && cache.filtro === cacheKey && (Date.now() - cache.timestamp) < CACHE_DURATION) {
+    console.log("📦 Usando caché de clientes");
+    return NextResponse.json(cache.data);
+  }
+
+  try {
+    console.log("📡 Obteniendo TODOS los clientes de Obuma (paginación completa)...");
+    
+    // 1. Obtener TODOS los clientes (todas las páginas)
+    const todosLosClientes = await obtenerTodosLosClientes(estado, filter);
+    console.log(`✅ Total clientes obtenidos: ${todosLosClientes.length}`);
+
+    if (todosLosClientes.length === 0) {
       const emptyResponse = {
         success: true,
         data: [],
@@ -97,13 +115,19 @@ export async function GET(request: NextRequest) {
           clientes_inactivos: 0,
           total_contactos: 0,
           total_direcciones: 0
+        },
+        pagination: {
+          current_page: 1,
+          last_page: 1,
+          per_page: 100,
+          total: 0
         }
       };
       return NextResponse.json(emptyResponse);
     }
 
-    // 2. Obtener contactos y direcciones en PARALELO
-    console.log("📡 Obteniendo contactos y direcciones en paralelo...");
+    // 2. Obtener contactos y direcciones en PARALELO (una sola llamada)
+    console.log("📡 Obteniendo contactos y direcciones...");
     
     const [contactosAll, direccionesAll] = await Promise.all([
       fetch(`${process.env.OBUMA_API_URL}/clientesContactos.listAll.json`, {
@@ -140,8 +164,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 3. Enriquecer clientes usando los mapas
-    const clientesEnriquecidos: ClienteEnriquecido[] = clientes.map((cliente: any) => {
+    // 3. Enriquecer clientes
+    const clientesEnriquecidos: ClienteEnriquecido[] = todosLosClientes.map((cliente: any) => {
       const contactos = contactosPorCliente.get(cliente.cliente_id) || [];
       const direcciones = direccionesPorCliente.get(cliente.cliente_id) || [];
       
@@ -165,8 +189,8 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 4. Calcular estadísticas (con tipos correctos)
-    const stats: Estadisticas = {
+    // 4. Estadísticas
+    const stats = {
       total_clientes: clientesEnriquecidos.length,
       clientes_activos: clientesEnriquecidos.filter((c: ClienteEnriquecido) => c.estado).length,
       clientes_inactivos: clientesEnriquecidos.filter((c: ClienteEnriquecido) => !c.estado).length,
@@ -179,10 +203,10 @@ export async function GET(request: NextRequest) {
       data: clientesEnriquecidos,
       stats: stats,
       pagination: {
-        current_page: data.pagination?.current_page || parseInt(page),
-        last_page: data.pagination?.last_page || 1,
-        per_page: data.pagination?.per_page || parseInt(limit),
-        total: data.pagination?.total || clientesEnriquecidos.length
+        current_page: 1,
+        last_page: 1,
+        per_page: clientesEnriquecidos.length,
+        total: clientesEnriquecidos.length
       },
       timestamp: new Date().toISOString()
     };
@@ -193,6 +217,8 @@ export async function GET(request: NextRequest) {
       timestamp: Date.now(),
       filtro: cacheKey
     };
+
+    console.log(`✅ Respuesta final: ${clientesEnriquecidos.length} clientes, ${stats.total_contactos} contactos, ${stats.total_direcciones} direcciones`);
 
     return NextResponse.json(responseData);
 
