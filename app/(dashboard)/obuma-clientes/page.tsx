@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, Loader2, Edit3, X, ChevronLeft, ChevronRight, ListIcon, Plus, Mail, Phone, MapPin, Users, Building, CheckCircle, XCircle } from "lucide-react";
+import { Search, Loader2, Edit3, ChevronLeft, ChevronRight, ListIcon, Plus, Mail, Phone, MapPin, Users, Building, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 
 interface Cliente {
@@ -26,19 +26,24 @@ export default function ObumaClientesListado() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(30);
   const [stats, setStats] = useState<any>(null);
-  const [filtroEstado, setFiltroEstado] = useState<'activo' | 'inactivo' | 'todos'>('activo');
+  const [filtroEstado, setFiltroEstado] = useState<'activo' | 'inactivo' | 'todos'>('todos'); // ✅ Cambiado a 'todos'
 
   const fetchClientes = async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/obuma/clientes/list?estado=${filtroEstado}&limit=500`);
       const result = await res.json();
+      
       if (result.success) {
         setClientes(result.data || []);
         setStats(result.stats);
+      } else {
+        console.error("Error en respuesta:", result.error);
+        setClientes([]);
       }
     } catch (err) {
       console.error("Error cargando clientes:", err);
+      setClientes([]);
     } finally {
       setLoading(false);
     }
@@ -72,10 +77,18 @@ export default function ObumaClientesListado() {
     return rut.replace(/^(\d{1,2})(\d{3})(\d{3})(\w{1})$/, '$1.$2.$3-$4');
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#00338d]" size={40} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#f8fafc] min-h-screen">
       
-      {/* Header con estadísticas */}
+      {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 text-slate-400 mb-1">
@@ -134,9 +147,9 @@ export default function ObumaClientesListado() {
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value as any)}
           >
+            <option value="todos">📋 Todos</option>
             <option value="activo">✅ Activos</option>
             <option value="inactivo">❌ Inactivos</option>
-            <option value="todos">📋 Todos</option>
           </select>
 
           <Link 
@@ -169,7 +182,7 @@ export default function ObumaClientesListado() {
         </div>
       </div>
 
-      {/* Tabla de clientes */}
+      {/* Tabla */}
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -183,15 +196,15 @@ export default function ObumaClientesListado() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {loading ? (
-              <tr><td colSpan={6} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00338d]" /></td></tr>
-            ) : currentItems.length === 0 ? (
-              <tr><td colSpan={6} className="py-20 text-center text-slate-400">No se encontraron clientes</td></tr>
+            {currentItems.length === 0 ? (
+              <tr><td colSpan={6} className="py-20 text-center text-slate-400">
+                No se encontraron clientes {filtroEstado !== 'todos' && `con estado "${filtroEstado}"`}
+              </td></tr>
             ) : (
               currentItems.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-slate-50/50 transition-all group">
                   <td className="px-6 py-4">
-                    <div className="font-black text-slate-800 text-sm">{cliente.razon_social}</div>
+                    <div className="font-black text-slate-800 text-sm">{cliente.razon_social || 'Sin nombre'}</div>
                     <div className="text-[10px] font-mono text-slate-400 mt-0.5">{formatRut(cliente.rut)}</div>
                     {cliente.es_extranjero && (
                       <span className="inline-block mt-1 text-[8px] font-black bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
