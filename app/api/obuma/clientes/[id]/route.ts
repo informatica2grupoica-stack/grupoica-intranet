@@ -10,70 +10,41 @@ export async function GET(
     
     console.log(`📡 Obteniendo cliente ID: ${id}`);
     
-    // 1. Obtener datos del cliente
-    const clienteUrl = `${process.env.OBUMA_API_URL}/clientes.findById.json/${id}`;
+    // Construir URL de Obuma
+    const obumaUrl = `${process.env.OBUMA_API_URL}/clientes.findById.json/${id}`;
+    console.log(`📡 URL: ${obumaUrl}`);
     
-    const clienteRes = await fetch(clienteUrl, {
-      headers: { 
+    const response = await fetch(obumaUrl, {
+      method: 'GET',
+      headers: {
         'access-token': process.env.OBUMA_API_TOKEN || '',
         'Content-Type': 'application/json'
       }
     });
     
-    if (!clienteRes.ok) {
-      console.error(`❌ Error HTTP: ${clienteRes.status}`);
+    if (!response.ok) {
+      console.error(`❌ Error HTTP: ${response.status}`);
       return NextResponse.json(
-        { error: `Error HTTP: ${clienteRes.status}` },
-        { status: clienteRes.status }
+        { error: `Cliente no encontrado (${response.status})` },
+        { status: response.status }
       );
     }
     
-    const clienteData = await clienteRes.json();
-    console.log("📦 Cliente raw:", JSON.stringify(clienteData).substring(0, 500));
+    const data = await response.json();
+    console.log("📦 Datos recibidos:", JSON.stringify(data).substring(0, 500));
     
-    // IMPORTANTE: La API devuelve los datos DIRECTAMENTE en el objeto raíz
-    // No dentro de 'data' o 'cliente'
-    const cliente = clienteData;
+    // La API devuelve los datos directamente en el objeto raíz
+    const cliente = data;
     
     if (!cliente || !cliente.cliente_id) {
-      console.error("❌ Cliente no encontrado");
+      console.error("❌ Cliente no encontrado en la respuesta");
       return NextResponse.json(
         { error: 'Cliente no encontrado' },
         { status: 404 }
       );
     }
     
-    console.log(`📦 Cliente encontrado: ${cliente.cliente_razon_social}`);
-    
-    // 2. Obtener contactos
-    let contactos = [];
-    try {
-      const contactosRes = await fetch(`${process.env.OBUMA_API_URL}/clientesContactos.list.json/${id}`, {
-        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
-      });
-      if (contactosRes.ok) {
-        const contactosData = await contactosRes.json();
-        contactos = contactosData.data || contactosData.contactos || [];
-      }
-    } catch (error) {
-      console.warn("Error obteniendo contactos:", error);
-    }
-    
-    // 3. Obtener direcciones
-    let direcciones = [];
-    try {
-      const direccionesRes = await fetch(`${process.env.OBUMA_API_URL}/clientesDirecciones.list.json/${id}`, {
-        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
-      });
-      if (direccionesRes.ok) {
-        const direccionesData = await direccionesRes.json();
-        direcciones = direccionesData.data || direccionesData.direcciones || [];
-      }
-    } catch (error) {
-      console.warn("Error obteniendo direcciones:", error);
-    }
-    
-    // 4. Construir respuesta - Usando los campos CORRECTOS de la API
+    // Formatear respuesta
     const clienteFormateado = {
       id: cliente.cliente_id,
       rut: cliente.cliente_rut || '',
@@ -87,24 +58,37 @@ export async function GET(
       es_extranjero: cliente.cliente_extranjero === '1',
       extranjero_id: cliente.cliente_extranjero_id || '',
       created_at: cliente.created_at,
-      contactos: contactos.map((c: any) => ({
-        cc_id: c.cc_id,
-        cc_nombres: c.cc_nombres || '',
-        cc_apellidos: c.cc_apellidos || '',
-        cc_email: c.cc_email || '',
-        cc_telefono_movil: c.cc_telefono_movil || '',
-        cc_cargo: c.cc_cargo || ''
-      })),
-      direcciones: direcciones.map((d: any) => ({
-        cd_id: d.cd_id,
-        cd_direccion: d.cd_direccion || '',
-        cd_comuna: d.cd_comuna || '',
-        cd_ciudad: d.cd_ciudad || '',
-        cd_tipo: d.cd_tipo || 'facturacion'
-      }))
+      contactos: [],
+      direcciones: []
     };
     
-    console.log(`✅ Cliente formateado: ${clienteFormateado.razon_social}`);
+    // Obtener contactos (opcional, si no funciona, ignorar)
+    try {
+      const contactosRes = await fetch(`${process.env.OBUMA_API_URL}/clientesContactos.list.json/${id}`, {
+        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
+      });
+      if (contactosRes.ok) {
+        const contactosData = await contactosRes.json();
+        clienteFormateado.contactos = contactosData.data || contactosData.contactos || [];
+      }
+    } catch (error) {
+      console.warn("Error obteniendo contactos:", error);
+    }
+    
+    // Obtener direcciones (opcional)
+    try {
+      const direccionesRes = await fetch(`${process.env.OBUMA_API_URL}/clientesDirecciones.list.json/${id}`, {
+        headers: { 'access-token': process.env.OBUMA_API_TOKEN || '' }
+      });
+      if (direccionesRes.ok) {
+        const direccionesData = await direccionesRes.json();
+        clienteFormateado.direcciones = direccionesData.data || direccionesData.direcciones || [];
+      }
+    } catch (error) {
+      console.warn("Error obteniendo direcciones:", error);
+    }
+    
+    console.log(`✅ Cliente encontrado: ${clienteFormateado.razon_social}`);
     
     return NextResponse.json({
       success: true,
