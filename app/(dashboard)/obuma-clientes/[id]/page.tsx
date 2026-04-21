@@ -4,6 +4,36 @@ import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, AlertCircle, Check, Mail, Phone, MapPin, Building, User, Globe, Users, MapPinned } from 'lucide-react';
 import Link from 'next/link';
 
+interface ClienteForm {
+  razon_social: string;
+  rut: string;
+  email: string;
+  telefono: string;
+  direccion: string;
+  comuna: string;
+  ciudad: string;
+  es_extranjero: boolean;
+  extranjero_id: string;
+  estado: boolean;
+}
+
+interface Contacto {
+  cc_id: string;
+  cc_nombres: string;
+  cc_apellidos: string;
+  cc_email: string;
+  cc_telefono_movil: string;
+  cc_cargo: string;
+}
+
+interface Direccion {
+  cd_id: string;
+  cd_direccion: string;
+  cd_comuna: string;
+  cd_ciudad: string;
+  cd_tipo: string;
+}
+
 export default function EditarClientePage() {
   const router = useRouter();
   const params = useParams();
@@ -15,7 +45,7 @@ export default function EditarClientePage() {
   const [mostrarContactos, setMostrarContactos] = useState(false);
   const [mostrarDirecciones, setMostrarDirecciones] = useState(false);
   
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ClienteForm>({
     razon_social: '',
     rut: '',
     email: '',
@@ -28,17 +58,20 @@ export default function EditarClientePage() {
     estado: true
   });
 
-  const [contactos, setContactos] = useState<any[]>([]);
-  const [direcciones, setDirecciones] = useState<any[]>([]);
+  const [contactos, setContactos] = useState<Contacto[]>([]);
+  const [direcciones, setDirecciones] = useState<Direccion[]>([]);
 
   // Cargar datos del cliente
   useEffect(() => {
     const cargarCliente = async () => {
       if (!id) return;
       
+      setCargandoDatos(true);
       try {
+        console.log("📡 Cargando cliente:", id);
         const res = await fetch(`/api/obuma/clientes/${id}`);
         const data = await res.json();
+        console.log("📦 Datos recibidos:", data);
         
         if (data.success && data.cliente) {
           const c = data.cliente;
@@ -56,6 +89,8 @@ export default function EditarClientePage() {
           });
           setContactos(c.contactos || []);
           setDirecciones(c.direcciones || []);
+        } else {
+          setStatus({ type: 'error', msg: 'Cliente no encontrado' });
         }
       } catch (error) {
         console.error("Error cargando cliente:", error);
@@ -123,14 +158,14 @@ export default function EditarClientePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase">Editar Cliente</h1>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{form.razon_social}</p>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{form.razon_social || 'Cargando...'}</p>
           </div>
           <Link href="/obuma-clientes" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#00338d] transition-all shadow-sm">
             <ArrowLeft size={20} />
           </Link>
         </div>
 
-        {/* Estadísticas rápidas */}
+        {/* Información adicional */}
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => setMostrarContactos(!mostrarContactos)}
@@ -150,7 +185,60 @@ export default function EditarClientePage() {
           </button>
         </div>
 
-        {/* Formulario */}
+        {/* Modal de contactos */}
+        {mostrarContactos && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMostrarContactos(false)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white p-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-slate-800">Contactos del Cliente</h3>
+                <button onClick={() => setMostrarContactos(false)} className="p-1 hover:bg-slate-100 rounded-lg">✕</button>
+              </div>
+              <div className="p-4 space-y-3">
+                {contactos.length === 0 ? (
+                  <p className="text-slate-400 text-center py-8">No hay contactos registrados</p>
+                ) : (
+                  contactos.map((c) => (
+                    <div key={c.cc_id} className="p-3 bg-slate-50 rounded-xl">
+                      <p className="font-bold text-slate-700">{c.cc_nombres} {c.cc_apellidos}</p>
+                      <p className="text-xs text-slate-500 mt-1">{c.cc_cargo}</p>
+                      <p className="text-xs text-blue-600 mt-1">{c.cc_email}</p>
+                      <p className="text-xs text-slate-500">{c.cc_telefono_movil}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de direcciones */}
+        {mostrarDirecciones && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMostrarDirecciones(false)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white p-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-slate-800">Direcciones del Cliente</h3>
+                <button onClick={() => setMostrarDirecciones(false)} className="p-1 hover:bg-slate-100 rounded-lg">✕</button>
+              </div>
+              <div className="p-4 space-y-3">
+                {direcciones.length === 0 ? (
+                  <p className="text-slate-400 text-center py-8">No hay direcciones registradas</p>
+                ) : (
+                  direcciones.map((d) => (
+                    <div key={d.cd_id} className="p-3 bg-slate-50 rounded-xl">
+                      <p className="font-bold text-slate-700">{d.cd_direccion}</p>
+                      <p className="text-xs text-slate-500 mt-1">{d.cd_comuna}, {d.cd_ciudad}</p>
+                      <span className="inline-block mt-1 text-[9px] font-black bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">
+                        {d.cd_tipo === 'facturacion' ? 'Facturación' : 'Despacho'}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Formulario de edición */}
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-6">
           
           {status && (
