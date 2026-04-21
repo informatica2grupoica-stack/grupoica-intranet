@@ -1,10 +1,10 @@
 "use client";
 import { supabase } from "@/lib/supabase";
-import { 
-  LayoutDashboard, 
-  Users, 
-  MessageSquare, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Users,
+  MessageSquare,
+  LogOut,
   ShoppingBag,
   Briefcase,
   Database,
@@ -23,7 +23,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 // --- IMPORTACIÓN DEL COMPONENTE IA ---
-import ChatBot from "@/components/ChatBot"; 
+import ChatBot from "@/components/ChatBot";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const getUserData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session?.user) {
         setUserEmail(session.user.email || "");
 
@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       }
     };
-    
+
     getUserData();
   }, []);
 
@@ -80,17 +80,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     },
     {
+      title: "CRM",
+      items: [
+        { name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" },
+      ]
+    },
+    {
       title: "Logística",
       items: [{ name: "Proveedores", icon: Truck, path: "/proveedores" }]
     },
     {
       title: "Recursos Humanos",
       items: [
-        { 
-          name: "Genera (RRHH)", 
-          icon: Briefcase, 
-          path: "https://portal360middleware.genera.cl/Account/Login?ReturnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dconsole%26scope%3Dopenid%2520email%2520console-api%26response_type%3Dcode%26acr_values%3Dtenant%253A93053F8F-8ACE-4ED3-881A-E348545F22B6%26redirect_uri%3Dhttps%253A%252F%252Fportal360comunicacion.genera.cl%252Fcallback%26state%3D6c3033c802788bfbb99af54c1e5b40d7154cf64e20201ca287043edc6589c297%26response_mode%3Dfragment", 
-          external: true 
+        {
+          name: "Genera (RRHH)",
+          icon: Briefcase,
+          path: "https://portal360middleware.genera.cl/Account/Login?ReturnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dconsole%26scope%3Dopenid%2520email%2520console-api%26response_type%3Dcode%26acr_values%3Dtenant%253A93053F8F-8ACE-4ED3-881A-E348545F22B6%26redirect_uri%3Dhttps%253A%252F%252Fportal360comunicacion.genera.cl%252Fcallback%26state%3D6c3033c802788bfbb99af54c1e5b40d7154cf64e20201ca287043edc6589c297%26response_mode%3Dfragment",
+          external: true
         }
       ]
     },
@@ -115,13 +121,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-[#f8faff]">
       {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r border-slate-100 flex flex-col fixed h-full z-20">
-        
+
         <div className="px-8 py-10 flex justify-center items-center">
           <div className="relative group cursor-pointer">
-            <img 
-              src="https://i.postimg.cc/NMhmBtKx/logo.webp" 
-              alt="Grupo ICA" 
-              className="h-12 w-auto object-contain transition-transform duration-300 group-hover:scale-105" 
+            <img
+              src="https://i.postimg.cc/NMhmBtKx/logo.webp"
+              alt="Grupo ICA"
+              className="h-12 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             />
             <div className="absolute -inset-2 bg-blue-500/5 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
@@ -137,11 +143,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="space-y-1">
                 {section.items.map((item) => {
                   const isActive = pathname === item.path;
-                  const commonClasses = `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive 
-                    ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50' 
-                    : 'text-slate-600 hover:bg-slate-50'
-                  }`;
+                  const commonClasses = `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
+                      ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50'
+                      : 'text-slate-600 hover:bg-slate-50'
+                    }`;
 
                   const content = (
                     <>
@@ -155,11 +160,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   );
 
                   return (item as any).external ? (
-                    <a 
-                      key={item.path} 
-                      href={item.path} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      key={item.path}
+                      href={item.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className={commonClasses}
                     >
                       {content}
@@ -187,7 +192,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </p>
               <p className="text-[9px] text-slate-400 truncate tracking-tight">{userEmail}</p>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
               title="Cerrar Sesión"
@@ -210,7 +215,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {pathname === "/" ? "Inicio" : pathname.split('/').pop()?.replace("-", " ")}
             </span>
           </div>
-          
+
           <div className="px-4">
             {children}
           </div>
