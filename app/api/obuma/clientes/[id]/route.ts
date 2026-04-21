@@ -8,18 +8,11 @@ export async function GET(
   try {
     const { id } = await params;
     
-    console.log(`📡 API Route - Obteniendo cliente ID: ${id}`);
+    console.log(`📡 API GET /api/obuma/clientes/${id}`);
     
-    if (!id) {
-      return NextResponse.json(
-        { error: 'ID no proporcionado' },
-        { status: 400 }
-      );
-    }
-    
-    // Llamar a Obuma
+    // Construir URL de Obuma
     const obumaUrl = `${process.env.OBUMA_API_URL}/clientes.findById.json/${id}`;
-    console.log(`📡 URL: ${obumaUrl}`);
+    console.log(`📡 Llamando a Obuma: ${obumaUrl}`);
     
     const response = await fetch(obumaUrl, {
       headers: {
@@ -27,42 +20,57 @@ export async function GET(
       }
     });
     
-    console.log(`📡 Response status: ${response.status}`);
+    console.log(`📡 Respuesta Obuma status: ${response.status}`);
     
-    if (!response.ok) {
+    const data = await response.json();
+    
+    // 🔍 LOG COMPLETO - Ver qué devuelve Obuma exactamente
+    console.log("📦 RESPUESTA COMPLETA DE OBUMA:");
+    console.log(JSON.stringify(data, null, 2));
+    
+    // Verificar si la respuesta tiene éxito
+    if (data.success === false || data.status === false) {
+      console.log("❌ Obuma devolvió error:", data.message);
       return NextResponse.json(
-        { error: `Cliente no encontrado (${response.status})` },
-        { status: response.status }
+        { error: data.message || 'Cliente no encontrado en Obuma' },
+        { status: 404 }
       );
     }
     
-    const data = await response.json();
-    console.log("📦 Datos recibidos:", JSON.stringify(data).substring(0, 300));
+    // La API de Obuma puede devolver los datos en diferentes formatos
+    let clienteData = null;
     
-    // Extraer cliente (la API devuelve directamente el objeto)
-    const clienteRaw = data;
+    if (data.data) {
+      clienteData = data.data;
+    } else if (data.cliente) {
+      clienteData = data.cliente;
+    } else if (data.cliente_id) {
+      clienteData = data;
+    } else if (Array.isArray(data) && data.length > 0) {
+      clienteData = data[0];
+    }
     
-    // Verificar que tenemos datos
-    if (!clienteRaw || !clienteRaw.cliente_id) {
+    if (!clienteData || !clienteData.cliente_id) {
+      console.log("❌ No se pudo extraer cliente de la respuesta");
       return NextResponse.json(
-        { error: 'Cliente no encontrado en respuesta' },
+        { error: 'Cliente no encontrado en respuesta', raw: data },
         { status: 404 }
       );
     }
     
     // Formatear respuesta
     const cliente = {
-      id: clienteRaw.cliente_id,
-      rut: clienteRaw.cliente_rut || '',
-      razon_social: clienteRaw.cliente_razon_social || '',
-      email: clienteRaw.cliente_email || '',
-      telefono: clienteRaw.cliente_telefono || '',
-      direccion: clienteRaw.cliente_direccion || '',
-      comuna: clienteRaw.cliente_comuna || '',
-      ciudad: clienteRaw.cliente_ciudad || '',
-      estado: clienteRaw.estado === '1',
-      es_extranjero: clienteRaw.cliente_extranjero === '1',
-      extranjero_id: clienteRaw.cliente_extranjero_id || '',
+      id: clienteData.cliente_id,
+      rut: clienteData.cliente_rut || '',
+      razon_social: clienteData.cliente_razon_social || '',
+      email: clienteData.cliente_email || '',
+      telefono: clienteData.cliente_telefono || '',
+      direccion: clienteData.cliente_direccion || '',
+      comuna: clienteData.cliente_comuna || '',
+      ciudad: clienteData.cliente_ciudad || '',
+      estado: clienteData.estado === '1',
+      es_extranjero: clienteData.cliente_extranjero === '1',
+      extranjero_id: clienteData.cliente_extranjero_id || '',
       contactos: [],
       direcciones: []
     };
@@ -78,59 +86,6 @@ export async function GET(
     console.error("❌ Error:", error);
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const body = await request.json();
-    
-    console.log(`📡 Actualizando cliente ${id}:`, body);
-    
-    const payload = {
-      cliente_id: id,
-      cliente_razon_social: body.razon_social,
-      cliente_email: body.email,
-      cliente_telefono: body.telefono || '',
-      cliente_direccion: body.direccion || '',
-      cliente_comuna: body.comuna || '',
-      cliente_ciudad: body.ciudad || '',
-      estado: body.estado ? '1' : '0'
-    };
-    
-    const response = await fetch(`${process.env.OBUMA_API_URL}/clientes.update.json`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'access-token': process.env.OBUMA_API_TOKEN || '',
-      },
-      body: JSON.stringify(payload),
-    });
-    
-    const result = await response.json();
-    
-    if (!response.ok || result.success === false) {
-      return NextResponse.json(
-        { error: result.message || 'Error al actualizar' },
-        { status: 400 }
-      );
-    }
-    
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Cliente actualizado exitosamente'
-    });
-    
-  } catch (error: any) {
-    console.error("❌ Error en PUT:", error);
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
       { status: 500 }
     );
   }
