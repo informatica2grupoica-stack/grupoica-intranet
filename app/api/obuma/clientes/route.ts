@@ -8,45 +8,36 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log("📡 Body recibido:", JSON.stringify(body, null, 2));
 
-    // Extraer valores (soportar ambos formatos)
+    // Extraer valores
     const razonSocial = body.razon_social || body.cliente_razon_social;
     const email = body.email || body.cliente_email;
     const rut = body.rut || body.cliente_rut || '';
-    const telefono = body.telefono || body.cliente_telefono || '';
-    const direccion = body.direccion || body.cliente_direccion || '';
-    const comuna = body.comuna || body.cliente_comuna || '';
-    const ciudad = body.ciudad || body.cliente_ciudad || '';
 
     // Validaciones
     if (!razonSocial) {
-      console.log("❌ Error: Razón social requerida");
       return NextResponse.json({ error: 'La razón social es requerida' }, { status: 400 });
     }
 
     if (!email) {
-      console.log("❌ Error: Email requerido");
       return NextResponse.json({ error: 'El email es requerido' }, { status: 400 });
     }
 
-    // Payload mínimo según documentación de Obuma
+    // Payload para Obuma
     const payload = {
       cliente_razon_social: razonSocial,
       cliente_email: email,
       cliente_rut: rut,
-      cliente_telefono: telefono,
-      cliente_direccion: direccion,
-      cliente_comuna: comuna,
-      cliente_ciudad: ciudad,
+      cliente_telefono: body.telefono || body.cliente_telefono || '',
+      cliente_direccion: body.direccion || body.cliente_direccion || '',
+      cliente_comuna: body.comuna || body.cliente_comuna || '',
+      cliente_ciudad: body.ciudad || body.cliente_ciudad || '',
       cliente_clave: Math.random().toString(36).substring(2, 10).toUpperCase(),
       estado: '1'
     };
 
     console.log("📤 Payload a Obuma:", JSON.stringify(payload, null, 2));
     
-    const obumaUrl = `${process.env.OBUMA_API_URL}/clientes.create.json`;
-    console.log(`📡 URL Obuma: ${obumaUrl}`);
-    
-    const response = await fetch(obumaUrl, {
+    const response = await fetch(`${process.env.OBUMA_API_URL}/clientes.create.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,40 +46,42 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     });
 
-    console.log(`📡 Respuesta HTTP status: ${response.status}`);
-    
     const result = await response.json();
-    console.log("📦 Respuesta Obuma COMPLETA:", JSON.stringify(result, null, 2));
+    console.log("📦 Respuesta Obuma:", JSON.stringify(result, null, 2));
 
-    // Verificar error de Obuma
-    if (result.result?.result === "0") {
-      console.log(`❌ Obuma error code: ${result.result?.result}`);
-      console.log(`❌ Obuma error detail: ${result.result?.result_detail}`);
-      return NextResponse.json(
-        { error: result.result?.result_detail || 'Error al crear cliente en Obuma' },
-        { status: 400 }
-      );
-    }
-
-    if (result.success === false || result.status === false) {
-      console.log(`❌ Obuma success false: ${result.message}`);
-      return NextResponse.json(
-        { error: result.message || 'Error al crear cliente' },
-        { status: 400 }
-      );
-    }
-
-    console.log("✅ Cliente creado exitosamente");
+    // ✅ CORREGIDO: Manejar respuesta de Obuma correctamente
+    // Obuma devuelve result.result (número) no result.result
+    // Si result.result === 0 es éxito, si es diferente es error
     
-    return NextResponse.json({ 
-      success: true, 
-      data: result.data || result,
-      message: 'Cliente creado exitosamente'
-    });
+    let clienteId = null;
+    let mensaje = '';
+    
+    // Extraer ID del cliente de la respuesta
+    if (result.result?.result === 0 || result.result?.result === "0") {
+      // Cliente creado o ya existente
+      if (result.result?.result_detail) {
+        const match = result.result.result_detail.match(/cliente_id:(\d+)/);
+        if (match) {
+          clienteId = match[1];
+        }
+        mensaje = result.result.result_detail;
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        cliente_id: clienteId,
+        message: mensaje || 'Cliente procesado correctamente'
+      });
+    }
+    
+    // Si hay error
+    return NextResponse.json(
+      { error: result.result?.result_detail || 'Error al crear cliente' },
+      { status: 400 }
+    );
 
   } catch (error: any) {
-    console.error("❌ Error capturado:", error.message);
-    console.error("Stack:", error.stack);
+    console.error("❌ Error:", error);
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message },
       { status: 500 }
