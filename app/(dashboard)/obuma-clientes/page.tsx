@@ -23,6 +23,7 @@ export default function ObumaClientesListado() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(30);
@@ -58,6 +59,28 @@ export default function ObumaClientesListado() {
   const refreshClientes = async () => {
     setRefreshing(true);
     await fetchClientes(true);
+  };
+
+  const sincronizarClientes = async () => {
+    setSincronizando(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/obuma/clientes/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Sincronización completada!\n📦 Clientes: ${data.sincronizados}\n❌ Errores: ${data.errores}\n⏱️ Duración: ${data.duracion_ms}ms`);
+        await fetchClientes(true);
+      } else {
+        alert(`❌ Error en sincronización: ${data.error}`);
+        setError(data.error);
+      }
+    } catch (error) {
+      console.error("Error sincronizando:", error);
+      alert("❌ Error al conectar con el servidor");
+      setError("Error de conexión al sincronizar");
+    } finally {
+      setSincronizando(false);
+    }
   };
 
   useEffect(() => {
@@ -186,6 +209,16 @@ export default function ObumaClientesListado() {
             title="Actualizar lista"
           >
             {refreshing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
+          </button>
+
+          {/* Botón de sincronización a Supabase */}
+          <button
+            onClick={sincronizarClientes}
+            disabled={sincronizando}
+            className="bg-green-600 hover:bg-green-700 text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            title="Sincronizar clientes con Supabase"
+          >
+            {sincronizando ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
           </button>
 
           <Link 
