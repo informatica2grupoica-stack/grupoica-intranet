@@ -27,6 +27,17 @@ interface ProductoReal {
   categoria?: string;
 }
 
+interface ClienteReal {
+  id: string;
+  razon_social: string;
+  rut: string;
+  email: string;
+  telefono: string;
+  estado: boolean;
+  total_contactos: number;
+  total_direcciones: number;
+}
+
 interface Usuario {
   id: string;
   email: string;
@@ -39,7 +50,7 @@ export default function ChatBot() {
   const [mensajes, setMensajes] = useState<Mensaje[]>([
     {
       id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente de productos. Puedo ayudarte a buscar productos, verificar SKUs o responder preguntas sobre tu inventario.\n\n✨ **Nuevo:** También puedo ayudarte a cambiar precios o actualizar stock. Solo dime:\n• "cambia el precio del SKU 6026423727 a 15000"\n• "actualiza stock del SKU 6026423727 a 50"\n\n¿En qué te ayudo?',
+      texto: '👋 ¡Hola! Soy tu asistente inteligente. Puedo ayudarte a buscar productos, consultar clientes, verificar SKUs o responder preguntas sobre tu inventario y base de datos.\n\n✨ **Qué puedo hacer:**\n• Buscar productos por nombre o SKU\n• Consultar clientes por RUT o razón social\n• Cambiar precios o actualizar stock\n• Ver estadísticas de inventario\n• Responder preguntas sobre tu base de datos\n\n¿En qué te ayudo?',
       esUsuario: false,
       timestamp: new Date()
     }
@@ -47,7 +58,8 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [cargando, setCargando] = useState(false);
   const [productos, setProductos] = useState<ProductoReal[]>([]);
-  const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [clientes, setClientes] = useState<ClienteReal[]>([]);
+  const [cargandoDatos, setCargandoDatos] = useState(true);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [recargandoLista, setRecargandoLista] = useState(false);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
@@ -102,12 +114,45 @@ export default function ChatBot() {
     }
   };
 
-  // Cargar productos al inicio
+  // Cargar clientes desde Supabase
+  const cargarClientes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clientes_obuma')
+        .select('id, razon_social, rut, email, telefono, estado, total_contactos, total_direcciones')
+        .eq('estado', true)
+        .order('razon_social');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const clientesMap: ClienteReal[] = data.map((c: any) => ({
+          id: c.id,
+          razon_social: c.razon_social,
+          rut: c.rut || '',
+          email: c.email || '',
+          telefono: c.telefono || '',
+          estado: c.estado,
+          total_contactos: c.total_contactos || 0,
+          total_direcciones: c.total_direcciones || 0
+        }));
+        setClientes(clientesMap);
+        console.log(`✅ ChatBot: ${clientesMap.length} clientes cargados`);
+        return clientesMap.length;
+      }
+      return 0;
+    } catch (error) {
+      console.error("Error cargando clientes:", error);
+      return 0;
+    }
+  };
+
+  // Cargar todos los datos al inicio
   useEffect(() => {
     const inicializar = async () => {
-      setCargandoProductos(true);
-      await cargarProductos();
-      setCargandoProductos(false);
+      setCargandoDatos(true);
+      await Promise.all([cargarProductos(), cargarClientes()]);
+      setCargandoDatos(false);
     };
     inicializar();
   }, []);
@@ -137,15 +182,15 @@ export default function ChatBot() {
     }
   };
 
-  // Recargar lista de productos después de una acción
-  const recargarListaProductos = async (): Promise<boolean> => {
+  // Recargar todos los datos
+  const recargarTodosLosDatos = async (): Promise<boolean> => {
     setRecargandoLista(true);
-    const count = await cargarProductos();
+    await Promise.all([cargarProductos(), cargarClientes()]);
     setRecargandoLista(false);
-    return count > 0;
+    return true;
   };
 
-  // Detectar y ejecutar acciones
+  // Detectar y ejecutar acciones (cambiar precio/stock)
   const detectarYEjecutarAccion = async (pregunta: string): Promise<{ esAccion: boolean; respuesta: string; exitosa: boolean }> => {
     const preguntaLower = pregunta.toLowerCase();
     
@@ -193,11 +238,10 @@ export default function ChatBot() {
         const data = await updateRes.json();
         
         if (updateRes.ok) {
-          // Recargar productos desde Supabase para actualizar la lista
-          await recargarListaProductos();
+          await recargarTodosLosDatos();
           return { 
             esAccion: true, 
-            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}\n\n🔄 La lista de productos se ha actualizado.`,
+            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}\n\n🔄 La lista se ha actualizado.`,
             exitosa: true 
           };
         }
@@ -241,12 +285,11 @@ export default function ChatBot() {
         const data = await stockRes.json();
         
         if (data.success) {
-          // Recargar productos desde Supabase para actualizar la lista
-          await recargarListaProductos();
+          await recargarTodosLosDatos();
           const direccion = diferencia > 0 ? "aumentado" : "disminuido";
           return { 
             esAccion: true, 
-            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}\n\n🔄 La lista de productos se ha actualizado.`,
+            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}\n\n🔄 La lista se ha actualizado.`,
             exitosa: true 
           };
         }
@@ -293,7 +336,7 @@ export default function ChatBot() {
       } else {
         const emptyMsg: Mensaje = {
           id: Date.now().toString(),
-          texto: "📜 No hay conversaciones previas en tu historial. ¡Empieza a preguntarme sobre productos!",
+          texto: "📜 No hay conversaciones previas en tu historial. ¡Empieza a preguntarme!",
           esUsuario: false,
           timestamp: new Date()
         };
@@ -311,16 +354,6 @@ export default function ChatBot() {
     } finally {
       setCargando(false);
     }
-  };
-
-  // Sugerencias proactivas basadas en stock bajo
-  const sugerirStockBajo = async (): Promise<string> => {
-    const productosBajoStock = productos.filter(p => p.stock > 0 && p.stock <= 5);
-    if (productosBajoStock.length > 0) {
-      const lista = productosBajoStock.slice(0, 3).map(p => `• **${p.nombre}** (Stock: ${p.stock})`).join('\n');
-      return `⚠️ **Alerta de stock bajo:**\n\n${lista}\n\n${productosBajoStock.length > 3 ? `... y ${productosBajoStock.length - 3} más.` : ''}\n\n¿Necesitas reabastecer alguno?`;
-    }
-    return '';
   };
 
   const enviarMensaje = async () => {
@@ -352,30 +385,19 @@ export default function ChatBot() {
         setMensajes(prev => [...prev, botMsg]);
         await guardarEnHistorial(pregunta, accionRespuesta, 0);
         setCargando(false);
-        
-        if (exitosa) {
-          const sugerencia = await sugerirStockBajo();
-          if (sugerencia) {
-            setTimeout(() => {
-              const sugerenciaMsg: Mensaje = {
-                id: (Date.now() + 2).toString(),
-                texto: sugerencia,
-                esUsuario: false,
-                timestamp: new Date()
-              };
-              setMensajes(prev => [...prev, sugerenciaMsg]);
-            }, 1000);
-          }
-        }
         return;
       }
       
+      // Consultar a DeepSeek con todos los datos
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           pregunta,
-          contexto: { productos }
+          contexto: { 
+            productos: productos,
+            clientes: clientes
+          }
         })
       });
 
@@ -395,21 +417,6 @@ export default function ChatBot() {
         }
       };
       setMensajes(prev => [...prev, botMsg]);
-      
-      if (pregunta.toLowerCase().includes('producto') || pregunta.toLowerCase().includes('tienes')) {
-        const sugerencia = await sugerirStockBajo();
-        if (sugerencia) {
-          setTimeout(() => {
-            const sugerenciaMsg: Mensaje = {
-              id: (Date.now() + 2).toString(),
-              texto: sugerencia,
-              esUsuario: false,
-              timestamp: new Date()
-            };
-            setMensajes(prev => [...prev, sugerenciaMsg]);
-          }, 1500);
-        }
-      }
       
     } catch (error) {
       console.error("Error en enviarMensaje:", error);
@@ -501,10 +508,19 @@ export default function ChatBot() {
         <div className="flex items-center gap-2">
           <Bot size={18} />
           <span className="font-bold text-sm">Asistente Obuma IA</span>
-          {!cargandoProductos && productos.length > 0 && (
-            <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
-              📦 {productos.length}
-            </span>
+          {!cargandoDatos && (
+            <div className="flex gap-1">
+              {productos.length > 0 && (
+                <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                  📦 {productos.length}
+                </span>
+              )}
+              {clientes.length > 0 && (
+                <span className="bg-blue-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                  👥 {clientes.length}
+                </span>
+              )}
+            </div>
           )}
           {recargandoLista && (
             <span className="bg-blue-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full animate-pulse">
@@ -523,18 +539,18 @@ export default function ChatBot() {
           <button
             onClick={async () => {
               setRecargandoLista(true);
-              await cargarProductos();
+              await recargarTodosLosDatos();
               setRecargandoLista(false);
               const refreshMsg: Mensaje = {
                 id: Date.now().toString(),
-                texto: `🔄 Lista actualizada: ${productos.length} productos en inventario.`,
+                texto: `🔄 Datos actualizados: ${productos.length} productos, ${clientes.length} clientes.`,
                 esUsuario: false,
                 timestamp: new Date()
               };
               setMensajes(prev => [...prev, refreshMsg]);
             }}
             className="hover:bg-blue-700 p-1 rounded transition-colors"
-            title="Recargar productos"
+            title="Recargar datos"
           >
             <RefreshCw size={16} className={recargandoLista ? 'animate-spin' : ''} />
           </button>
@@ -556,7 +572,7 @@ export default function ChatBot() {
       {!isMinimized && (
         <>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-            {cargandoProductos ? (
+            {cargandoDatos ? (
               <div className="flex justify-center items-center h-32">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
@@ -592,7 +608,7 @@ export default function ChatBot() {
 
           <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
             <div className="flex flex-wrap gap-1">
-              {["¿Cuántos productos tenemos?", "Productos con poco stock", "Productos más caros", "Buscar por SKU", "Ver mi historial"].map((sug) => (
+              {["¿Cuántos productos tenemos?", "¿Cuántos clientes tenemos?", "Productos con poco stock", "Buscar por SKU", "Ver mi historial"].map((sug) => (
                 <button
                   key={sug}
                   onClick={() => {
@@ -617,7 +633,7 @@ export default function ChatBot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ej: 'busca film plastico' o 'cambia el precio del SKU 6026423727 a 15000' o 'actualiza stock del SKU 6026423727 a 50'"
+                placeholder="Ej: 'busca cliente ENVAPOL' o 'cambia el precio del SKU 6026423727 a 15000' o 'actualiza stock del SKU 6026423727 a 50'"
                 className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
                 rows={1}
                 disabled={cargando}
@@ -632,15 +648,19 @@ export default function ChatBot() {
             </div>
             <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
               <span>🤖</span>
-              <span>{productos.length > 0 ? `${productos.length} productos indexados` : "Cargando..."}</span>
+              <span>
+                {productos.length > 0 || clientes.length > 0 
+                  ? `${productos.length} productos | ${clientes.length} clientes` 
+                  : "Cargando..."}
+              </span>
               <button
                 onClick={async () => {
                   setRecargandoLista(true);
-                  await cargarProductos();
+                  await recargarTodosLosDatos();
                   setRecargandoLista(false);
                   const refreshMsg: Mensaje = {
                     id: Date.now().toString(),
-                    texto: `🔄 Actualizado: ${productos.length} productos en mi base de datos.`,
+                    texto: `🔄 Actualizado: ${productos.length} productos, ${clientes.length} clientes.`,
                     esUsuario: false,
                     timestamp: new Date()
                   };
