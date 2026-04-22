@@ -106,49 +106,30 @@ const databaseSchema = {
   }
 };
 
-// Función para buscar productos en Supabase (CON LOGS DETALLADOS)
+// Función para buscar productos en Supabase (CON LOGS)
 async function buscarProductosEnSupabase(termino: string, limit: number = 20): Promise<Producto[]> {
-  console.log("=========================================");
-  console.log(`🔍 INICIO BÚSQUEDA - Término: "${termino}"`);
-  console.log("=========================================");
+  console.log(`🔍 Buscando en Supabase: "${termino}"`);
   
   try {
-    // 1. Verificar cuántos productos hay en total
-    const { count: totalProductos, error: countError } = await supabase
-      .from('productos_obuma')
-      .select('*', { count: 'exact', head: true });
-    
-    console.log(`📊 PASO 1: Total de productos en tabla productos_obuma: ${totalProductos || 0}`);
-    
-    if (countError) {
-      console.error(`❌ Error al contar productos:`, countError);
-    }
-    
-    // 2. Obtener una muestra de productos para verificar que hay datos
-    const { data: muestra, error: muestraError } = await supabase
+    // Primero, obtener todos los productos para depuración
+    const { data: todosProductos, error: todosError } = await supabase
       .from('productos_obuma')
       .select('nombre, sku')
-      .limit(5);
+      .limit(10);
     
-    if (muestraError) {
-      console.error(`❌ Error al obtener muestra:`, muestraError);
-    } else {
-      console.log(`📋 PASO 2: Muestra de productos en BD:`);
-      muestra?.forEach((p, idx) => {
-        console.log(`   ${idx + 1}. "${p.nombre}" (SKU: ${p.sku})`);
+    if (!todosError && todosProductos) {
+      console.log(`📋 PRIMEROS 10 PRODUCTOS EN BD:`);
+      todosProductos.forEach((p, i) => {
+        console.log(`   ${i+1}. "${p.nombre}" (SKU: ${p.sku})`);
       });
     }
     
-    // 3. Construir consulta
     let query = supabase
       .from('productos_obuma')
       .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
       .eq('activo', true);
     
-    // 4. Determinar tipo de búsqueda
     const esSKU = /^\d{7,}$/.test(termino);
-    console.log(`🔍 PASO 3: Tipo de búsqueda - esSKU: ${esSKU}`);
-    
     if (esSKU) {
       console.log(`🔍 Buscando por SKU exacto: "${termino}"`);
       query = query.eq('sku', termino);
@@ -157,53 +138,20 @@ async function buscarProductosEnSupabase(termino: string, limit: number = 20): P
       query = query.ilike('nombre', `%${termino}%`);
     }
     
-    // 5. Ejecutar consulta
     const { data, error } = await query.limit(limit);
     
     if (error) {
-      console.error(`❌ PASO 4: Error en consulta:`, error);
+      console.error(`❌ Error en consulta:`, error);
       return [];
     }
     
-    console.log(`✅ PASO 4: Resultados encontrados: ${data?.length || 0}`);
+    console.log(`✅ Resultados encontrados: ${data?.length || 0}`);
     
     if (data && data.length > 0) {
-      console.log(`📋 PASO 5: Detalle de resultados:`);
       data.forEach((p, idx) => {
-        console.log(`   ${idx + 1}. "${p.nombre}" - SKU: ${p.sku} - Precio: ${p.precio_total} - Stock: ${p.stock_actual}`);
+        console.log(`   ${idx+1}. "${p.nombre}" - SKU: ${p.sku}`);
       });
-    } else {
-      console.log(`⚠️ PASO 5: No se encontraron productos para "${termino}"`);
-      
-      // Intentar búsqueda alternativa con término más corto
-      const palabras = termino.split(' ');
-      if (palabras.length > 1) {
-        const palabraCorta = palabras[0];
-        console.log(`🔄 Intentando búsqueda alternativa con: "${palabraCorta}"`);
-        
-        const { data: altData, error: altError } = await supabase
-          .from('productos_obuma')
-          .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
-          .eq('activo', true)
-          .ilike('nombre', `%${palabraCorta}%`)
-          .limit(limit);
-        
-        if (!altError && altData && altData.length > 0) {
-          console.log(`✅ Búsqueda alternativa encontró ${altData.length} resultados`);
-          return (altData || []).map((p: any) => ({
-            nombre: p.nombre || '',
-            sku: p.sku || '',
-            precio: p.precio_total || 0,
-            stock: p.stock_actual || 0,
-            categoria: p.categoria_nombre || ''
-          }));
-        }
-      }
     }
-    
-    console.log("=========================================");
-    console.log(`🔍 FIN BÚSQUEDA`);
-    console.log("=========================================");
     
     return (data || []).map((p: any) => ({
       nombre: p.nombre || '',
@@ -214,15 +162,13 @@ async function buscarProductosEnSupabase(termino: string, limit: number = 20): P
     }));
     
   } catch (error) {
-    console.error("❌ Error en buscarProductosEnSupabase:", error);
+    console.error("Error buscando en Supabase:", error);
     return [];
   }
 }
 
 // Función para obtener estadísticas completas
 async function obtenerEstadisticasCompletas(): Promise<any> {
-  console.log("📊 Obteniendo estadísticas completas...");
-  
   const { count: productosCount, error: productosError } = await supabase
     .from('productos_obuma')
     .select('*', { count: 'exact', head: true });
@@ -282,41 +228,33 @@ function detectarIntencion(pregunta: string): string {
 async function obtenerDatosPorIntencion(intencion: string, pregunta: string, limit: number = 20): Promise<DatosResponse> {
   const p = pregunta.toLowerCase();
   
-  console.log(`🎯 obtenerDatosPorIntencion - Intención: ${intencion}, Pregunta: "${pregunta}"`);
-  
   try {
     switch (intencion) {
       case "productos_obuma": {
-        console.log("📦 Procesando caso productos_obuma");
-        
         let termino = '';
         
         if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
           termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
-          console.log(`📦 Término extraído (comando especial): "${termino}"`);
         } else {
           termino = p
             .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
             .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
             .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
             .trim();
-          console.log(`📦 Término extraído (limpieza general): "${termino}"`);
         }
         
         if (!termino || termino.length < 3) {
           const { count } = await supabase
             .from('productos_obuma')
             .select('*', { count: 'exact', head: true });
-          console.log(`📊 Pregunta general de productos: total = ${count || 0}`);
           return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
         }
         
-        console.log(`🔍 Buscando producto específico: "${termino}"`);
+        console.log(`🔍 Buscando producto: "${termino}"`);
         
         const productos = await buscarProductosEnSupabase(termino, limit);
         
         if (productos.length > 0) {
-          console.log(`✅ Productos encontrados: ${productos.length}`);
           return { 
             tipo: "productos", 
             datos: productos, 
@@ -328,8 +266,6 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         const { count } = await supabase
           .from('productos_obuma')
           .select('*', { count: 'exact', head: true });
-        
-        console.log(`❌ No se encontraron productos para "${termino}"`);
         
         return { 
           tipo: "productos", 
@@ -416,11 +352,6 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
           responsable: t.responsable ? `${t.responsable.nombre} ${t.responsable.apellido}` : 'No asignado'
         }));
         
-        console.log(`📋 Tareas encontradas: ${tareasFormateadas.length}`);
-        if (tareasFormateadas.length > 0) {
-          console.log(`📋 Primera tarea: ${tareasFormateadas[0].titulo} → Responsable: ${tareasFormateadas[0].responsable}`);
-        }
-        
         return { tipo: "tareas", datos: tareasFormateadas, total: count || 0 };
       }
       
@@ -496,19 +427,12 @@ export async function POST(req: Request) {
   try {
     const { pregunta, contexto } = await req.json();
     
-    console.log("=========================================");
-    console.log(`💬 NUEVA CONSULTA AL CHATBOT: "${pregunta}"`);
-    console.log("=========================================");
-    
     if (!pregunta || pregunta.trim() === "") {
       return NextResponse.json({ error: "La pregunta no puede estar vacía" }, { status: 400 });
     }
 
     const intencion = detectarIntencion(pregunta);
-    console.log(`🎯 Intención detectada: ${intencion}`);
-    
     const datosDB = await obtenerDatosPorIntencion(intencion, pregunta);
-    console.log(`📦 datosDB resultante: tipo=${datosDB.tipo}, total=${datosDB.total}, datos.length=${datosDB.datos?.length || 0}`);
     
     let systemPrompt = `Eres "Asistente Obuma", un asistente inteligente que conoce TODA la base de datos de la empresa.
 
@@ -524,11 +448,18 @@ ${JSON.stringify(datosDB.datos, null, 2)}
 
 ⚠️ REGLA ESTRICTA: Estos son los ÚNICOS productos que existen en la base de datos.
 NO INVENTES NINGÚN PRODUCTO. Si el usuario pregunta por un producto que no está en esta lista, responde que no existe.
-NO uses ejemplos como "producto de prueba" o "Lenovo ThinkPad" a menos que estén explícitamente en esta lista.`;
+NO uses ejemplos como "producto de prueba" a menos que estén explícitamente en esta lista.`;
     }
     else if (datosDB.tipo === "productos" && datosDB.noEncontrado) {
-      systemPrompt += `\n\n❌ No se encontró el producto "${datosDB.termino}" en la base de datos.
-Responde EXACTAMENTE: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. Tenemos ${datosDB.total} productos en total. ¿Quieres que te liste algunos o busques por otra palabra?"`;
+      // PROMPT MUY ESTRICTO PARA EVITAR INVENCIÓN
+      systemPrompt += `\n\n❌ **NO SE ENCONTRARON PRODUCTOS EN LA BASE DE DATOS**
+
+La búsqueda del producto "${datosDB.termino}" no arrojó resultados en la tabla productos_obuma.
+
+⚠️ **REGLAS ESTRICTAS:**
+1. NO inventes productos falsos como "Papel Higienico Elite 4x500mt"
+2. NO uses SKU inventados como "ELITE-4X500MT"
+3. Responde EXACTAMENTE: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. Tenemos ${datosDB.total} productos en total. ¿Quieres que busque por otra palabra o SKU?"`;
     }
     else if (datosDB.tipo === "productos" && datosDB.esPreguntaGeneral) {
       systemPrompt += `\n\nResponde: "Tenemos ${datosDB.total} productos en inventario."`;
@@ -558,29 +489,23 @@ ${JSON.stringify(datosDB.datos, null, 2)}`;
     systemPrompt += `\n\n🎨 REGLAS DE RESPUESTA:
 1. Responde en español, de forma natural, amable y conversacional
 2. Usa los datos REALES que se te proporcionan - NUNCA inventes información
-3. Usa emojis para hacer la conversación más amigable (📦 para productos, 👥 para clientes, ✅ para tareas, 💻 para dispositivos)
-4. Si muestras listados, usa • o ✅ al inicio de cada línea
-5. Destaca información importante con **negritas**
-6. Si no hay datos, dilo honestamente y ofrece ayuda
-7. Sé conciso pero completo - ve al grano`;
+3. Si no hay datos en la lista que se te proporcionó, NO INVENTES NADA
+4. Usa emojis para hacer la conversación más amigable (📦 para productos, 👥 para clientes, ✅ para tareas, 💻 para dispositivos)
+5. Si muestras listados, usa • o ✅ al inicio de cada línea
+6. Destaca información importante con **negritas**
+7. Si no hay datos, dilo honestamente y ofrece ayuda`;
 
-    console.log(`🤖 Enviando prompt a DeepSeek...`);
-    
     const result = await callDeepSeek([
       { role: "system", content: systemPrompt },
       { role: "user", content: pregunta }
-    ], 0.3, 800);
+    ], 0.2, 600);
 
     if (result.error) {
-      console.error(`❌ Error en DeepSeek: ${result.error}`);
       return NextResponse.json({ 
         respuesta: "🔌 Lo siento, tuve un problema de conexión. ¿Puedes intentarlo de nuevo?",
         error: result.error 
       }, { status: 500 });
     }
-    
-    console.log(`✅ Respuesta generada exitosamente`);
-    console.log("=========================================");
     
     return NextResponse.json({ 
       respuesta: result.content,
@@ -590,7 +515,7 @@ ${JSON.stringify(datosDB.datos, null, 2)}`;
     });
     
   } catch (error: any) {
-    console.error("❌ Error en chat:", error);
+    console.error("Error en chat:", error);
     return NextResponse.json(
       { respuesta: "🔌 Ups, algo salió mal. Por favor, intenta nuevamente." },
       { status: 500 }
