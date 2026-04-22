@@ -94,7 +94,8 @@ const databaseSchema = {
 // Función para buscar productos DIRECTAMENTE en Obuma API (prioridad)
 async function buscarProductosEnObuma(termino: string, limit: number = 20): Promise<Producto[]> {
   try {
-    const obumaUrl = `${process.env.OBUMA_API_URL}/productos.list.json?filter=${encodeURIComponent(termino)}&limit=${limit}`;
+    const filterTerm = encodeURIComponent(termino);
+    const obumaUrl = `${process.env.OBUMA_API_URL}/productos.list.json?filter=${filterTerm}&limit=${limit}`;
     console.log(`🔍 Buscando en Obuma API: ${obumaUrl}`);
     
     const response = await fetch(obumaUrl, {
@@ -183,9 +184,20 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
   try {
     switch (intencion) {
       case "productos_obuma": {
-        let termino = p
-          .replace(/productos?|busca|encuentra|tienes?|muestra|listame|dame|el|la|los|las/gi, '')
-          .trim();
+        // MEJORADO: Extraer término de búsqueda correctamente
+        let termino = '';
+        
+        // Si la pregunta comienza con "busca" o "encuentra"
+        if (p.startsWith('busca') || p.startsWith('encuentra')) {
+          termino = p.replace(/^(busca|encuentra)\s+/, '').trim();
+        } else {
+          termino = p
+            .replace(/productos?|busca|encuentra|tienes?|muestra|listame|dame|el|la|los|las|ver|todos/gi, '')
+            .replace(/^de\s+|^del\s+|^los\s+|^las\s+/, '')
+            .trim();
+        }
+        
+        console.log(`🔍 Término extraído: "${termino}" de: "${pregunta}"`);
         
         if (termino && termino.length > 2) {
           console.log(`🔍 Prioridad 1: Buscando "${termino}" en Obuma API...`);
