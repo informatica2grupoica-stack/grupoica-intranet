@@ -237,36 +237,113 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
       
       case "proveedores": {
         const { count } = await supabase.from('proveedores').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('proveedores').select('nombre_empresa, categoria, email_contacto, telefono').eq('activo', true).limit(limit);
+        const { data } = await supabase
+          .from('proveedores')
+          .select('nombre_empresa, categoria, email_contacto, telefono, calificacion')
+          .eq('activo', true)
+          .limit(limit);
         return { tipo: "proveedores", datos: data || [], total: count || 0 };
       }
       
       case "tareas": {
         const { count } = await supabase.from('tareas').select('*', { count: 'exact', head: true });
-        let query = supabase.from('tareas').select('titulo, prioridad, estado, fecha_limite');
+        
+        // Consulta con JOIN a perfiles para obtener el nombre del asignado
+        let query = supabase
+          .from('tareas')
+          .select(`
+            titulo,
+            descripcion,
+            prioridad,
+            estado,
+            fecha_limite,
+            fecha_inicio,
+            proyecto,
+            creado_por,
+            asignado_a,
+            responsable:perfiles!tareas_asignado_a_fkey(
+              nombre,
+              apellido
+            )
+          `);
+        
         if (p.includes('pendiente')) query = query.eq('estado', 'pendiente');
-        const { data } = await query.order('created_at', { ascending: false }).limit(limit);
-        return { tipo: "tareas", datos: data || [], total: count || 0 };
+        if (p.includes('en proceso') || p.includes('en_proceso')) query = query.eq('estado', 'en_proceso');
+        if (p.includes('completada')) query = query.eq('estado', 'completada');
+        if (p.includes('alta')) query = query.eq('prioridad', 'alta');
+        if (p.includes('baja')) query = query.eq('prioridad', 'baja');
+        
+        const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+        
+        if (error) {
+          console.error("Error en consulta de tareas:", error);
+          return { tipo: "tareas", datos: [], total: count || 0, error: true };
+        }
+        
+        // Formatear tareas con nombre del responsable
+        const tareasFormateadas = (data || []).map((t: any) => ({
+          titulo: t.titulo,
+          descripcion: t.descripcion,
+          prioridad: t.prioridad,
+          estado: t.estado,
+          fecha_limite: t.fecha_limite,
+          fecha_inicio: t.fecha_inicio,
+          proyecto: t.proyecto || 'Sin proyecto',
+          responsable: t.responsable ? `${t.responsable.nombre} ${t.responsable.apellido}` : 'No asignado'
+        }));
+        
+        console.log(`📋 Tareas encontradas: ${tareasFormateadas.length}`);
+        if (tareasFormateadas.length > 0) {
+          console.log(`📋 Primera tarea: ${tareasFormateadas[0].titulo} → Responsable: ${tareasFormateadas[0].responsable}`);
+        }
+        
+        return { tipo: "tareas", datos: tareasFormateadas, total: count || 0 };
       }
       
       case "perfiles": {
         const { count } = await supabase.from('perfiles').select('*', { count: 'exact', head: true });
-        let query = supabase.from('perfiles').select('nombre, apellido, email, rol');
-        if (p.includes('admin')) query = query.in('rol', ['admin', 'superuser']);
+        let query = supabase.from('perfiles').select('nombre, apellido, email, rol, cargo, activo');
+        if (p.includes('admin') || p.includes('administrador')) {
+          query = query.in('rol', ['admin', 'superuser']);
+        }
+        if (p.includes('activo')) query = query.eq('activo', true);
         const { data } = await query.limit(limit);
         return { tipo: "usuarios", datos: data || [], total: count || 0 };
       }
       
       case "dispositivos": {
         const { count } = await supabase.from('dispositivos').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('dispositivos').select('nombre_equipo, tipo, marca, estado').limit(limit);
+        let query = supabase.from('dispositivos').select('nombre_equipo, tipo, marca, modelo, estado, asignado_a');
+        if (p.includes('disponible')) query = query.eq('estado', 'operativo');
+        if (p.includes('asignado')) query = query.not('asignado_a', 'is', null);
+        const { data } = await query.limit(limit);
         return { tipo: "dispositivos", datos: data || [], total: count || 0 };
       }
       
       case "mensajes": {
         const { count } = await supabase.from('mensajes').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('mensajes').select('contenido, leido, created_at').order('created_at', { ascending: false }).limit(limit);
+        let query = supabase.from('mensajes').select('contenido, leido, created_at, emisor_id, receptor_id');
+        if (p.includes('no leído') || p.includes('no leidos')) query = query.eq('leido', false);
+        const { data } = await query.order('created_at', { ascending: false }).limit(limit);
         return { tipo: "mensajes", datos: data || [], total: count || 0 };
+      }
+      
+      case "proveedores_transporte": {
+        const { count } = await supabase.from('proveedores_transporte').select('*', { count: 'exact', head: true });
+        const { data } = await supabase.from('proveedores_transporte').select('nombre, tipo, correo, direccion').limit(limit);
+        return { tipo: "transporte", datos: data || [], total: count || 0 };
+      }
+      
+      case "analisis_competencia": {
+        const { count } = await supabase.from('analisis_competencia').select('*', { count: 'exact', head: true });
+        const { data } = await supabase.from('analisis_competencia').select('termino_busqueda, nombre_producto_tienda, precio_num, tienda_url').limit(limit);
+        return { tipo: "competencia", datos: data || [], total: count || 0 };
+      }
+      
+      case "registros_precios": {
+        const { count } = await supabase.from('registros_precios').select('*', { count: 'exact', head: true });
+        const { data } = await supabase.from('registros_precios').select('nombre_producto, tienda, precio_valor, fecha').limit(limit);
+        return { tipo: "precios", datos: data || [], total: count || 0 };
       }
         
       default: {
