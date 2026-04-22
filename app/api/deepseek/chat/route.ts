@@ -106,31 +106,104 @@ const databaseSchema = {
   }
 };
 
-// Función para buscar productos en Supabase (CORREGIDA)
+// Función para buscar productos en Supabase (CON LOGS DETALLADOS)
 async function buscarProductosEnSupabase(termino: string, limit: number = 20): Promise<Producto[]> {
+  console.log("=========================================");
+  console.log(`🔍 INICIO BÚSQUEDA - Término: "${termino}"`);
+  console.log("=========================================");
+  
   try {
-    // Consulta directa a la tabla productos_obuma
+    // 1. Verificar cuántos productos hay en total
+    const { count: totalProductos, error: countError } = await supabase
+      .from('productos_obuma')
+      .select('*', { count: 'exact', head: true });
+    
+    console.log(`📊 PASO 1: Total de productos en tabla productos_obuma: ${totalProductos || 0}`);
+    
+    if (countError) {
+      console.error(`❌ Error al contar productos:`, countError);
+    }
+    
+    // 2. Obtener una muestra de productos para verificar que hay datos
+    const { data: muestra, error: muestraError } = await supabase
+      .from('productos_obuma')
+      .select('nombre, sku')
+      .limit(5);
+    
+    if (muestraError) {
+      console.error(`❌ Error al obtener muestra:`, muestraError);
+    } else {
+      console.log(`📋 PASO 2: Muestra de productos en BD:`);
+      muestra?.forEach((p, idx) => {
+        console.log(`   ${idx + 1}. "${p.nombre}" (SKU: ${p.sku})`);
+      });
+    }
+    
+    // 3. Construir consulta
     let query = supabase
       .from('productos_obuma')
       .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
       .eq('activo', true);
     
-    if (termino && termino.length > 2) {
+    // 4. Determinar tipo de búsqueda
+    const esSKU = /^\d{7,}$/.test(termino);
+    console.log(`🔍 PASO 3: Tipo de búsqueda - esSKU: ${esSKU}`);
+    
+    if (esSKU) {
+      console.log(`🔍 Buscando por SKU exacto: "${termino}"`);
+      query = query.eq('sku', termino);
+    } else {
+      console.log(`🔍 Buscando por nombre que contenga: "${termino}"`);
       query = query.ilike('nombre', `%${termino}%`);
     }
     
+    // 5. Ejecutar consulta
     const { data, error } = await query.limit(limit);
     
     if (error) {
-      console.error("Error en búsqueda de productos:", error);
+      console.error(`❌ PASO 4: Error en consulta:`, error);
       return [];
     }
     
-    console.log(`📦 Supabase devolvió ${data?.length || 0} productos para "${termino}"`);
+    console.log(`✅ PASO 4: Resultados encontrados: ${data?.length || 0}`);
     
     if (data && data.length > 0) {
-      console.log(`📋 Primer producto encontrado: ${data[0].nombre} (SKU: ${data[0].sku})`);
+      console.log(`📋 PASO 5: Detalle de resultados:`);
+      data.forEach((p, idx) => {
+        console.log(`   ${idx + 1}. "${p.nombre}" - SKU: ${p.sku} - Precio: ${p.precio_total} - Stock: ${p.stock_actual}`);
+      });
+    } else {
+      console.log(`⚠️ PASO 5: No se encontraron productos para "${termino}"`);
+      
+      // Intentar búsqueda alternativa con término más corto
+      const palabras = termino.split(' ');
+      if (palabras.length > 1) {
+        const palabraCorta = palabras[0];
+        console.log(`🔄 Intentando búsqueda alternativa con: "${palabraCorta}"`);
+        
+        const { data: altData, error: altError } = await supabase
+          .from('productos_obuma')
+          .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+          .eq('activo', true)
+          .ilike('nombre', `%${palabraCorta}%`)
+          .limit(limit);
+        
+        if (!altError && altData && altData.length > 0) {
+          console.log(`✅ Búsqueda alternativa encontró ${altData.length} resultados`);
+          return (altData || []).map((p: any) => ({
+            nombre: p.nombre || '',
+            sku: p.sku || '',
+            precio: p.precio_total || 0,
+            stock: p.stock_actual || 0,
+            categoria: p.categoria_nombre || ''
+          }));
+        }
+      }
     }
+    
+    console.log("=========================================");
+    console.log(`🔍 FIN BÚSQUEDA`);
+    console.log("=========================================");
     
     return (data || []).map((p: any) => ({
       nombre: p.nombre || '',
@@ -141,14 +214,15 @@ async function buscarProductosEnSupabase(termino: string, limit: number = 20): P
     }));
     
   } catch (error) {
-    console.error("Error buscando en Supabase:", error);
+    console.error("❌ Error en buscarProductosEnSupabase:", error);
     return [];
   }
 }
 
-// Función para obtener estadísticas completas (CORREGIDA)
+// Función para obtener estadísticas completas
 async function obtenerEstadisticasCompletas(): Promise<any> {
-  // Primero, obtener el conteo de productos directamente
+  console.log("📊 Obteniendo estadísticas completas...");
+  
   const { count: productosCount, error: productosError } = await supabase
     .from('productos_obuma')
     .select('*', { count: 'exact', head: true });
@@ -208,22 +282,27 @@ function detectarIntencion(pregunta: string): string {
 async function obtenerDatosPorIntencion(intencion: string, pregunta: string, limit: number = 20): Promise<DatosResponse> {
   const p = pregunta.toLowerCase();
   
+  console.log(`🎯 obtenerDatosPorIntencion - Intención: ${intencion}, Pregunta: "${pregunta}"`);
+  
   try {
     switch (intencion) {
       case "productos_obuma": {
+        console.log("📦 Procesando caso productos_obuma");
+        
         let termino = '';
         
         if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
           termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
+          console.log(`📦 Término extraído (comando especial): "${termino}"`);
         } else {
           termino = p
             .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
             .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
             .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
             .trim();
+          console.log(`📦 Término extraído (limpieza general): "${termino}"`);
         }
         
-        // Si no hay término específico, devolver estadísticas generales
         if (!termino || termino.length < 3) {
           const { count } = await supabase
             .from('productos_obuma')
@@ -234,30 +313,10 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         
         console.log(`🔍 Buscando producto específico: "${termino}"`);
         
-        // Búsqueda por SKU (si son números)
-        let query = supabase
-          .from('productos_obuma')
-          .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
-          .eq('activo', true);
+        const productos = await buscarProductosEnSupabase(termino, limit);
         
-        const esSKU = /^\d{7,}$/.test(termino);
-        if (esSKU) {
-          console.log(`🔍 Buscando por SKU: "${termino}"`);
-          query = query.eq('sku', termino);
-        } else {
-          query = query.ilike('nombre', `%${termino}%`);
-        }
-        
-        const { data: productos, error } = await query.limit(limit);
-        
-        if (error) {
-          console.error("Error en búsqueda de productos:", error);
-          return { tipo: "productos", datos: [], total: 0, error: true };
-        }
-        
-        console.log(`✅ Productos encontrados: ${productos?.length || 0}`);
-        
-        if (productos && productos.length > 0) {
+        if (productos.length > 0) {
+          console.log(`✅ Productos encontrados: ${productos.length}`);
           return { 
             tipo: "productos", 
             datos: productos, 
@@ -266,10 +325,11 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
           };
         }
         
-        // No encontrado
         const { count } = await supabase
           .from('productos_obuma')
           .select('*', { count: 'exact', head: true });
+        
+        console.log(`❌ No se encontraron productos para "${termino}"`);
         
         return { 
           tipo: "productos", 
@@ -436,12 +496,19 @@ export async function POST(req: Request) {
   try {
     const { pregunta, contexto } = await req.json();
     
+    console.log("=========================================");
+    console.log(`💬 NUEVA CONSULTA AL CHATBOT: "${pregunta}"`);
+    console.log("=========================================");
+    
     if (!pregunta || pregunta.trim() === "") {
       return NextResponse.json({ error: "La pregunta no puede estar vacía" }, { status: 400 });
     }
 
     const intencion = detectarIntencion(pregunta);
+    console.log(`🎯 Intención detectada: ${intencion}`);
+    
     const datosDB = await obtenerDatosPorIntencion(intencion, pregunta);
+    console.log(`📦 datosDB resultante: tipo=${datosDB.tipo}, total=${datosDB.total}, datos.length=${datosDB.datos?.length || 0}`);
     
     let systemPrompt = `Eres "Asistente Obuma", un asistente inteligente que conoce TODA la base de datos de la empresa.
 
@@ -497,17 +564,23 @@ ${JSON.stringify(datosDB.datos, null, 2)}`;
 6. Si no hay datos, dilo honestamente y ofrece ayuda
 7. Sé conciso pero completo - ve al grano`;
 
+    console.log(`🤖 Enviando prompt a DeepSeek...`);
+    
     const result = await callDeepSeek([
       { role: "system", content: systemPrompt },
       { role: "user", content: pregunta }
     ], 0.3, 800);
 
     if (result.error) {
+      console.error(`❌ Error en DeepSeek: ${result.error}`);
       return NextResponse.json({ 
         respuesta: "🔌 Lo siento, tuve un problema de conexión. ¿Puedes intentarlo de nuevo?",
         error: result.error 
       }, { status: 500 });
     }
+    
+    console.log(`✅ Respuesta generada exitosamente`);
+    console.log("=========================================");
     
     return NextResponse.json({ 
       respuesta: result.content,
@@ -517,7 +590,7 @@ ${JSON.stringify(datosDB.datos, null, 2)}`;
     });
     
   } catch (error: any) {
-    console.error("Error en chat:", error);
+    console.error("❌ Error en chat:", error);
     return NextResponse.json(
       { respuesta: "🔌 Ups, algo salió mal. Por favor, intenta nuevamente." },
       { status: 500 }
