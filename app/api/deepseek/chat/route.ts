@@ -182,37 +182,66 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
   
   try {
     switch (intencion) {
-      case "productos_obuma": {
-        let termino = '';
-        
-        if (p.startsWith('busca') || p.startsWith('encuentra')) {
-          termino = p.replace(/^(busca|encuentra)\s+/, '').trim();
-        } else {
-          termino = p
-            .replace(/productos?|busca|encuentra|tienes?|muestra|listame|dame|el|la|los|las|ver|todos/gi, '')
-            .trim();
-        }
-        
-        console.log(`🔍 Buscando producto: "${termino}"`);
-        
-        if (termino && termino.length > 2) {
-          const productos = await buscarProductosEnSupabase(termino, limit);
-          
-          if (productos.length > 0) {
-            return { 
-              tipo: "productos", 
-              datos: productos, 
-              total: productos.length,
-              fuente: "Supabase"
-            };
-          }
-          
-          return { tipo: "productos", datos: [], total: 0, noEncontrado: true, termino };
-        }
-        
-        const { count } = await supabase.from('productos_obuma').select('*', { count: 'exact', head: true });
-        return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
-      }
+      // Reemplaza la función `obtenerDatosPorIntencion` para el case "productos_obuma" con esto:
+
+case "productos_obuma": {
+  // Extraer término de búsqueda de manera más precisa
+  let termino = '';
+  
+  // Si la pregunta empieza con "busca", "encuentra", "dame", "muestra"
+  if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
+    termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
+  } else {
+    // Eliminar palabras comunes y quedarse con el posible nombre del producto
+    termino = p
+      .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
+      .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
+      .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
+      .trim();
+  }
+  
+  // Si el término tiene menos de 3 caracteres, es una pregunta general
+  if (!termino || termino.length < 3) {
+    const { count } = await supabase.from('productos_obuma').select('*', { count: 'exact', head: true });
+    return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
+  }
+  
+  console.log(`🔍 Buscando en Supabase: "${termino}"`);
+  
+  // Búsqueda en Supabase
+  let query = supabase
+    .from('productos_obuma')
+    .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+    .eq('activo', true);
+  
+  // Búsqueda por nombre o SKU
+  const esSKU = /^\d{7,}$/.test(termino);
+  if (esSKU) {
+    query = query.eq('sku', termino);
+  } else {
+    query = query.ilike('nombre', `%${termino}%`);
+  }
+  
+  const { data: productos, error } = await query.limit(20);
+  
+  if (error) {
+    console.error("Error en búsqueda de productos:", error);
+    return { tipo: "productos", datos: [], total: 0, error: true };
+  }
+  
+  console.log(`✅ Productos encontrados: ${productos?.length || 0}`);
+  
+  if (productos && productos.length > 0) {
+    return { 
+      tipo: "productos", 
+      datos: productos, 
+      total: productos.length,
+      fuente: "Supabase"
+    };
+  }
+  
+  return { tipo: "productos", datos: [], total: 0, noEncontrado: true, termino };
+}
         
       case "clientes_obuma": {
         const { count: totalClientes } = await supabase.from('clientes_obuma').select('*', { count: 'exact', head: true });
