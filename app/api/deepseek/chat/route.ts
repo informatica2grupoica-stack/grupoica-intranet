@@ -106,32 +106,60 @@ const databaseSchema = {
   }
 };
 
-// Función para buscar productos en Supabase (fuente principal)
+// Función para buscar productos en Supabase (CORREGIDA)
 async function buscarProductosEnSupabase(termino: string, limit: number = 20): Promise<Producto[]> {
   try {
-    let query = supabase.from('productos_obuma').select('nombre, sku, precio_total, stock_actual, categoria_nombre').eq('activo', true);
+    // Consulta directa a la tabla productos_obuma
+    let query = supabase
+      .from('productos_obuma')
+      .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+      .eq('activo', true);
+    
     if (termino && termino.length > 2) {
       query = query.ilike('nombre', `%${termino}%`);
     }
-    const { data } = await query.limit(limit);
+    
+    const { data, error } = await query.limit(limit);
+    
+    if (error) {
+      console.error("Error en búsqueda de productos:", error);
+      return [];
+    }
+    
     console.log(`📦 Supabase devolvió ${data?.length || 0} productos para "${termino}"`);
+    
+    if (data && data.length > 0) {
+      console.log(`📋 Primer producto encontrado: ${data[0].nombre} (SKU: ${data[0].sku})`);
+    }
+    
     return (data || []).map((p: any) => ({
-      nombre: p.nombre,
-      sku: p.sku,
-      precio: p.precio_total,
-      stock: p.stock_actual,
-      categoria: p.categoria_nombre
+      nombre: p.nombre || '',
+      sku: p.sku || '',
+      precio: p.precio_total || 0,
+      stock: p.stock_actual || 0,
+      categoria: p.categoria_nombre || ''
     }));
+    
   } catch (error) {
     console.error("Error buscando en Supabase:", error);
     return [];
   }
 }
 
-// Función para obtener estadísticas completas
+// Función para obtener estadísticas completas (CORREGIDA)
 async function obtenerEstadisticasCompletas(): Promise<any> {
-  const [productos, clientes, proveedores, tareas, dispositivos, perfiles, mensajes] = await Promise.all([
-    supabase.from('productos_obuma').select('*', { count: 'exact', head: true }),
+  // Primero, obtener el conteo de productos directamente
+  const { count: productosCount, error: productosError } = await supabase
+    .from('productos_obuma')
+    .select('*', { count: 'exact', head: true });
+  
+  if (productosError) {
+    console.error("Error contando productos:", productosError);
+  }
+  
+  console.log(`📊 Total productos en Supabase: ${productosCount || 0}`);
+  
+  const [clientes, proveedores, tareas, dispositivos, perfiles, mensajes] = await Promise.all([
     supabase.from('clientes_obuma').select('*', { count: 'exact', head: true }),
     supabase.from('proveedores').select('*', { count: 'exact', head: true }),
     supabase.from('tareas').select('*', { count: 'exact', head: true }),
@@ -141,7 +169,7 @@ async function obtenerEstadisticasCompletas(): Promise<any> {
   ]);
   
   return {
-    productos: productos.count || 0,
+    productos: productosCount || 0,
     clientes: clientes.count || 0,
     proveedores: proveedores.count || 0,
     tareas: tareas.count || 0,
@@ -195,13 +223,18 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
             .trim();
         }
         
+        // Si no hay término específico, devolver estadísticas generales
         if (!termino || termino.length < 3) {
-          const { count } = await supabase.from('productos_obuma').select('*', { count: 'exact', head: true });
+          const { count } = await supabase
+            .from('productos_obuma')
+            .select('*', { count: 'exact', head: true });
+          console.log(`📊 Pregunta general de productos: total = ${count || 0}`);
           return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
         }
         
-        console.log(`🔍 Buscando en Supabase: "${termino}"`);
+        console.log(`🔍 Buscando producto específico: "${termino}"`);
         
+        // Búsqueda por SKU (si son números)
         let query = supabase
           .from('productos_obuma')
           .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
@@ -209,12 +242,13 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         
         const esSKU = /^\d{7,}$/.test(termino);
         if (esSKU) {
+          console.log(`🔍 Buscando por SKU: "${termino}"`);
           query = query.eq('sku', termino);
         } else {
           query = query.ilike('nombre', `%${termino}%`);
         }
         
-        const { data: productos, error } = await query.limit(20);
+        const { data: productos, error } = await query.limit(limit);
         
         if (error) {
           console.error("Error en búsqueda de productos:", error);
@@ -232,7 +266,18 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
           };
         }
         
-        return { tipo: "productos", datos: [], total: 0, noEncontrado: true, termino };
+        // No encontrado
+        const { count } = await supabase
+          .from('productos_obuma')
+          .select('*', { count: 'exact', head: true });
+        
+        return { 
+          tipo: "productos", 
+          datos: [], 
+          total: count || 0, 
+          noEncontrado: true, 
+          termino 
+        };
       }
         
       case "clientes_obuma": {
