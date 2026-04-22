@@ -107,7 +107,7 @@ function detectarIntencion(pregunta: string): string {
   return "general";
 }
 
-// Función para obtener datos según la intención
+// Función para obtener datos según la intención (MEJORADA PARA CLIENTES)
 async function obtenerDatosPorIntencion(intencion: string, pregunta: string, limit: number = 30) {
   const p = pregunta.toLowerCase();
   
@@ -125,21 +125,62 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         return { tipo: "productos", datos: productos, total: productos?.length || 0 };
         
       case "clientes_obuma":
-        let clientesQuery = supabase.from('clientes_obuma').select('*').eq('estado', true);
+        // Primero, contar cuántos clientes hay en total
+        const { count: totalClientes, error: countError } = await supabase
+          .from('clientes_obuma')
+          .select('*', { count: 'exact', head: true });
         
-        // Buscar por RUT o por razón social
+        console.log(`📊 Total clientes en Supabase: ${totalClientes || 0}`);
+        
+        if (countError) {
+          console.error("Error contando clientes:", countError);
+          return { tipo: "clientes", datos: [], total: 0, error: true };
+        }
+        
+        if (totalClientes === 0) {
+          return { tipo: "clientes", datos: [], total: 0, mensaje: "No hay clientes sincronizados" };
+        }
+        
+        // Construir consulta de clientes
+        let clientesQuery = supabase
+          .from('clientes_obuma')
+          .select('razon_social, rut, email, telefono, estado, total_contactos');
+        
+        // Buscar por RUT (formato chileno)
         const rutMatch = p.match(/\b\d{1,2}\.\d{3}\.\d{3}-[\dkK]\b/);
         if (rutMatch) {
+          console.log(`🔍 Buscando por RUT: ${rutMatch[0]}`);
           clientesQuery = clientesQuery.eq('rut', rutMatch[0]);
-        } else {
-          const nombreCliente = p.match(/(?:cliente|empresa|busca|encuentra)\s+([a-záéíóúñ\s]+)/i);
-          if (nombreCliente && nombreCliente[1]?.trim().length > 2) {
-            clientesQuery = clientesQuery.ilike('razon_social', `%${nombreCliente[1].trim()}%`);
+        } 
+        // Buscar por término de búsqueda
+        else {
+          // Extraer término de búsqueda de la pregunta
+          let terminoBusqueda = p
+            .replace(/cliente|clientes|busca|encuentra|dame|muestra|listame|ver|todos|los|las|el|la/gi, '')
+            .trim();
+          
+          // Si la pregunta es "busca envapol", terminoBusqueda será "envapol"
+          if (terminoBusqueda && terminoBusqueda.length > 2 && terminoBusqueda !== 'activos') {
+            console.log(`🔍 Buscando cliente con término: "${terminoBusqueda}"`);
+            clientesQuery = clientesQuery.ilike('razon_social', `%${terminoBusqueda}%`);
           }
         }
         
-        const { data: clientes } = await clientesQuery.limit(limit);
-        return { tipo: "clientes", datos: clientes, total: clientes?.length || 0 };
+        const { data: clientes, error } = await clientesQuery.limit(limit);
+        
+        if (error) {
+          console.error("Error buscando clientes:", error);
+          return { tipo: "clientes", datos: [], total: totalClientes, error: true };
+        }
+        
+        console.log(`✅ Clientes encontrados: ${clientes?.length || 0} de ${totalClientes}`);
+        
+        return { 
+          tipo: "clientes", 
+          datos: clientes || [], 
+          total: totalClientes,
+          encontrados: clientes?.length || 0
+        };
         
       case "proveedores":
         let proveedoresQuery = supabase.from('proveedores').select('*').eq('activo', true);
