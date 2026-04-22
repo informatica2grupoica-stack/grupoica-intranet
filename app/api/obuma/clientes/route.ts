@@ -8,42 +8,38 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log("📡 Body recibido:", JSON.stringify(body, null, 2));
 
+    // Extraer valores (soportar ambos formatos)
+    const razonSocial = body.razon_social || body.cliente_razon_social;
+    const email = body.email || body.cliente_email;
+    const rut = body.rut || body.cliente_rut || '';
+    const telefono = body.telefono || body.cliente_telefono || '';
+    const direccion = body.direccion || body.cliente_direccion || '';
+    const comuna = body.comuna || body.cliente_comuna || '';
+    const ciudad = body.ciudad || body.cliente_ciudad || '';
+
     // Validaciones
-    if (!body.rut && !body.es_extranjero) {
-      console.log("❌ Error: RUT requerido");
-      return NextResponse.json({ error: 'El RUT es requerido' }, { status: 400 });
-    }
-    
-    if (!body.razon_social) {
+    if (!razonSocial) {
       console.log("❌ Error: Razón social requerida");
       return NextResponse.json({ error: 'La razón social es requerida' }, { status: 400 });
     }
 
-    if (!body.email) {
+    if (!email) {
       console.log("❌ Error: Email requerido");
       return NextResponse.json({ error: 'El email es requerido' }, { status: 400 });
     }
 
-    const payload: any = {
-      cliente_rut: body.rut || '',
-      cliente_razon_social: body.razon_social,
-      cliente_email: body.email,
-      cliente_telefono: body.telefono || '',
-      cliente_direccion: body.direccion || '',
-      cliente_comuna: body.comuna || '',
-      cliente_ciudad: body.ciudad || '',
+    // Payload mínimo según documentación de Obuma
+    const payload = {
+      cliente_razon_social: razonSocial,
+      cliente_email: email,
+      cliente_rut: rut,
+      cliente_telefono: telefono,
+      cliente_direccion: direccion,
+      cliente_comuna: comuna,
+      cliente_ciudad: ciudad,
+      cliente_clave: Math.random().toString(36).substring(2, 10).toUpperCase(),
       estado: '1'
     };
-
-    if (body.es_extranjero) {
-      payload.cliente_extranjero = '1';
-      payload.cliente_extranjero_id = body.extranjero_id || '';
-    }
-
-    // Generar clave automática si no viene
-    if (!body.clave) {
-      payload.cliente_clave = Math.random().toString(36).substring(2, 10).toUpperCase();
-    }
 
     console.log("📤 Payload a Obuma:", JSON.stringify(payload, null, 2));
     
@@ -62,11 +58,12 @@ export async function POST(request: Request) {
     console.log(`📡 Respuesta HTTP status: ${response.status}`);
     
     const result = await response.json();
-    console.log("📦 Respuesta Obuma completa:", JSON.stringify(result, null, 2));
+    console.log("📦 Respuesta Obuma COMPLETA:", JSON.stringify(result, null, 2));
 
     // Verificar error de Obuma
     if (result.result?.result === "0") {
-      console.log(`❌ Obuma error: ${result.result?.result_detail}`);
+      console.log(`❌ Obuma error code: ${result.result?.result}`);
+      console.log(`❌ Obuma error detail: ${result.result?.result_detail}`);
       return NextResponse.json(
         { error: result.result?.result_detail || 'Error al crear cliente en Obuma' },
         { status: 400 }
