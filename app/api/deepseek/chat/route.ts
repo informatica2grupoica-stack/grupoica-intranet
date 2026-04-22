@@ -125,55 +125,54 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         return { tipo: "productos", datos: productos, total: productos?.length || 0 };
         
       case "clientes_obuma":
-        // Primero, contar cuántos clientes hay en total
-        const { count: totalClientes, error: countError } = await supabase
+        // Contar clientes
+        const { count: totalClientes } = await supabase
           .from('clientes_obuma')
           .select('*', { count: 'exact', head: true });
         
         console.log(`📊 Total clientes en Supabase: ${totalClientes || 0}`);
         
-        if (countError) {
-          console.error("Error contando clientes:", countError);
-          return { tipo: "clientes", datos: [], total: 0, error: true };
+        if (!totalClientes || totalClientes === 0) {
+          return { tipo: "clientes", datos: [], total: 0 };
         }
         
-        if (totalClientes === 0) {
-          return { tipo: "clientes", datos: [], total: 0, mensaje: "No hay clientes sincronizados" };
-        }
-        
-        // Construir consulta de clientes
+        // Construir consulta base
         let clientesQuery = supabase
           .from('clientes_obuma')
-          .select('razon_social, rut, email, telefono, estado, total_contactos');
+          .select('razon_social, rut, email, telefono, estado')
+          .limit(limit);
         
-        // Buscar por RUT (formato chileno)
-        const rutMatch = p.match(/\b\d{1,2}\.\d{3}\.\d{3}-[\dkK]\b/);
-        if (rutMatch) {
-          console.log(`🔍 Buscando por RUT: ${rutMatch[0]}`);
-          clientesQuery = clientesQuery.eq('rut', rutMatch[0]);
-        } 
-        // Buscar por término de búsqueda
-        else {
-          // Extraer término de búsqueda de la pregunta
-          let terminoBusqueda = p
-            .replace(/cliente|clientes|busca|encuentra|dame|muestra|listame|ver|todos|los|las|el|la/gi, '')
-            .trim();
-          
-          // Si la pregunta es "busca envapol", terminoBusqueda será "envapol"
-          if (terminoBusqueda && terminoBusqueda.length > 2 && terminoBusqueda !== 'activos') {
-            console.log(`🔍 Buscando cliente con término: "${terminoBusqueda}"`);
-            clientesQuery = clientesQuery.ilike('razon_social', `%${terminoBusqueda}%`);
-          }
+        // Extraer término de búsqueda
+        let terminoBusqueda = p
+          .replace(/cliente|clientes|busca|encuentra|dame|muestra|listame|ver|todos|los|las|el|la|cuántos|cuantos|tenemos|hay/gi, '')
+          .trim();
+        
+        // Si hay término específico (como "envapol")
+        if (terminoBusqueda && terminoBusqueda.length > 2 && 
+            terminoBusqueda !== 'activos' && 
+            terminoBusqueda !== 'inactivos') {
+          console.log(`🔍 Buscando cliente con término: "${terminoBusqueda}"`);
+          clientesQuery = clientesQuery.ilike('razon_social', `%${terminoBusqueda}%`);
         }
         
-        const { data: clientes, error } = await clientesQuery.limit(limit);
+        const { data: clientes, error } = await clientesQuery;
         
         if (error) {
-          console.error("Error buscando clientes:", error);
+          console.error("Error en consulta de clientes:", error);
           return { tipo: "clientes", datos: [], total: totalClientes, error: true };
         }
         
-        console.log(`✅ Clientes encontrados: ${clientes?.length || 0} de ${totalClientes}`);
+        console.log(`✅ Clientes obtenidos: ${clientes?.length || 0}`);
+        
+        // Si es pregunta general de cantidad
+        if (p.includes('cuántos') || p.includes('cuantos') || p.includes('total de clientes')) {
+          return { 
+            tipo: "clientes", 
+            datos: [], 
+            total: totalClientes,
+            esPreguntaGeneral: true
+          };
+        }
         
         return { 
           tipo: "clientes", 
@@ -239,7 +238,6 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
         return { tipo: "competencia", datos: competencia, total: competencia?.length || 0 };
         
       default:
-        // Estadísticas generales - incluyendo clientes_obuma
         const stats: Record<string, number> = {};
         const tablas = ['productos_obuma', 'clientes_obuma', 'proveedores', 'tareas', 'perfiles', 'dispositivos', 'mensajes'];
         
