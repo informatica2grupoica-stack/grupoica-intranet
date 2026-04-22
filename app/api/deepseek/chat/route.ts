@@ -106,54 +106,90 @@ const databaseSchema = {
   }
 };
 
-// Función para buscar productos en Supabase (CON LOGS)
+// Función para normalizar texto (quitar tildes, mayúsculas)
+function normalizarTexto(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+// Función para buscar productos en Supabase (BÚSQUEDA INTELIGENTE)
 async function buscarProductosEnSupabase(termino: string, limit: number = 20): Promise<Producto[]> {
-  console.log(`🔍 Buscando en Supabase: "${termino}"`);
+  console.log(`🔍 Búsqueda inteligente - Término original: "${termino}"`);
   
   try {
-    // Primero, obtener todos los productos para depuración
-    const { data: todosProductos, error: todosError } = await supabase
-      .from('productos_obuma')
-      .select('nombre, sku')
-      .limit(10);
+    const terminoNormalizado = normalizarTexto(termino);
+    console.log(`📝 Término normalizado: "${terminoNormalizado}"`);
     
-    if (!todosError && todosProductos) {
-      console.log(`📋 PRIMEROS 10 PRODUCTOS EN BD:`);
-      todosProductos.forEach((p, i) => {
-        console.log(`   ${i+1}. "${p.nombre}" (SKU: ${p.sku})`);
-      });
-    }
+    // Dividir en palabras clave para búsqueda más flexible
+    const palabrasClave = terminoNormalizado.split(/\s+/).filter(p => p.length > 2);
+    console.log(`🔑 Palabras clave: ${palabrasClave.join(', ')}`);
     
+    // Primero, obtener todos los productos activos
     let query = supabase
       .from('productos_obuma')
       .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
       .eq('activo', true);
     
-    const esSKU = /^\d{7,}$/.test(termino);
-    if (esSKU) {
-      console.log(`🔍 Buscando por SKU exacto: "${termino}"`);
-      query = query.eq('sku', termino);
-    } else {
-      console.log(`🔍 Buscando por nombre que contenga: "${termino}"`);
-      query = query.ilike('nombre', `%${termino}%`);
-    }
+    const { data: todosProductos, error: errorProductos } = await query;
     
-    const { data, error } = await query.limit(limit);
-    
-    if (error) {
-      console.error(`❌ Error en consulta:`, error);
+    if (errorProductos) {
+      console.error(`❌ Error obteniendo productos:`, errorProductos);
       return [];
     }
     
-    console.log(`✅ Resultados encontrados: ${data?.length || 0}`);
+    if (!todosProductos || todosProductos.length === 0) {
+      console.log(`⚠️ No hay productos en la base de datos`);
+      return [];
+    }
     
-    if (data && data.length > 0) {
-      data.forEach((p, idx) => {
+    console.log(`📊 Total productos en BD: ${todosProductos.length}`);
+    
+    // Búsqueda inteligente por SKU exacto (prioridad máxima)
+    const esSKU = /^\d{7,}$/.test(terminoNormalizado);
+    if (esSKU) {
+      const producto = todosProductos.find(p => p.sku === terminoNormalizado);
+      if (producto) {
+        console.log(`✅ Encontrado por SKU exacto: "${producto.nombre}"`);
+        return [{
+          nombre: producto.nombre,
+          sku: producto.sku,
+          precio: producto.precio_total || 0,
+          stock: producto.stock_actual || 0,
+          categoria: producto.categoria_nombre || ''
+        }];
+      }
+    }
+    
+    // Búsqueda por coincidencia de palabras clave
+    const resultados = todosProductos.filter(producto => {
+      const nombreNormalizado = normalizarTexto(producto.nombre);
+      
+      // Coincidencia exacta (prioridad alta)
+      if (nombreNormalizado === terminoNormalizado) {
+        return true;
+      }
+      
+      // Coincidencia por palabras clave (todas las palabras deben coincidir)
+      if (palabrasClave.length > 0) {
+        return palabrasClave.every(palabra => nombreNormalizado.includes(palabra));
+      }
+      
+      // Coincidencia parcial
+      return nombreNormalizado.includes(terminoNormalizado);
+    });
+    
+    console.log(`✅ Resultados encontrados: ${resultados.length}`);
+    
+    if (resultados.length > 0) {
+      resultados.slice(0, 5).forEach((p, idx) => {
         console.log(`   ${idx+1}. "${p.nombre}" - SKU: ${p.sku}`);
       });
     }
     
-    return (data || []).map((p: any) => ({
+    return resultados.slice(0, limit).map((p: any) => ({
       nombre: p.nombre || '',
       sku: p.sku || '',
       precio: p.precio_total || 0,
@@ -162,20 +198,16 @@ async function buscarProductosEnSupabase(termino: string, limit: number = 20): P
     }));
     
   } catch (error) {
-    console.error("Error buscando en Supabase:", error);
+    console.error("❌ Error en búsqueda inteligente:", error);
     return [];
   }
 }
 
 // Función para obtener estadísticas completas
 async function obtenerEstadisticasCompletas(): Promise<any> {
-  const { count: productosCount, error: productosError } = await supabase
+  const { count: productosCount } = await supabase
     .from('productos_obuma')
     .select('*', { count: 'exact', head: true });
-  
-  if (productosError) {
-    console.error("Error contando productos:", productosError);
-  }
   
   console.log(`📊 Total productos en Supabase: ${productosCount || 0}`);
   
@@ -451,14 +483,13 @@ NO INVENTES NINGÚN PRODUCTO. Si el usuario pregunta por un producto que no est�
 NO uses ejemplos como "producto de prueba" a menos que estén explícitamente en esta lista.`;
     }
     else if (datosDB.tipo === "productos" && datosDB.noEncontrado) {
-      // PROMPT MUY ESTRICTO PARA EVITAR INVENCIÓN
       systemPrompt += `\n\n❌ **NO SE ENCONTRARON PRODUCTOS EN LA BASE DE DATOS**
 
 La búsqueda del producto "${datosDB.termino}" no arrojó resultados en la tabla productos_obuma.
 
 ⚠️ **REGLAS ESTRICTAS:**
-1. NO inventes productos falsos como "Papel Higienico Elite 4x500mt"
-2. NO uses SKU inventados como "ELITE-4X500MT"
+1. NO inventes productos falsos
+2. NO uses SKU inventados
 3. Responde EXACTAMENTE: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. Tenemos ${datosDB.total} productos en total. ¿Quieres que busque por otra palabra o SKU?"`;
     }
     else if (datosDB.tipo === "productos" && datosDB.esPreguntaGeneral) {
