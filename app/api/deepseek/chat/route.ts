@@ -16,6 +16,16 @@ interface Producto {
   categoria?: string;
 }
 
+interface DatosResponse {
+  tipo: string;
+  datos: any[];
+  total: number;
+  termino?: string;
+  esLista?: boolean;
+  esPreguntaGeneral?: boolean;
+  error?: boolean;
+}
+
 // Esquema COMPLETO de la base de datos
 const databaseSchema = {
   tablas: {
@@ -87,11 +97,10 @@ const databaseSchema = {
   }
 };
 
-// Detectar intención (prioridad: clientes > productos > otros)
+// Detectar intención
 function detectarIntencion(pregunta: string): string {
   const p = pregunta.toLowerCase();
   
-  // Palabras clave de clientes (prioridad alta)
   const palabrasCliente = ['cliente', 'clientes', 'empresa', 'rut', 'razon social', 'envapol', 'brigada', 'municipalidad', 'limitada', 'spa'];
   for (const palabra of palabrasCliente) {
     if (p.includes(palabra)) {
@@ -99,12 +108,10 @@ function detectarIntencion(pregunta: string): string {
     }
   }
   
-  // Palabras clave de productos
   if (p.includes('producto') || p.includes('inventario') || p.includes('stock') || p.includes('sku')) {
     return "productos_obuma";
   }
   
-  // Otras tablas
   if (p.includes('proveedor')) return "proveedores";
   if (p.includes('transporte') || p.includes('camión')) return "proveedores_transporte";
   if (p.includes('tarea') || p.includes('pendiente')) return "tareas";
@@ -118,12 +125,12 @@ function detectarIntencion(pregunta: string): string {
 }
 
 // Obtener datos de cualquier tabla
-async function obtenerDatos(intencion: string, pregunta: string, limit: number = 20) {
+async function obtenerDatos(intencion: string, pregunta: string, limit: number = 20): Promise<DatosResponse> {
   const p = pregunta.toLowerCase();
   
   try {
     switch (intencion) {
-      case "clientes_obuma":
+      case "clientes_obuma": {
         const { count: totalClientes } = await supabase.from('clientes_obuma').select('*', { count: 'exact', head: true });
         
         let termino = p.replace(/cliente|clientes|busca|encuentra|dame|lista|todos/gi, '').trim();
@@ -133,62 +140,72 @@ async function obtenerDatos(intencion: string, pregunta: string, limit: number =
             .select('razon_social, rut, email, telefono')
             .ilike('razon_social', `%${termino}%`)
             .limit(5);
-          return { tipo: "clientes", datos: data || [], total: totalClientes, termino };
+          return { tipo: "clientes", datos: data || [], total: totalClientes || 0, termino };
         }
         
         if (p.includes('lista') || p.includes('todos')) {
           const { data } = await supabase.from('clientes_obuma').select('razon_social, rut').limit(limit);
-          return { tipo: "clientes", datos: data || [], total: totalClientes, esLista: true };
+          return { tipo: "clientes", datos: data || [], total: totalClientes || 0, esLista: true };
         }
         
-        return { tipo: "clientes", datos: [], total: totalClientes, esPreguntaGeneral: true };
+        return { tipo: "clientes", datos: [], total: totalClientes || 0, esPreguntaGeneral: true };
+      }
         
-      case "productos_obuma":
+      case "productos_obuma": {
         let query = supabase.from('productos_obuma').select('nombre, sku, precio_total, stock_actual').eq('activo', true);
         const terminos = p.replace(/productos?|busca|encuentra/gi, '').trim();
         if (terminos && terminos.length > 2) {
           query = query.ilike('nombre', `%${terminos}%`);
         }
-        const { data: productos } = await query.limit(limit);
-        return { tipo: "productos", datos: productos || [], total: productos?.length || 0 };
+        const { data } = await query.limit(limit);
+        return { tipo: "productos", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "proveedores":
-        const { data: proveedores } = await supabase.from('proveedores').select('nombre_empresa, categoria, email_contacto, telefono').eq('activo', true).limit(limit);
-        return { tipo: "proveedores", datos: proveedores || [], total: proveedores?.length || 0 };
+      case "proveedores": {
+        const { data } = await supabase.from('proveedores').select('nombre_empresa, categoria, email_contacto, telefono').eq('activo', true).limit(limit);
+        return { tipo: "proveedores", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "proveedores_transporte":
-        const { data: transportes } = await supabase.from('proveedores_transporte').select('nombre, tipo, correo').limit(limit);
-        return { tipo: "transporte", datos: transportes || [], total: transportes?.length || 0 };
+      case "proveedores_transporte": {
+        const { data } = await supabase.from('proveedores_transporte').select('nombre, tipo, correo').limit(limit);
+        return { tipo: "transporte", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "tareas":
+      case "tareas": {
         let tareasQuery = supabase.from('tareas').select('titulo, prioridad, estado, fecha_limite');
         if (p.includes('pendiente')) tareasQuery = tareasQuery.eq('estado', 'pendiente');
-        const { data: tareas } = await tareasQuery.order('created_at', { ascending: false }).limit(limit);
-        return { tipo: "tareas", datos: tareas || [], total: tareas?.length || 0 };
+        const { data } = await tareasQuery.order('created_at', { ascending: false }).limit(limit);
+        return { tipo: "tareas", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "perfiles":
+      case "perfiles": {
         let perfilesQuery = supabase.from('perfiles').select('nombre, apellido, email, rol');
         if (p.includes('admin')) perfilesQuery = perfilesQuery.in('rol', ['admin', 'superuser']);
-        const { data: perfiles } = await perfilesQuery.limit(limit);
-        return { tipo: "usuarios", datos: perfiles || [], total: perfiles?.length || 0 };
+        const { data } = await perfilesQuery.limit(limit);
+        return { tipo: "usuarios", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "dispositivos":
-        const { data: dispositivos } = await supabase.from('dispositivos').select('nombre_equipo, tipo, marca, estado').limit(limit);
-        return { tipo: "dispositivos", datos: dispositivos || [], total: dispositivos?.length || 0 };
+      case "dispositivos": {
+        const { data } = await supabase.from('dispositivos').select('nombre_equipo, tipo, marca, estado').limit(limit);
+        return { tipo: "dispositivos", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "mensajes":
-        const { data: mensajes } = await supabase.from('mensajes').select('contenido, leido, created_at').order('created_at', { ascending: false }).limit(limit);
-        return { tipo: "mensajes", datos: mensajes || [], total: mensajes?.length || 0 };
+      case "mensajes": {
+        const { data } = await supabase.from('mensajes').select('contenido, leido, created_at').order('created_at', { ascending: false }).limit(limit);
+        return { tipo: "mensajes", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "analisis_competencia":
-        const { data: competencia } = await supabase.from('analisis_competencia').select('termino_busqueda, nombre_producto_tienda, precio_num').limit(limit);
-        return { tipo: "competencia", datos: competencia || [], total: competencia?.length || 0 };
+      case "analisis_competencia": {
+        const { data } = await supabase.from('analisis_competencia').select('termino_busqueda, nombre_producto_tienda, precio_num').limit(limit);
+        return { tipo: "competencia", datos: data || [], total: data?.length || 0 };
+      }
         
-      case "registros_precios":
-        const { data: precios } = await supabase.from('registros_precios').select('nombre_producto, tienda, precio_valor, fecha').limit(limit);
-        return { tipo: "precios", datos: precios || [], total: precios?.length || 0 };
+      case "registros_precios": {
+        const { data } = await supabase.from('registros_precios').select('nombre_producto, tienda, precio_valor, fecha').limit(limit);
+        return { tipo: "precios", datos: data || [], total: data?.length || 0 };
+      }
         
-      default:
+      default: {
         const stats = await Promise.all([
           supabase.from('productos_obuma').select('*', { count: 'exact', head: true }),
           supabase.from('clientes_obuma').select('*', { count: 'exact', head: true }),
@@ -200,16 +217,10 @@ async function obtenerDatos(intencion: string, pregunta: string, limit: number =
         
         return {
           tipo: "estadisticas",
-          datos: {
-            productos: stats[0].count || 0,
-            clientes: stats[1].count || 0,
-            proveedores: stats[2].count || 0,
-            tareas: stats[3].count || 0,
-            usuarios: stats[4].count || 0,
-            dispositivos: stats[5].count || 0
-          },
+          datos: [],
           total: 6
         };
+      }
     }
   } catch (error) {
     console.error(`Error en ${intencion}:`, error);
@@ -249,7 +260,6 @@ export async function POST(req: Request) {
     const datos = await obtenerDatos(intencion, pregunta);
     const productosEncontrados = intencion === "productos_obuma" ? buscarEnProductos(pregunta, productos) : [];
     
-    // Construir prompt
     let systemPrompt = `Eres "Asistente Obuma", un asistente conversacional que conoce TODA la base de datos.
 
 📊 ESQUEMA COMPLETO:
@@ -258,7 +268,7 @@ ${JSON.stringify(databaseSchema, null, 2)}
 🎯 PREGUNTA: "${pregunta}"
 🔍 INTENCIÓN: ${intencion}`;
 
-    if (datos.tipo === "clientes" && datos.datos?.length > 0) {
+    if (datos.tipo === "clientes" && datos.datos && datos.datos.length > 0) {
       systemPrompt += `\n\n👥 CLIENTES ENCONTRADOS:
 ${JSON.stringify(datos.datos, null, 2)}
 
@@ -267,7 +277,7 @@ Responde SOLO con estos datos reales. NO inventes clientes.`;
     else if (datos.tipo === "clientes" && datos.esPreguntaGeneral) {
       systemPrompt += `\n\nResponde: "Tenemos ${datos.total} clientes registrados en total."`;
     }
-    else if (datos.datos?.length > 0) {
+    else if (datos.datos && datos.datos.length > 0) {
       systemPrompt += `\n\n📦 DATOS ENCONTRADOS (${datos.tipo}):
 ${JSON.stringify(datos.datos, null, 2)}`;
     }
