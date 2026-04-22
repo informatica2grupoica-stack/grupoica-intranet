@@ -182,66 +182,58 @@ async function obtenerDatosPorIntencion(intencion: string, pregunta: string, lim
   
   try {
     switch (intencion) {
-      // Reemplaza la función `obtenerDatosPorIntencion` para el case "productos_obuma" con esto:
-
-case "productos_obuma": {
-  // Extraer término de búsqueda de manera más precisa
-  let termino = '';
-  
-  // Si la pregunta empieza con "busca", "encuentra", "dame", "muestra"
-  if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
-    termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
-  } else {
-    // Eliminar palabras comunes y quedarse con el posible nombre del producto
-    termino = p
-      .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
-      .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
-      .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
-      .trim();
-  }
-  
-  // Si el término tiene menos de 3 caracteres, es una pregunta general
-  if (!termino || termino.length < 3) {
-    const { count } = await supabase.from('productos_obuma').select('*', { count: 'exact', head: true });
-    return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
-  }
-  
-  console.log(`🔍 Buscando en Supabase: "${termino}"`);
-  
-  // Búsqueda en Supabase
-  let query = supabase
-    .from('productos_obuma')
-    .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
-    .eq('activo', true);
-  
-  // Búsqueda por nombre o SKU
-  const esSKU = /^\d{7,}$/.test(termino);
-  if (esSKU) {
-    query = query.eq('sku', termino);
-  } else {
-    query = query.ilike('nombre', `%${termino}%`);
-  }
-  
-  const { data: productos, error } = await query.limit(20);
-  
-  if (error) {
-    console.error("Error en búsqueda de productos:", error);
-    return { tipo: "productos", datos: [], total: 0, error: true };
-  }
-  
-  console.log(`✅ Productos encontrados: ${productos?.length || 0}`);
-  
-  if (productos && productos.length > 0) {
-    return { 
-      tipo: "productos", 
-      datos: productos, 
-      total: productos.length,
-      fuente: "Supabase"
-    };
-  }
-  
-  return { tipo: "productos", datos: [], total: 0, noEncontrado: true, termino };
-}
+      case "productos_obuma": {
+        let termino = '';
+        
+        if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
+          termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
+        } else {
+          termino = p
+            .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
+            .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
+            .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
+            .trim();
+        }
+        
+        if (!termino || termino.length < 3) {
+          const { count } = await supabase.from('productos_obuma').select('*', { count: 'exact', head: true });
+          return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
+        }
+        
+        console.log(`🔍 Buscando en Supabase: "${termino}"`);
+        
+        let query = supabase
+          .from('productos_obuma')
+          .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
+          .eq('activo', true);
+        
+        const esSKU = /^\d{7,}$/.test(termino);
+        if (esSKU) {
+          query = query.eq('sku', termino);
+        } else {
+          query = query.ilike('nombre', `%${termino}%`);
+        }
+        
+        const { data: productos, error } = await query.limit(20);
+        
+        if (error) {
+          console.error("Error en búsqueda de productos:", error);
+          return { tipo: "productos", datos: [], total: 0, error: true };
+        }
+        
+        console.log(`✅ Productos encontrados: ${productos?.length || 0}`);
+        
+        if (productos && productos.length > 0) {
+          return { 
+            tipo: "productos", 
+            datos: productos, 
+            total: productos.length,
+            fuente: "Supabase"
+          };
+        }
+        
+        return { tipo: "productos", datos: [], total: 0, noEncontrado: true, termino };
+      }
         
       case "clientes_obuma": {
         const { count: totalClientes } = await supabase.from('clientes_obuma').select('*', { count: 'exact', head: true });
@@ -277,7 +269,6 @@ case "productos_obuma": {
       case "tareas": {
         const { count } = await supabase.from('tareas').select('*', { count: 'exact', head: true });
         
-        // Consulta con JOIN a perfiles para obtener el nombre del asignado
         let query = supabase
           .from('tareas')
           .select(`
@@ -309,7 +300,6 @@ case "productos_obuma": {
           return { tipo: "tareas", datos: [], total: count || 0, error: true };
         }
         
-        // Formatear tareas con nombre del responsable
         const tareasFormateadas = (data || []).map((t: any) => ({
           titulo: t.titulo,
           descripcion: t.descripcion,
@@ -417,14 +407,16 @@ ${JSON.stringify(databaseSchema, null, 2)}
 🔍 INTENCIÓN DETECTADA: ${intencion}`;
 
     if (datosDB.tipo === "productos" && datosDB.datos && datosDB.datos.length > 0) {
-      systemPrompt += `\n\n📦 PRODUCTOS ENCONTRADOS (${datosDB.total} resultados):
+      systemPrompt += `\n\n📦 PRODUCTOS REALES ENCONTRADOS EN SUPABASE (${datosDB.total} resultados):
 ${JSON.stringify(datosDB.datos, null, 2)}
 
-Responde MOSTRANDO estos productos reales. Incluye nombre, SKU, precio y stock.`;
+⚠️ REGLA ESTRICTA: Estos son los ÚNICOS productos que existen en la base de datos.
+NO INVENTES NINGÚN PRODUCTO. Si el usuario pregunta por un producto que no está en esta lista, responde que no existe.
+NO uses ejemplos como "producto de prueba" o "Lenovo ThinkPad" a menos que estén explícitamente en esta lista.`;
     }
     else if (datosDB.tipo === "productos" && datosDB.noEncontrado) {
-      systemPrompt += `\n\n❌ No se encontró el producto "${datosDB.termino}" en el inventario.
-Responde: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. ¿Quieres que busque productos similares?"`;
+      systemPrompt += `\n\n❌ No se encontró el producto "${datosDB.termino}" en la base de datos.
+Responde EXACTAMENTE: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. Tenemos ${datosDB.total} productos en total. ¿Quieres que te liste algunos o busques por otra palabra?"`;
     }
     else if (datosDB.tipo === "productos" && datosDB.esPreguntaGeneral) {
       systemPrompt += `\n\nResponde: "Tenemos ${datosDB.total} productos en inventario."`;
