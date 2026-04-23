@@ -43,32 +43,25 @@ export default function RegistroAsistencia({
     }
   }, [asistenciaExistente]);
 
-  const calcularHoras = () => {
-    let horas = 0;
-    if (form.hora_entrada && form.hora_salida) {
-      const entrada = new Date(`2000-01-01T${form.hora_entrada}`);
-      const salida = new Date(`2000-01-01T${form.hora_salida}`);
-      horas = (salida.getTime() - entrada.getTime()) / (1000 * 60 * 60);
-    }
-    return horas;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const horasTrabajadas = calcularHoras();
-    const horasExtras = horasTrabajadas > 8 ? horasTrabajadas - 8 : 0;
-
-    const result = await onSave({
+    // ✅ Solo enviar campos con valores, no strings vacíos
+    const datosEnviar: any = {
       empleado_id: empleadoId,
-      fecha,
-      ...form,
-      horas_trabajadas: horasTrabajadas,
-      horas_extras: horasExtras,
-      horas_extras_25: Math.min(horasExtras, 2),
-      horas_extras_50: Math.max(horasExtras - 2, 0),
-    });
+      fecha: fecha,
+      estado: form.estado,
+    };
+
+    // ✅ Solo agregar horas si están presentes
+    if (form.hora_entrada) datosEnviar.hora_entrada = form.hora_entrada;
+    if (form.hora_salida) datosEnviar.hora_salida = form.hora_salida;
+    if (form.hora_entrada_tarde) datosEnviar.hora_entrada_tarde = form.hora_entrada_tarde;
+    if (form.hora_salida_tarde) datosEnviar.hora_salida_tarde = form.hora_salida_tarde;
+    if (form.justificacion) datosEnviar.justificacion = form.justificacion;
+
+    const result = await onSave(datosEnviar);
 
     setLoading(false);
     if (result.success) {
@@ -148,14 +141,6 @@ export default function RegistroAsistencia({
                   />
                 </div>
               </div>
-
-              {form.hora_entrada && form.hora_salida && (
-                <div className="bg-slate-50 rounded-xl p-3 text-center">
-                  <p className="text-xs text-slate-600">
-                    Horas trabajadas: <strong>{calcularHoras()} hrs</strong>
-                  </p>
-                </div>
-              )}
             </>
           )}
 
