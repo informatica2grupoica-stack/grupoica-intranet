@@ -1,58 +1,79 @@
-import { NextResponse } from 'next/server';
+// app/api/chatbot/historial/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// ✅ Usar las variables de entorno correctas
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // ✅ Cambiar a NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export async function POST(req: Request) {
-  try {
-    const { usuario_id, usuario_nombre, pregunta, respuesta, productos_encontrados, fuente } = await req.json();
-    
-    const { data, error } = await supabase
-      .from('chatbot_historial')
-      .insert({
-        usuario_id,
-        usuario_nombre,
-        pregunta,
-        respuesta,
-        productos_encontrados: productos_encontrados || 0,
-        fuente: fuente || 'supabase'
-      });
-    
-    if (error) throw error;
-    
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error guardando historial:", error);
-    return NextResponse.json({ error: "Error guardando historial" }, { status: 500 });
-  }
+// ✅ Verificar que las variables existen antes de crear el cliente
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Faltan variables de entorno de Supabase');
 }
 
-export async function GET(req: Request) {
+const supabase = createClient(supabaseUrl || '', supabaseKey || '');
+
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const usuario_id = searchParams.get('usuario_id');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    
-    let query = supabase
+    // Verificar que el cliente está configurado
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: 'Configuración de Supabase no disponible' },
+        { status: 500 }
+      );
+    }
+
+    const { data, error } = await supabase
       .from('chatbot_historial')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(limit);
-    
-    if (usuario_id) {
-      query = query.eq('usuario_id', usuario_id);
-    }
-    
-    const { data, error } = await query;
-    
+      .limit(50);
+
     if (error) throw error;
-    
-    return NextResponse.json({ success: true, historial: data });
-  } catch (error) {
-    console.error("Error obteniendo historial:", error);
-    return NextResponse.json({ error: "Error obteniendo historial" }, { status: 500 });
+
+    return NextResponse.json({ success: true, data: data || [] });
+  } catch (error: any) {
+    console.error('Error en GET /api/chatbot/historial:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error al obtener historial' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json(
+        { error: 'Configuración de Supabase no disponible' },
+        { status: 500 }
+      );
+    }
+
+    const body = await request.json();
+
+    const { data, error } = await supabase
+      .from('chatbot_historial')
+      .insert([{
+        usuario_id: body.usuario_id,
+        usuario_nombre: body.usuario_nombre,
+        pregunta: body.pregunta,
+        respuesta: body.respuesta,
+        productos_encontrados: body.productos_encontrados || 0,
+        fuente: body.fuente || 'supabase',
+        feedback: body.feedback || null,
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    console.error('Error en POST /api/chatbot/historial:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error al guardar historial' },
+      { status: 500 }
+    );
   }
 }
