@@ -21,23 +21,16 @@ export interface ObumaProveedor {
   cuenta_contable?: string;
 }
 
-interface PaginationInfo {
-  current_page: number;
-  last_page: number;
-  per_page: number;
-  total: number;
-}
-
 export function useObumaProveedores() {
-  const [proveedores, setProveedores] = useState<ObumaProveedor[]>([]);
+  const [todosProveedores, setTodosProveedores] = useState<ObumaProveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<PaginationInfo>({
-    current_page: 1,
-    last_page: 1,
-    per_page: 20,
-    total: 0,
-  });
+  
+  // Paginación frontend
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10); // 10 items por página
+  const [busqueda, setBusqueda] = useState("");
+  
   const [estadisticas, setEstadisticas] = useState({
     total: 0,
     conContacto: 0,
@@ -45,12 +38,12 @@ export function useObumaProveedores() {
     conTelefono: 0,
   });
 
-  const cargarProveedores = useCallback(async (page: number = 1, limit: number = 20) => {
+  const cargarProveedores = useCallback(async () => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/obuma/proveedores?page=${page}&limit=${limit}`);
+      const response = await fetch('/api/obuma/proveedores');
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -58,50 +51,48 @@ export function useObumaProveedores() {
       }
       
       const result = await response.json();
+      const proveedores = result.data || result.proveedores || [];
       
-      let listaProveedores: ObumaProveedor[] = [];
-      if (Array.isArray(result.data)) {
-        listaProveedores = result.data;
-      } else if (Array.isArray(result.proveedores)) {
-        listaProveedores = result.proveedores;
-      } else if (Array.isArray(result)) {
-        listaProveedores = result;
-      } else {
-        listaProveedores = [];
-      }
+      setTodosProveedores(proveedores);
       
-      setProveedores(listaProveedores);
-      
-      // Actualizar paginación
-      setPagination({
-        current_page: result.pagination?.current_page || page,
-        last_page: result.pagination?.last_page || 1,
-        per_page: result.pagination?.per_page || limit,
-        total: result.pagination?.total || listaProveedores.length,
+      // Calcular estadísticas
+      setEstadisticas({
+        total: proveedores.length,
+        conContacto: proveedores.filter((p: ObumaProveedor) => p.proveedor_contacto).length,
+        conEmail: proveedores.filter((p: ObumaProveedor) => p.proveedor_email).length,
+        conTelefono: proveedores.filter((p: ObumaProveedor) => p.proveedor_telefono || p.proveedor_celular).length,
       });
-      
-      // Calcular estadísticas con todos los datos (si vienen del backend)
-      if (result.stats) {
-        setEstadisticas(result.stats);
-      } else {
-        setEstadisticas({
-          total: result.pagination?.total || listaProveedores.length,
-          conContacto: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_contacto).length,
-          conEmail: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_email).length,
-          conTelefono: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_telefono || p.proveedor_celular).length,
-        });
-      }
     } catch (err: any) {
-      console.error('❌ Error cargando proveedores Obuma:', err);
+      console.error('❌ Error cargando proveedores:', err);
       setError(err.message || 'Error al cargar los proveedores');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Filtrar por búsqueda
+  const proveedoresFiltrados = todosProveedores.filter(prov => {
+    const textoBusqueda = busqueda.toLowerCase();
+    if (!textoBusqueda) return true;
+    return (
+      prov.proveedor_razon_social?.toLowerCase().includes(textoBusqueda) ||
+      prov.proveedor_rut?.includes(textoBusqueda) ||
+      prov.proveedor_contacto?.toLowerCase().includes(textoBusqueda) ||
+      prov.proveedor_email?.toLowerCase().includes(textoBusqueda)
+    );
+  });
+
+  // Paginación frontend
+  const totalPages = Math.ceil(proveedoresFiltrados.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const proveedoresPaginados = proveedoresFiltrados.slice(startIndex, endIndex);
+
   const cambiarPagina = (page: number) => {
-    if (page >= 1 && page <= pagination.last_page) {
-      cargarProveedores(page, pagination.per_page);
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      // Scroll al top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -120,7 +111,9 @@ export function useObumaProveedores() {
         throw new Error(result.error || 'Error al crear proveedor');
       }
       
-      await cargarProveedores(1, pagination.per_page);
+      await cargarProveedores();
+      setCurrentPage(1); // Volver a la primera página
+      setBusqueda(""); // Limpiar búsqueda
       return { success: true, data: result.data };
     } catch (err: any) {
       console.error('Error creando proveedor:', err);
@@ -145,7 +138,7 @@ export function useObumaProveedores() {
         throw new Error(result.error || 'Error al actualizar proveedor');
       }
       
-      await cargarProveedores(pagination.current_page, pagination.per_page);
+      await cargarProveedores();
       return { success: true, data: result.data };
     } catch (err: any) {
       console.error('Error actualizando proveedor:', err);
@@ -156,17 +149,22 @@ export function useObumaProveedores() {
   };
 
   useEffect(() => {
-    cargarProveedores(1, 20);
+    cargarProveedores();
   }, [cargarProveedores]);
 
   return {
-    proveedores,
+    proveedores: proveedoresPaginados,
+    todosProveedores,
     loading,
     error,
     estadisticas,
-    pagination,
-    cargarProveedores,
+    busqueda,
+    setBusqueda,
+    currentPage,
+    totalPages,
+    itemsPerPage,
     cambiarPagina,
+    cargarProveedores,
     crearProveedor,
     actualizarProveedor,
   };

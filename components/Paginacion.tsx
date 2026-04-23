@@ -9,8 +9,10 @@ interface PaginacionProps {
 }
 
 export default function Paginacion({ currentPage, totalPages, onPageChange }: PaginacionProps) {
+  if (totalPages <= 1) return null;
+
   const getPageNumbers = () => {
-    const pages = [];
+    const pages: (number | string)[] = [];
     const maxVisible = 5;
     
     if (totalPages <= maxVisible) {
@@ -34,8 +36,6 @@ export default function Paginacion({ currentPage, totalPages, onPageChange }: Pa
     }
     return pages;
   };
-
-  if (totalPages <= 1) return null;
 
   return (
     <div className="flex items-center justify-center gap-2 mt-8">
