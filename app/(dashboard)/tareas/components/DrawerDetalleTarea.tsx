@@ -139,14 +139,24 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
     }
   };
 
+  // 🔥 Función mejorada para obtener nombre completo
   const getNombreCompleto = (persona: any) => {
     if (!persona) return 'No asignado';
-    if (Array.isArray(persona) && persona.length > 0) {
-      return `${persona[0]?.nombre || ''} ${persona[0]?.apellido || ''}`.trim() || 'No asignado';
+    
+    // Si es un array, tomar el primer elemento
+    if (Array.isArray(persona)) {
+      if (persona.length === 0) return 'No asignado';
+      persona = persona[0];
     }
-    if (typeof persona === 'object') {
-      return `${persona.nombre || ''} ${persona.apellido || ''}`.trim() || 'No asignado';
+    
+    // Ahora debería ser un objeto
+    if (persona && typeof persona === 'object') {
+      const nombre = persona.nombre || '';
+      const apellido = persona.apellido || '';
+      const nombreCompleto = `${nombre} ${apellido}`.trim();
+      return nombreCompleto || 'No asignado';
     }
+    
     return 'No asignado';
   };
 
@@ -164,7 +174,7 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
       />
       
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out animate-slide-in">
+      <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white">
@@ -345,7 +355,7 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
                     rows={3}
                   />
-                                  <div className="flex justify-end mt-2">
+                  <div className="flex justify-end mt-2">
                     <button
                       onClick={enviarComentario}
                       disabled={!nuevoComentario.trim() || enviando}

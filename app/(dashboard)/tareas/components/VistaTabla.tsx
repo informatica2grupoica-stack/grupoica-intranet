@@ -1,3 +1,4 @@
+// components/VistaTabla.tsx
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +48,38 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
       case 'media': return { label: 'Media', css: 'bg-amber-100 text-amber-600 border-amber-200' };
       default: return { label: 'Baja', css: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
     }
+  };
+
+  // 🔥 Función para obtener el nombre del responsable correctamente
+  const getNombreResponsable = (tarea: any) => {
+    // Si responsable es un objeto con nombre y apellido
+    if (tarea.responsable) {
+      if (tarea.responsable.nombre || tarea.responsable.apellido) {
+        return `${tarea.responsable.nombre || ''} ${tarea.responsable.apellido || ''}`.trim();
+      }
+    }
+    
+    // Si tenemos usuarios y asignado_a, buscar en la lista
+    if (tarea.asignado_a && usuarios.length > 0) {
+      const usuario = usuarios.find(u => u.id === tarea.asignado_a);
+      if (usuario) {
+        return `${usuario.nombre} ${usuario.apellido}`.trim();
+      }
+    }
+    
+    return 'Sin responsable';
+  };
+
+  // 🔥 Función para obtener las iniciales del responsable
+  const getInicialesResponsable = (tarea: any) => {
+    const nombreCompleto = getNombreResponsable(tarea);
+    if (nombreCompleto === 'Sin responsable') return '?';
+    
+    const partes = nombreCompleto.split(' ');
+    if (partes.length >= 2) {
+      return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
+    }
+    return partes[0][0]?.toUpperCase() || '?';
   };
 
   const puedeActualizarEstado = (tarea: any) => {
@@ -192,6 +225,8 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
               const puedeEditar = puedeEditarTarea(t);
               const puedeEliminar = puedeEliminarTarea(t);
               const puedeCambiarEstado = puedeActualizarEstado(t);
+              const nombreResponsable = getNombreResponsable(t);
+              const inicialesResponsable = getInicialesResponsable(t);
 
               if (editandoTarea === t.id) {
                 return (
@@ -262,7 +297,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         </div>
                       </div>
                      </td>
-                   </tr>
+                    </tr>
                 );
               }
 
@@ -280,25 +315,25 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                     {t.descripcion && (
                       <p className="text-[9px] text-slate-400 mt-1 line-clamp-1">{t.descripcion}</p>
                     )}
-                   </td>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white text-[10px] font-black shadow-inner flex-shrink-0">
-                        {t.responsable?.nombre?.[0]}{t.responsable?.apellido?.[0]}
+                        {inicialesResponsable}
                       </div>
                       <div className="flex flex-col truncate">
                         <span className="text-[11px] font-black text-slate-700 uppercase leading-none truncate">
-                          {t.responsable?.nombre} {t.responsable?.apellido}
+                          {nombreResponsable}
                         </span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Operativo</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Responsable</span>
                       </div>
                     </div>
-                   </td>
+                  </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-[9px] font-black uppercase border ${prioridad.css}`}>
                       {prioridad.label}
                     </span>
-                   </td>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg w-fit">
@@ -310,12 +345,12 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         <Clock size={10} /> {formatFecha(t.fecha_limite)}
                       </div>
                     </div>
-                   </td>
+                  </td>
                   <td className="px-6 py-4 text-center">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${status.css}`}>
                       {status.label}
                     </span>
-                   </td>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
@@ -323,11 +358,6 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         className="p-2 bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-all relative"
                       >
                         <MessageSquare size={14} />
-                        {t.comentarios?.[0]?.count > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-                            {t.comentarios[0].count}
-                          </span>
-                        )}
                       </button>
                       
                       {puedeCambiarEstado && (
@@ -387,8 +417,8 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         </div>
                       </div>
                     )}
-                   </td>
-                 </tr>
+                  </td>
+                </tr>
               );
             })}
           </tbody>
