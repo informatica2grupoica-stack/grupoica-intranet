@@ -6,7 +6,8 @@ import {
   Trash2, Edit3, Save, Plus, CheckCircle2, AlertCircle,
   Landmark, CreditCard, Mail, Globe, Info, ChevronDown, ChevronUp,
   Briefcase, DollarSign, Map, Filter, ArrowUpDown, TrendingUp,
-  Clock, Award, ThumbsUp, MessageCircle, Calendar, Users
+  Clock, Award, ThumbsUp, MessageCircle, Calendar, Users,
+  Eye, EyeOff
 } from 'lucide-react';
 
 interface Proveedor {
@@ -53,6 +54,7 @@ export default function SeccionProveedores() {
     activos: 0,
     avgCalificacion: 0
   });
+  const [errorRut, setErrorRut] = useState("");
 
   const initialFormState = {
     nombre_empresa: '', rut_empresa: '', categoria: '', tipo_servicio: '',
@@ -87,6 +89,8 @@ export default function SeccionProveedores() {
     if (!error && data) {
       setProveedores(data);
       calcularEstadisticas(data);
+    } else if (error) {
+      console.error("Error cargando proveedores:", error);
     }
     setLoading(false);
   };
@@ -107,7 +111,6 @@ export default function SeccionProveedores() {
   const filtrarYOrdenar = () => {
     let filtrados = [...proveedores];
     
-    // Filtro por búsqueda
     if (busqueda) {
       filtrados = filtrados.filter(p => 
         p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -117,12 +120,10 @@ export default function SeccionProveedores() {
       );
     }
     
-    // Filtro por categoría
     if (categoriaFiltro !== "Todas") {
       filtrados = filtrados.filter(p => p.categoria === categoriaFiltro);
     }
     
-    // Ordenamiento
     switch (orden) {
       case 'nombre':
         filtrados.sort((a, b) => a.nombre_empresa?.localeCompare(b.nombre_empresa || ''));
@@ -141,12 +142,65 @@ export default function SeccionProveedores() {
     setFilteredProveedores(filtrados);
   };
 
+  const validarRut = (rut: string): boolean => {
+    if (!rut) return true; // Permitir vacío inicialmente
+    const rutLimpio = rut.replace(/\./g, '').replace(/-/g, '');
+    if (rutLimpio.length < 2) return false;
+    
+    const cuerpo = rutLimpio.slice(0, -1);
+    const dvEsperado = rutLimpio.slice(-1).toUpperCase();
+    
+    let suma = 0;
+    let multiplo = 2;
+    
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+      suma += parseInt(cuerpo[i]) * multiplo;
+      multiplo = multiplo === 7 ? 2 : multiplo + 1;
+    }
+    
+    const dvCalculado = 11 - (suma % 11);
+    const dvCaracter = dvCalculado === 11 ? '0' : dvCalculado === 10 ? 'K' : dvCalculado.toString();
+    
+    return dvCaracter === dvEsperado;
+  };
+
   const guardarProveedor = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validaciones
+    if (!nuevo.nombre_empresa.trim()) {
+      showAlert("El nombre de la empresa es obligatorio", "error");
+      return;
+    }
+    
+    if (!nuevo.rut_empresa.trim()) {
+      showAlert("El RUT es obligatorio", "error");
+      return;
+    }
+    
+    if (!validarRut(nuevo.rut_empresa)) {
+      showAlert("RUT inválido. Formato: 12345678-9", "error");
+      return;
+    }
+    
+    if (!nuevo.categoria.trim()) {
+      showAlert("La categoría es obligatoria", "error");
+      return;
+    }
+    
     setLoading(true);
+    setErrorRut("");
+    
     const { error } = await supabase.from('proveedores').insert([nuevo]);
-    if (error) showAlert(error.message, 'error');
-    else {
+    
+    if (error) {
+      if (error.code === '23505') {
+        showAlert("Ya existe un proveedor con este RUT", "error");
+        setErrorRut("Este RUT ya está registrado");
+      } else {
+        showAlert(error.message, "error");
+      }
+    } else {
       showAlert("Proveedor registrado con éxito", "success");
       setNuevo(initialFormState);
       cargarProveedores();
@@ -157,14 +211,25 @@ export default function SeccionProveedores() {
 
   const actualizarProveedor = async () => {
     if (!seleccionado) return;
+    
+    if (seleccionado.rut_empresa && !validarRut(seleccionado.rut_empresa)) {
+      showAlert("RUT inválido. Formato: 12345678-9", "error");
+      return;
+    }
+    
     setLoading(true);
     const { error } = await supabase
       .from('proveedores')
       .update(seleccionado)
       .eq('id', seleccionado.id);
     
-    if (error) showAlert(error.message, 'error');
-    else {
+    if (error) {
+      if (error.code === '23505') {
+        showAlert("Ya existe otro proveedor con este RUT", "error");
+      } else {
+        showAlert(error.message, "error");
+      }
+    } else {
       showAlert("Proveedor actualizado con éxito", "success");
       cargarProveedores();
       setSeleccionado(null);
@@ -174,27 +239,87 @@ export default function SeccionProveedores() {
 
   const eliminarProveedor = async (id: string) => {
     if (!window.confirm("¿Eliminar este proveedor permanentemente?")) return;
+    setLoading(true);
     const { error } = await supabase.from('proveedores').delete().eq('id', id);
-    if (error) showAlert("Error al eliminar", "error");
-    else {
+    if (error) {
+      showAlert("Error al eliminar", "error");
+    } else {
       showAlert("Eliminado correctamente", "success");
       setSeleccionado(null);
+      cargarProveedores();
+    }
+    setLoading(false);
+  };
+
+  const toggleActivo = async (prov: Proveedor) => {
+    const nuevoEstado = !prov.activo;
+    const { error } = await supabase
+      .from('proveedores')
+      .update({ activo: nuevoEstado })
+      .eq('id', prov.id);
+    
+    if (error) {
+      showAlert("Error al cambiar estado", "error");
+    } else {
+      showAlert(`Proveedor ${nuevoEstado ? 'activado' : 'desactivado'}`, "success");
       cargarProveedores();
     }
   };
 
   const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(Boolean))];
 
-  const getCalificacionColor = (calif: number) => {
-    if (calif >= 4.5) return 'text-emerald-600 bg-emerald-50';
-    if (calif >= 3.5) return 'text-blue-600 bg-blue-50';
-    if (calif >= 2.5) return 'text-amber-600 bg-amber-50';
-    return 'text-red-600 bg-red-50';
-  };
-
   const getInitials = (nombre: string) => {
     return nombre?.charAt(0).toUpperCase() || 'P';
   };
+
+  // Componente de detalles expandidos reutilizable
+  const DetallesExpandidos = ({ prov }: { prov: Proveedor }) => (
+    <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
+      {prov.direccion && (
+        <div className="flex items-start gap-2 text-xs text-slate-600">
+          <MapPin size={12} className="text-slate-400 mt-0.5 flex-shrink-0" />
+          <span>{prov.direccion}, {prov.comuna}, {prov.ciudad}</span>
+        </div>
+      )}
+      {prov.email_contacto && (
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          <Mail size={12} className="text-slate-400 flex-shrink-0" />
+          <span className="truncate">{prov.email_contacto}</span>
+        </div>
+      )}
+      {prov.sitio_web && (
+        <div className="flex items-center gap-2 text-xs text-blue-600">
+          <Globe size={12} className="flex-shrink-0" />
+          <a href={prov.sitio_web} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
+            {prov.sitio_web}
+          </a>
+        </div>
+      )}
+      {prov.condiciones_pago && (
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          <DollarSign size={12} className="text-slate-400" />
+          <span>Pago: {prov.condiciones_pago}</span>
+        </div>
+      )}
+      {prov.banco_nombre && (
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          <Landmark size={12} className="text-slate-400" />
+          <span>{prov.banco_nombre} - {prov.cuenta_tipo}: {prov.cuenta_numero}</span>
+        </div>
+      )}
+      {prov.observaciones && (
+        <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg mt-2">
+          <strong>Observaciones:</strong> {prov.observaciones}
+        </p>
+      )}
+      <div className="flex items-center justify-between pt-2 text-[9px] text-slate-400">
+        <span>Registrado: {new Date(prov.created_at).toLocaleDateString('es-CL')}</span>
+        <span className={`px-2 py-0.5 rounded-full ${prov.activo ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+          {prov.activo ? 'Activo' : 'Inactivo'}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4 lg:p-8 font-sans">
@@ -228,7 +353,6 @@ export default function SeccionProveedores() {
               </div>
             </div>
             
-            {/* Botón vista */}
             <div className="flex gap-2">
               <button
                 onClick={() => setVista('lista')}
@@ -336,7 +460,7 @@ export default function SeccionProveedores() {
           </div>
         </div>
 
-        {/* Formulario de creación */}
+        {/* Formulario de creación - COMPLETO con todos los campos */}
         {showForm && (
           <form onSubmit={guardarProveedor} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
@@ -344,46 +468,204 @@ export default function SeccionProveedores() {
               REGISTRAR NUEVO PROVEEDOR
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {/* Datos básicos */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Nombre Empresa *</label>
-                <input required value={nuevo.nombre_empresa} onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input 
+                  required 
+                  value={nuevo.nombre_empresa} 
+                  onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  placeholder="Razón Social"
+                />
               </div>
+              
               <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500">RUT</label>
-                <input value={nuevo.rut_empresa} onChange={e => setNuevo({...nuevo, rut_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="text-[10px] font-bold uppercase text-slate-500">RUT *</label>
+                <input 
+                  required 
+                  value={nuevo.rut_empresa} 
+                  onChange={e => setNuevo({...nuevo, rut_empresa: e.target.value})} 
+                  className={`w-full bg-slate-50 rounded-xl p-3 text-sm border ${errorRut ? 'border-red-500' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  placeholder="12.345.678-9"
+                />
+                {errorRut && <p className="text-[9px] text-red-500">{errorRut}</p>}
               </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Categoría *</label>
-                <input required value={nuevo.categoria} onChange={e => setNuevo({...nuevo, categoria: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input 
+                  required 
+                  value={nuevo.categoria} 
+                  onChange={e => setNuevo({...nuevo, categoria: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: Materiales, Servicios, Transporte"
+                />
               </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Tipo Servicio</label>
-                <input value={nuevo.tipo_servicio} onChange={e => setNuevo({...nuevo, tipo_servicio: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input 
+                  value={nuevo.tipo_servicio} 
+                  onChange={e => setNuevo({...nuevo, tipo_servicio: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: Asesoría, Suministro, Fletes"
+                />
               </div>
+              
+              {/* Contacto */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Contacto</label>
-                <input value={nuevo.nombre_contacto} onChange={e => setNuevo({...nuevo, nombre_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" />
+                <label className="text-[10px] font-bold uppercase text-slate-500">Nombre Contacto</label>
+                <input 
+                  value={nuevo.nombre_contacto} 
+                  onChange={e => setNuevo({...nuevo, nombre_contacto: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
+                  placeholder="Persona de contacto"
+                />
               </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Teléfono</label>
-                <input value={nuevo.telefono} onChange={e => setNuevo({...nuevo, telefono: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
+                <input 
+                  value={nuevo.telefono} 
+                  onChange={e => setNuevo({...nuevo, telefono: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="+56 9 1234 5678"
+                />
               </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Email</label>
-                <input type="email" value={nuevo.email_contacto} onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
+                <input 
+                  type="email" 
+                  value={nuevo.email_contacto} 
+                  onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="contacto@empresa.cl"
+                />
               </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Sitio Web</label>
+                <input 
+                  value={nuevo.sitio_web} 
+                  onChange={e => setNuevo({...nuevo, sitio_web: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="https://www.empresa.cl"
+                />
+              </div>
+              
+              {/* Ubicación */}
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Dirección</label>
+                <input 
+                  value={nuevo.direccion} 
+                  onChange={e => setNuevo({...nuevo, direccion: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="Calle, número, edificio"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Comuna</label>
+                <input 
+                  value={nuevo.comuna} 
+                  onChange={e => setNuevo({...nuevo, comuna: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="Comuna"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Ciudad</label>
+                <input 
+                  value={nuevo.ciudad} 
+                  onChange={e => setNuevo({...nuevo, ciudad: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="Ciudad"
+                />
+              </div>
+              
+              {/* Datos financieros */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Condiciones Pago</label>
+                <select 
+                  value={nuevo.condiciones_pago} 
+                  onChange={e => setNuevo({...nuevo, condiciones_pago: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
+                >
+                  <option value="Contado">Contado</option>
+                  <option value="30 días">30 días</option>
+                  <option value="60 días">60 días</option>
+                  <option value="90 días">90 días</option>
+                </select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Banco</label>
+                <input 
+                  value={nuevo.banco_nombre} 
+                  onChange={e => setNuevo({...nuevo, banco_nombre: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="Nombre del banco"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Tipo Cuenta</label>
+                <select 
+                  value={nuevo.cuenta_tipo} 
+                  onChange={e => setNuevo({...nuevo, cuenta_tipo: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
+                >
+                  <option value="Corriente">Corriente</option>
+                  <option value="Vista">Vista / RUT</option>
+                </select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500">Número Cuenta</label>
+                <input 
+                  value={nuevo.cuenta_numero} 
+                  onChange={e => setNuevo({...nuevo, cuenta_numero: e.target.value})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
+                  placeholder="Número de cuenta"
+                />
+              </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Calificación</label>
-                <select value={nuevo.calificacion} onChange={e => setNuevo({...nuevo, calificacion: Number(e.target.value)})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200">
-                  {[5,4,3,2,1].map(num => <option key={num} value={num}>{'★'.repeat(num)}{'☆'.repeat(5-num)}</option>)}
+                <select 
+                  value={nuevo.calificacion} 
+                  onChange={e => setNuevo({...nuevo, calificacion: Number(e.target.value)})} 
+                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
+                >
+                  {[5,4,3,2,1].map(num => (
+                    <option key={num} value={num}>{'★'.repeat(num)}{'☆'.repeat(5-num)}</option>
+                  ))}
                 </select>
               </div>
             </div>
+            
+            {/* Observaciones */}
+            <div className="mt-5 space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-500">Observaciones</label>
+              <textarea 
+                value={nuevo.observaciones} 
+                onChange={e => setNuevo({...nuevo, observaciones: e.target.value})} 
+                className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 resize-none"
+                rows={3}
+                placeholder="Información adicional sobre el proveedor..."
+              />
+            </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
               <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg">Guardar Proveedor</button>
+              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+                {loading && <Loader2 size={16} className="animate-spin" />}
+                Guardar Proveedor
+              </button>
             </div>
           </form>
         )}
@@ -399,7 +681,7 @@ export default function SeccionProveedores() {
           </div>
         )}
 
-        {/* Vista de lista - Estilo similar a tareas */}
+        {/* Vista de lista */}
         {vista === 'lista' && !loading && filteredProveedores.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
@@ -410,7 +692,7 @@ export default function SeccionProveedores() {
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contacto</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Calificación</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ubicación</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estado</th>
                     <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
@@ -437,6 +719,9 @@ export default function SeccionProveedores() {
                       <td className="px-6 py-4">
                         <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
                         <p className="text-[10px] text-slate-400">{prov.telefono}</p>
+                        {prov.email_contacto && (
+                          <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
@@ -446,21 +731,43 @@ export default function SeccionProveedores() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-xs text-slate-600">{prov.ciudad || '—'}</p>
-                        <p className="text-[9px] text-slate-400">{prov.comuna}</p>
+                        <button 
+                          onClick={() => toggleActivo(prov)}
+                          className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${
+                            prov.activo !== false 
+                              ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' 
+                              : 'bg-red-100 text-red-600 hover:bg-red-200'
+                          }`}
+                        >
+                          {prov.activo !== false ? 'Activo' : 'Inactivo'}
+                        </button>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                          <button 
+                            onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} 
+                            className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                            title="Ver detalles"
+                          >
                             {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
-                          <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
+                          <button 
+                            onClick={() => setSeleccionado(prov)} 
+                            className="p-2 text-slate-400 hover:text-amber-600 transition-colors"
+                            title="Editar"
+                          >
                             <Edit3 size={16} />
                           </button>
-                          <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors">
+                          <button 
+                            onClick={() => eliminarProveedor(prov.id)} 
+                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                            title="Eliminar"
+                          >
                             <Trash2 size={16} />
                           </button>
                         </div>
+                        {/* Detalles expandidos en línea */}
+                        {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
                       </td>
                     </tr>
                   ))}
@@ -470,7 +777,7 @@ export default function SeccionProveedores() {
           </div>
         )}
 
-        {/* Vista de grid - Tarjetas compactas */}
+        {/* Vista de grid */}
         {vista === 'grid' && !loading && filteredProveedores.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProveedores.map((prov) => (
@@ -530,39 +837,13 @@ export default function SeccionProveedores() {
                     </button>
                   </div>
                   
-                  {/* Detalles expandidos en grid */}
-                  {expandedCard === prov.id && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
-                      {prov.direccion && (
-                        <div className="flex items-start gap-2 text-xs text-slate-600">
-                          <MapPin size={12} className="text-slate-400 mt-0.5 flex-shrink-0" />
-                          <span>{prov.direccion}, {prov.comuna}</span>
-                        </div>
-                      )}
-                      {prov.email_contacto && (
-                        <div className="flex items-center gap-2 text-xs text-slate-600">
-                          <Mail size={12} className="text-slate-400" />
-                          <span className="truncate">{prov.email_contacto}</span>
-                        </div>
-                      )}
-                      {prov.banco_nombre && (
-                        <div className="flex items-center gap-2 text-xs text-slate-600">
-                          <Landmark size={12} className="text-slate-400" />
-                          <span>{prov.banco_nombre} - {prov.cuenta_tipo}</span>
-                        </div>
-                      )}
-                      {prov.observaciones && (
-                        <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg">{prov.observaciones}</p>
-                      )}
-                    </div>
-                  )}
+                  {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="flex justify-center py-20">
             <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -570,32 +851,32 @@ export default function SeccionProveedores() {
         )}
       </div>
 
-      {/* Modal de edición */}
+      {/* Modal de edición - COMPLETO */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Editar Proveedor</h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modificar información</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modificar información del proveedor</p>
               </div>
               <button onClick={() => setSeleccionado(null)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Nombre Empresa</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Nombre Empresa *</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.nombre_empresa} onChange={e => setSeleccionado({...seleccionado, nombre_empresa: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">RUT</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">RUT *</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.rut_empresa} onChange={e => setSeleccionado({...seleccionado, rut_empresa: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Categoría</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Categoría *</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.categoria} onChange={e => setSeleccionado({...seleccionado, categoria: e.target.value})} />
                 </div>
                 <div>
@@ -632,20 +913,47 @@ export default function SeccionProveedores() {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Condiciones Pago</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.condiciones_pago} onChange={e => setSeleccionado({...seleccionado, condiciones_pago: e.target.value})} />
+                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.condiciones_pago} onChange={e => setSeleccionado({...seleccionado, condiciones_pago: e.target.value})}>
+                    <option value="Contado">Contado</option>
+                    <option value="30 días">30 días</option>
+                    <option value="60 días">60 días</option>
+                    <option value="90 días">90 días</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Banco</label>
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.banco_nombre} onChange={e => setSeleccionado({...seleccionado, banco_nombre: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Tipo Cuenta</label>
+                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.cuenta_tipo} onChange={e => setSeleccionado({...seleccionado, cuenta_tipo: e.target.value})}>
+                    <option value="Corriente">Corriente</option>
+                    <option value="Vista">Vista / RUT</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Número Cuenta</label>
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.cuenta_numero} onChange={e => setSeleccionado({...seleccionado, cuenta_numero: e.target.value})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Calificación</label>
                   <select className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.calificacion} onChange={e => setSeleccionado({...seleccionado, calificacion: Number(e.target.value)})}>
-                    {[5,4,3,2,1].map(num => <option key={num} value={num}>{'★'.repeat(num)}</option>)}
+                    {[5,4,3,2,1].map(num => <option key={num} value={num}>{'★'.repeat(num)}{'☆'.repeat(5-num)}</option>)}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Observaciones</label>
+                <textarea className="w-full bg-slate-50 rounded-xl p-3 text-sm resize-none" rows={3} value={seleccionado.observaciones} onChange={e => setSeleccionado({...seleccionado, observaciones: e.target.value})} />
               </div>
             </div>
 
             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
               <button onClick={() => setSeleccionado(null)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button onClick={actualizarProveedor} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg">Guardar Cambios</button>
+              <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+                {loading && <Loader2 size={16} className="animate-spin" />}
+                Guardar Cambios
+              </button>
             </div>
           </div>
         </div>
