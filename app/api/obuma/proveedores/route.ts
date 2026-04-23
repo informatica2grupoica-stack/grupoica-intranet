@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 const OBUMA_API_URL = process.env.OBUMA_API_URL || 'https://api.obuma.cl/v1.0';
 const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
 
-// GET: Listar todos los proveedores
 export async function GET() {
   try {
     if (!OBUMA_API_TOKEN) {
@@ -37,7 +36,6 @@ export async function GET() {
   }
 }
 
-// POST: Crear un nuevo proveedor
 export async function POST(request: NextRequest) {
   try {
     if (!OBUMA_API_TOKEN) {
@@ -49,7 +47,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Validar campos requeridos
     if (!body.proveedor_rut) {
       return NextResponse.json(
         { error: 'El RUT del proveedor es obligatorio' },

@@ -7,10 +7,10 @@ const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
 // GET: Obtener proveedor por ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!OBUMA_API_TOKEN) {
       return NextResponse.json(
@@ -45,10 +45,10 @@ export async function GET(
 // POST: Actualizar proveedor
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     if (!OBUMA_API_TOKEN) {
@@ -84,6 +84,28 @@ export async function POST(
     console.error('Error en POST /api/obuma/proveedores/[id]:', error);
     return NextResponse.json(
       { error: 'Error al actualizar el proveedor' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Opcional - si la API lo soporta
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    
+    // Nota: La documentación no especifica un endpoint de eliminación
+    return NextResponse.json(
+      { error: 'La eliminación de proveedores no está implementada en la API de Obuma' },
+      { status: 501 }
+    );
+  } catch (error) {
+    console.error('Error en DELETE /api/obuma/proveedores/[id]:', error);
+    return NextResponse.json(
+      { error: 'Error al eliminar el proveedor' },
       { status: 500 }
     );
   }
