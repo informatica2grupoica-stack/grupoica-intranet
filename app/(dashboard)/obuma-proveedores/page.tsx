@@ -318,7 +318,7 @@ export default function ObumaProveedoresPage() {
             </div>
           </div>
           
-          {/* Filtros y búsqueda */}
+          {/* Filtros y busqueda */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
