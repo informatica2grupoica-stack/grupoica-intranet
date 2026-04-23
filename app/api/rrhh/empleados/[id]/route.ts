@@ -17,20 +17,7 @@ export async function GET(
     
     const { data, error } = await supabase
       .from('empleados')
-      .select(`
-        *,
-        jefe_directo:empleados!empleados_jefe_directo_id_fkey(
-          id,
-          nombre_completo,
-          cargo
-        ),
-        contratos:contratos_empleados(
-          *,
-          empleado:empleados(nombre_completo)
-        ),
-        permisos:permisos_empleados(*),
-        perfil:perfiles(*)
-      `)
+      .select('*')
       .eq('id', id)
       .single();
     
@@ -58,19 +45,12 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     
-    // No permitir cambiar RUT si ya existe otro
-    if (body.rut) {
-      const { data: existente } = await supabase
-        .from('empleados')
-        .select('id')
-        .eq('rut', body.rut)
-        .neq('id', id)
-        .single();
-      
-      if (existente) {
-        return NextResponse.json({ error: 'Ya existe otro empleado con este RUT' }, { status: 400 });
+    // Limpiar campos vacíos
+    Object.keys(body).forEach(key => {
+      if (body[key] === '' || body[key] === 'null') {
+        body[key] = null;
       }
-    }
+    });
     
     const { data, error } = await supabase
       .from('empleados')
@@ -84,20 +64,6 @@ export async function PUT(
     
     if (error) throw error;
     
-    // Actualizar perfil asociado si existe
-    if (data.perfil_id) {
-      await supabase
-        .from('perfiles')
-        .update({
-          nombre: body.nombre_completo?.split(' ')[0],
-          apellido: body.nombre_completo?.split(' ').slice(1).join(' '),
-          telefono: body.telefono,
-          rut: body.rut,
-          cargo: body.cargo,
-        })
-        .eq('id', data.perfil_id);
-    }
-    
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('Error en PUT /api/rrhh/empleados/[id]:', error);
@@ -108,7 +74,7 @@ export async function PUT(
   }
 }
 
-// DELETE: Eliminar empleado (soft delete)
+// DELETE: Soft delete - solo cambiar estado
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -116,22 +82,45 @@ export async function DELETE(
   try {
     const { id } = await params;
     
-    // Soft delete - solo cambiar estado
-    const { error } = await supabase
+    console.log(`🗑️ Eliminando (soft delete) empleado: ${id}`);
+    
+    // Verificar si el empleado existe
+    const { data: empleado, error: findError } = await supabase
+      .from('empleados')
+      .select('id, activo, estado')
+      .eq('id', id)
+      .single();
+    
+    if (findError || !empleado) {
+      return NextResponse.json({ error: 'Empleado no encontrado' }, { status: 404 });
+    }
+    
+    // Soft delete - solo cambiar estado y activo
+    const { data, error } = await supabase
       .from('empleados')
       .update({
         activo: false,
         estado: 'despedido',
-        fecha_termino: new Date().toISOString(),
+        fecha_termino: new Date().toISOString().split('T')[0],
         updated_at: new Date().toISOString(),
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error en soft delete:', error);
+      throw error;
+    }
     
-    return NextResponse.json({ success: true, message: 'Empleado desactivado' });
+    console.log('✅ Empleado desactivado:', data);
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Empleado desactivado correctamente',
+      data: data 
+    });
   } catch (error: any) {
-    console.error('Error en DELETE /api/rrhh/empleados/[id]:', error);
+    console.error('❌ Error en DELETE /api/rrhh/empleados/[id]:', error);
     return NextResponse.json(
       { error: error.message || 'Error al eliminar empleado' },
       { status: 500 }

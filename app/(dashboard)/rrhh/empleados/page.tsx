@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRrhh } from '@/app/hooks/useRrhh';
-import { Plus, Loader2, Eye, Edit3, Trash2, Users } from 'lucide-react';
+import { Plus, Loader2, Eye, Edit3, Trash2, Users, X } from 'lucide-react';
 import FiltrosEmpleados from '@/app/components/rrhh/FiltrosEmpleados';
 import EmpleadoCard from '@/app/components/rrhh/EmpleadoCard';
 import PaginacionRRHH from '@/app/components/rrhh/PaginacionRRHH';
@@ -14,13 +14,21 @@ type VistaType = 'grid' | 'lista';
 export default function EmpleadosPage() {
   const { empleados, loading, pagination, filtros, setFiltros, areasDisponibles, cambiarPagina, eliminarEmpleado } = useRrhh();
   const [vista, setVista] = useState<VistaType>('grid');
-  const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null);
+  const [empleadoAEliminar, setEmpleadoAEliminar] = useState<any>(null);
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<any>(null);
+  const [eliminando, setEliminando] = useState(false);
 
-  const handleEliminar = async (id: string) => {
-    const result = await eliminarEmpleado(id);
+  const handleEliminar = async () => {
+    if (!empleadoAEliminar) return;
+    
+    setEliminando(true);
+    const result = await eliminarEmpleado(empleadoAEliminar.id);
+    setEliminando(false);
+    
     if (result.success) {
-      setConfirmarEliminar(null);
+      setEmpleadoAEliminar(null);
+    } else {
+      alert(result.error || 'Error al eliminar el empleado');
     }
   };
 
@@ -109,7 +117,7 @@ export default function EmpleadosPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white font-bold">
-                          {emp.nombre_completo.charAt(0).toUpperCase()}
+                          {emp.nombre_completo?.charAt(0).toUpperCase() || '?'}
                         </div>
                         <div>
                           <p className="font-bold text-slate-800 text-sm">{emp.nombre_completo}</p>
@@ -146,21 +154,14 @@ export default function EmpleadosPage() {
                         <Link href={`/rrhh/empleados/${emp.id}/editar`} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
                           <Edit3 size={16} />
                         </Link>
-                        <button onClick={() => setConfirmarEliminar(emp.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar">
+                        <button 
+                          onClick={() => setEmpleadoAEliminar(emp)} 
+                          className="p-2 text-slate-400 hover:text-red-600 transition-colors" 
+                          title="Eliminar"
+                        >
                           <Trash2 size={16} />
                         </button>
                       </div>
-
-                      {/* Modal de confirmación */}
-                      {confirmarEliminar === emp.id && (
-                        <div className="absolute right-0 mt-2 bg-white rounded-xl shadow-lg border border-slate-200 p-4 z-10">
-                          <p className="text-sm text-slate-700 mb-3">¿Eliminar este empleado?</p>
-                          <div className="flex gap-2 justify-end">
-                            <button onClick={() => setConfirmarEliminar(null)} className="px-3 py-1.5 text-xs font-bold text-slate-500">Cancelar</button>
-                            <button onClick={() => handleEliminar(emp.id)} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold">Eliminar</button>
-                          </div>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -171,7 +172,7 @@ export default function EmpleadosPage() {
       )}
 
       {/* Paginación */}
-      {pagination.total > 0 && (
+      {pagination.total > 0 && pagination.last_page > 1 && (
         <PaginacionRRHH
           currentPage={pagination.current_page}
           totalPages={pagination.last_page}
@@ -187,6 +188,52 @@ export default function EmpleadosPage() {
           empleado={empleadoSeleccionado}
           onClose={() => setEmpleadoSeleccionado(null)}
         />
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {empleadoAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-800">Confirmar eliminación</h3>
+                <button onClick={() => setEmpleadoAEliminar(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={28} className="text-red-600" />
+              </div>
+              <p className="text-slate-700 mb-2">
+                ¿Estás seguro de que deseas eliminar a <strong>{empleadoAEliminar.nombre_completo}</strong>?
+              </p>
+              <p className="text-xs text-slate-400">
+                Esta acción desactivará al empleado. No se perderán sus registros históricos.
+              </p>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setEmpleadoAEliminar(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEliminar}
+                disabled={eliminando}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {eliminando && <Loader2 size={14} className="animate-spin" />}
+                <Trash2 size={14} />
+                {eliminando ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

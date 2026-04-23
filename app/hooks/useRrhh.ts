@@ -66,42 +66,40 @@ export function useRrhh() {
   });
   const [areasDisponibles, setAreasDisponibles] = useState<string[]>([]);
 
-  // hooks/useRrhh.ts - Actualiza la función cargarEmpleados
-const cargarEmpleados = useCallback(async (page: number = 1) => {
-  setLoading(true);
-  setError(null);
-  
-  try {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: pagination.per_page.toString(),
-      ...(filtros.search && { search: filtros.search }),
-      ...(filtros.estado && { estado: filtros.estado }),
-      ...(filtros.area && { area: filtros.area }),
-    });
+  const cargarEmpleados = useCallback(async (page: number = 1) => {
+    setLoading(true);
+    setError(null);
     
-    const response = await fetch(`/api/rrhh/empleados?${params}`);
-    const result = await response.json();
-    
-    if (!response.ok) throw new Error(result.error);
-    
-    // ✅ Mapear los datos sin el campo jefe_directo que daba error
-    const empleadosConFormato = (result.data || []).map((emp: any) => ({
-      ...emp,
-      jefe_directo: null, // Temporal hasta que tengamos la relación
-    }));
-    
-    setEmpleados(empleadosConFormato);
-    setPagination(result.pagination);
-    if (result.filters?.areas) {
-      setAreasDisponibles(result.filters.areas);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.per_page.toString(),
+        ...(filtros.search && { search: filtros.search }),
+        ...(filtros.estado && { estado: filtros.estado }),
+        ...(filtros.area && { area: filtros.area }),
+      });
+      
+      const response = await fetch(`/api/rrhh/empleados?${params}`);
+      const result = await response.json();
+      
+      if (!response.ok) throw new Error(result.error);
+      
+      const empleadosConFormato = (result.data || []).map((emp: any) => ({
+        ...emp,
+        jefe_directo: null,
+      }));
+      
+      setEmpleados(empleadosConFormato);
+      setPagination(result.pagination);
+      if (result.filters?.areas) {
+        setAreasDisponibles(result.filters.areas);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  } catch (err: any) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-}, [filtros, pagination.per_page]);
+  }, [filtros, pagination.per_page]);
 
   const cargarEstadisticas = useCallback(async () => {
     try {
@@ -173,13 +171,16 @@ const cargarEmpleados = useCallback(async (page: number = 1) => {
       
       const result = await response.json();
       
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al eliminar empleado');
+      }
       
       await cargarEmpleados(pagination.current_page);
       await cargarEstadisticas();
       
-      return { success: true };
+      return { success: true, message: result.message };
     } catch (err: any) {
+      console.error('Error eliminando empleado:', err);
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
