@@ -2,7 +2,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-// Definimos el tipo directamente aquí para evitar problemas de importación
 export interface ObumaProveedor {
   proveedor_id?: string;
   proveedor_rut: string;
@@ -38,13 +37,18 @@ export function useObumaProveedores() {
     setError(null);
     
     try {
+      console.log('📢 Cargando proveedores desde API...');
       const response = await fetch('/api/obuma/proveedores');
       
+      console.log('📢 Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('📢 Datos recibidos:', data);
       
       // La API de Obuma devuelve un objeto con una propiedad 'data'
       let listaProveedores: ObumaProveedor[] = [];
@@ -60,7 +64,6 @@ export function useObumaProveedores() {
       
       setProveedores(listaProveedores);
       
-      // Calcular estadísticas
       setEstadisticas({
         total: listaProveedores.length,
         conContacto: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_contacto).length,
@@ -68,7 +71,7 @@ export function useObumaProveedores() {
         conTelefono: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_telefono || p.proveedor_celular).length,
       });
     } catch (err: any) {
-      console.error('Error cargando proveedores Obuma:', err);
+      console.error('❌ Error cargando proveedores Obuma:', err);
       setError(err.message || 'Error al cargar los proveedores');
     } finally {
       setLoading(false);
@@ -97,22 +100,6 @@ export function useObumaProveedores() {
       return { success: false, error: err.message };
     } finally {
       setLoading(false);
-    }
-  };
-
-  const obtenerProveedorPorId = async (id: string) => {
-    try {
-      const response = await fetch(`/api/obuma/proveedores/${id}`);
-      
-      if (!response.ok) {
-        throw new Error('Error al obtener el proveedor');
-      }
-      
-      const data = await response.json();
-      return { success: true, data };
-    } catch (err: any) {
-      console.error('Error obteniendo proveedor:', err);
-      return { success: false, error: err.message };
     }
   };
 
@@ -152,7 +139,6 @@ export function useObumaProveedores() {
     estadisticas,
     cargarProveedores,
     crearProveedor,
-    obtenerProveedorPorId,
     actualizarProveedor,
   };
 }
