@@ -1,3 +1,4 @@
+// app/(dashboard)/layout.tsx
 "use client";
 import { supabase } from "@/lib/supabase";
 import {
@@ -17,8 +18,18 @@ import {
   Truck,
   TrendingUp,
   BarChart3,
-  Building2, // Agregado para Proveedores Obuma
-  Server    // Agregado para API Obuma
+  Building2,
+  Server,
+  Calendar,
+  FileCheck,
+  GraduationCap,
+  Star,
+  PieChart,
+  Bell,
+  UserCheck,
+  Clock,
+  FileSignature,
+  Download
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,6 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("Cargando...");
+  const [userRol, setUserRol] = useState<string | null>(null);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -41,12 +53,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         const { data: perfil } = await supabase
           .from('perfiles')
-          .select('nombre')
+          .select('nombre, rol')
           .eq('user_id', session.user.id)
           .single();
 
         if (perfil && perfil.nombre) {
           setUserName(perfil.nombre);
+          setUserRol(perfil.rol);
         } else {
           setUserName(session.user.email?.split('@')[0] || "Usuario");
         }
@@ -61,10 +74,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = "/login";
   };
 
+  // Verificar si el usuario puede ver RRHH (admin, superuser, rrhh)
+  const puedeVerRRHH = userRol === 'admin' || userRol === 'superuser' || userRol === 'rrhh';
+
   const sections = [
     {
       title: "Menu",
-      items: [{ name: "Inicio", icon: LayoutDashboard, path: "/" }]
+      items: [
+        { name: "Inicio", icon: LayoutDashboard, path: "/" }
+      ]
+    },
+    {
+      title: "Recursos Humanos",
+      icon: Users,
+      items: [
+        { name: "Dashboard RRHH", icon: PieChart, path: "/rrhh" },
+        { name: "Empleados", icon: Users, path: "/rrhh/empleados" },
+        { name: "Asistencias", icon: Calendar, path: "/rrhh/asistencias" },
+        { name: "Permisos", icon: FileCheck, path: "/rrhh/permisos" },
+        { name: "Contratos", icon: FileSignature, path: "/rrhh/contratos" },
+        { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
+        { name: "Evaluaciones", icon: Star, path: "/rrhh/evaluaciones" },
+        { name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
+      ]
     },
     {
       title: "Comunicación y Flujo",
@@ -74,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     },
     {
-      title: "Analisis de productos",
+      title: "Análisis de productos",
       items: [
         { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
@@ -91,24 +123,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       title: "Logística",
       items: [
         { name: "Proveedores", icon: Truck, path: "/proveedores" },
-        
-      ]
-    },
-    {
-      title: "Recursos Humanos",
-      items: [
-        {
-          name: "Genera (RRHH)",
-          icon: Briefcase,
-          path: "https://portal360middleware.genera.cl/Account/Login?ReturnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dconsole%26scope%3Dopenid%2520email%2520console-api%26response_type%3Dcode%26acr_values%3Dtenant%253A93053F8F-8ACE-4ED3-881A-E348545F22B6%26redirect_uri%3Dhttps%253A%252F%252Fportal360comunicacion.genera.cl%252Fcallback%26state%3D6c3033c802788bfbb99af54c1e5b40d7154cf64e20201ca287043edc6589c297%26response_mode%3Dfragment",
-          external: true
-        }
       ]
     },
     {
       title: "OBUMA",
       items: [
-        { name: "Proveedores Obuma", icon: Building2, path: "/obuma-proveedores" }, // ← NUEVO
+        { name: "Proveedores Obuma", icon: Building2, path: "/obuma-proveedores" },
         { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
         { name: "Productos", icon: Database, path: "/obuma-productos" },
         { name: "Ordenes de Compras", icon: ShoppingBag, path: "/compras" },
@@ -117,7 +137,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "Integración API",
       items: [
-        { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true }, // Opcional: página de documentación de la API
+        { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
       ]
     },
     {
@@ -128,6 +148,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     }
   ];
+
+  // Agregar sección de Recursos Humanos solo si tiene permisos
+  const sectionsFiltradas = sections.filter(section => {
+    if (section.title === "Recursos Humanos" && !puedeVerRRHH) return false;
+    return true;
+  });
 
   return (
     <div className="flex min-h-screen bg-[#f8faff]">
@@ -147,14 +173,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* NAVEGACIÓN */}
         <nav className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-          {sections.map((section, idx) => (
+          {sectionsFiltradas.map((section, idx) => (
             <div key={idx} className="mb-6">
               <h3 className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                 {section.title}
               </h3>
               <div className="space-y-1">
                 {section.items.map((item) => {
-                  const isActive = pathname === item.path;
+                  const isActive = pathname === item.path || pathname?.startsWith(item.path + '/');
                   const commonClasses = `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
                       ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50'
                       : 'text-slate-600 hover:bg-slate-50'
@@ -203,6 +229,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {userName}
               </p>
               <p className="text-[9px] text-slate-400 truncate tracking-tight">{userEmail}</p>
+              {userRol && (
+                <p className="text-[8px] font-bold uppercase text-blue-500">{userRol}</p>
+              )}
             </div>
             <button
               onClick={handleLogout}
@@ -224,7 +253,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span>Sistema Central</span>
             <ChevronRight className="w-2.5 h-2.5 opacity-50" />
             <span className="text-slate-600">
-              {pathname === "/" ? "Inicio" : pathname.split('/').pop()?.replace("-", " ")}
+              {pathname === "/" ? "Inicio" : pathname.split('/').filter(Boolean).pop()?.replace(/-/g, " ")}
             </span>
           </div>
 
