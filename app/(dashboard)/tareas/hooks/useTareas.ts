@@ -42,27 +42,96 @@ export function useTareas() {
         setLoading(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return;
+            if (!session) {
+                console.log("No hay sesión activa");
+                setLoading(false);
+                return;
+            }
 
-            const { data: perfil } = await supabase
+            // Obtener perfil del usuario
+            const { data: perfil, error: perfilError } = await supabase
                 .from('perfiles')
                 .select('*')
                 .eq('user_id', session.user.id)
                 .single();
-            setPerfilUsuario(perfil);
+            
+            if (perfilError) {
+                console.error("Error obteniendo perfil:", perfilError);
+                // Crear perfil por defecto si no existe
+                if (perfilError.code === 'PGRST116') {
+                    console.log("Usuario sin perfil, creando perfil por defecto...");
+                    const nuevoPerfil = {
+                        user_id: session.user.id,
+                        email: session.user.email,
+                        nombre: session.user.email?.split('@')[0] || 'Usuario',
+                        apellido: '',
+                        rol: 'user',
+                        activo: true,
+                        permisos: {
+                            can_create_tasks: true,
+                            can_edit_all_tasks: false,
+                            can_delete_all_tasks: false,
+                            can_assign_tasks: true,
+                            can_manage_devices: false,
+                            can_create_products: false,
+                            can_view_billing: false
+                        }
+                    };
+                    
+                    const { data: newPerfil, error: insertError } = await supabase
+                        .from('perfiles')
+                        .insert([nuevoPerfil])
+                        .select()
+                        .single();
+                    
+                    if (!insertError && newPerfil) {
+                        setPerfilUsuario(newPerfil);
+                    } else {
+                        // Si no se puede crear, usar un perfil por defecto
+                        setPerfilUsuario({
+                            id: session.user.id,
+                            user_id: session.user.id,
+                            email: session.user.email,
+                            nombre: session.user.email?.split('@')[0] || 'Usuario',
+                            apellido: '',
+                            rol: 'user',
+                            activo: true,
+                            permisos: {
+                                can_create_tasks: true,
+                                can_edit_all_tasks: false,
+                                can_delete_all_tasks: false,
+                                can_assign_tasks: true
+                            }
+                        });
+                    }
+                } else {
+                    setPerfilUsuario(null);
+                }
+            } else {
+                setPerfilUsuario(perfil);
+            }
+            
+            console.log("Perfil usuario:", perfilUsuario || perfil);
 
+            // Consulta de tareas
             let query = supabase.from('tareas').select(`
-        *,
-        responsable:perfiles!tareas_asignado_a_fkey(id, nombre, apellido),
-        creador:perfiles!tareas_creado_por_fkey(id, nombre, apellido),
-        comentarios:comentarios_tareas(count)
-      `);
+                *,
+                responsable:perfiles!tareas_asignado_a_fkey(id, nombre, apellido),
+                creador:perfiles!tareas_creado_por_fkey(id, nombre, apellido),
+                comentarios:comentarios_tareas(count)
+            `);
 
-            if (perfil?.rol === 'user') {
-                query = query.or(`asignado_a.eq.${perfil.id},creado_por.eq.${perfil.id}`);
+            // Si el usuario no es admin, solo ver sus tareas asignadas o creadas por él
+            const usuarioActual = perfilUsuario || perfil;
+            if (usuarioActual?.rol === 'user') {
+                query = query.or(`asignado_a.eq.${usuarioActual.id},creado_por.eq.${usuarioActual.id}`);
             }
 
-            const { data: tareasData } = await query.order('created_at', { ascending: false });
+            const { data: tareasData, error: tareasError } = await query.order('created_at', { ascending: false });
+
+            if (tareasError) {
+                console.error("Error cargando tareas:", tareasError);
+            }
 
             if (tareasData) {
                 setTareas(tareasData);
@@ -82,31 +151,29 @@ export function useTareas() {
                     ? Math.round((completadas / tareasData.length) * 100)
                     : 0;
 
-                // En useTareas.ts, dentro de fetchTareas, asegura que estadisticas tenga:
                 setEstadisticas({
                     total: tareasData.length,
-                    completadas: tareasData.filter(t => t.estado === 'completada').length,
-                    en_proceso: tareasData.filter(t => t.estado === 'en_proceso').length,
-                    pendientes: tareasData.filter(t => t.estado === 'pendiente').length,
-                    atrasadas: tareasData.filter(t => {
-                        if (t.estado === 'completada') return false;
-                        if (!t.fecha_limite) return false;
-                        return new Date(t.fecha_limite) < new Date();
-                    }).length,
-                    progreso_general: tareasData.length > 0
-                        ? Math.round((tareasData.filter(t => t.estado === 'completada').length / tareasData.length) * 100)
-                        : 0
+                    completadas,
+                    en_proceso,
+                    pendientes,
+                    atrasadas,
+                    progreso_general: progresoGeneral
                 });
             }
 
-            const { data: users } = await supabase
+            // Obtener lista de usuarios activos
+            const { data: users, error: usersError } = await supabase
                 .from('perfiles')
                 .select('id, nombre, apellido')
                 .eq('activo', true);
+            
+            if (usersError) {
+                console.error("Error cargando usuarios:", usersError);
+            }
             if (users) setUsuarios(users);
 
         } catch (error) {
-            console.error("Error cargando tareas:", error);
+            console.error("Error en fetchTareas:", error);
         } finally {
             setLoading(false);
         }
