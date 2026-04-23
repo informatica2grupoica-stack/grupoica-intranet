@@ -14,15 +14,10 @@ interface FormularioTareaProps {
 export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSuccess, tareaEdit }: FormularioTareaProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // ✅ Verificar permisos para crear/editar
+
   const puedeCrear = perfilUsuario?.rol === 'admin' || 
                      perfilUsuario?.rol === 'superuser' || 
                      perfilUsuario?.permisos?.can_create_tasks === true;
-  
-  const puedeEditar = perfilUsuario?.rol === 'admin' || 
-                      perfilUsuario?.rol === 'superuser' || 
-                      perfilUsuario?.permisos?.can_edit_all_tasks === true;
 
   const [form, setForm] = useState({
     titulo: tareaEdit?.titulo || '',
@@ -32,19 +27,18 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
     proyecto: tareaEdit?.proyecto || '',
     fecha_inicio: tareaEdit?.fecha_inicio || '',
     fecha_limite: tareaEdit?.fecha_limite || '',
-    horas_estimadas: tareaEdit?.horas_estimadas || 0
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (tareaEdit && !puedeEditar) {
-      setError("No tienes permisos para editar esta tarea");
+    if (!puedeCrear && !tareaEdit) {
+      setError("No tienes permisos para crear tareas");
       return;
     }
     
-    if (!tareaEdit && !puedeCrear) {
-      setError("No tienes permisos para crear tareas");
+    if (!perfilUsuario?.id) {
+      setError("No se pudo identificar al usuario. Recarga la página.");
       return;
     }
     
@@ -62,50 +56,40 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
     setError(null);
 
     try {
-      if (tareaEdit) {
-        const { error } = await supabase
-          .from('tareas')
-          .update({
-            titulo: form.titulo,
-            descripcion: form.descripcion,
-            prioridad: form.prioridad,
-            asignado_a: form.asignado_a,
-            proyecto: form.proyecto,
-            fecha_inicio: form.fecha_inicio || null,
-            fecha_limite: form.fecha_limite || null,
-            horas_estimadas: form.horas_estimadas
-          })
-          .eq('id', tareaEdit.id);
-        
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('tareas')
-          .insert([{
-            titulo: form.titulo,
-            descripcion: form.descripcion,
-            prioridad: form.prioridad,
-            estado: 'pendiente',
-            asignado_a: form.asignado_a,
-            creado_por: perfilUsuario.id,
-            proyecto: form.proyecto,
-            fecha_inicio: form.fecha_inicio || null,
-            fecha_limite: form.fecha_limite || null,
-            horas_estimadas: form.horas_estimadas
-          }]);
-        
-        if (error) throw error;
+      // SOLO columnas que existen en la tabla tareas
+      const tareaData: any = {
+        titulo: form.titulo,
+        descripcion: form.descripcion || null,
+        prioridad: form.prioridad,
+        estado: 'pendiente',
+        asignado_a: form.asignado_a,
+        creado_por: perfilUsuario.id,
+        proyecto: form.proyecto || null,
+      };
+      
+      if (form.fecha_inicio) tareaData.fecha_inicio = form.fecha_inicio;
+      if (form.fecha_limite) tareaData.fecha_limite = form.fecha_limite;
+      
+      console.log("Enviando tarea:", tareaData);
+      
+      const { error } = await supabase
+        .from('tareas')
+        .insert([tareaData]);
+      
+      if (error) {
+        console.error("Error Supabase:", error);
+        throw error;
       }
       
       onSuccess();
     } catch (err: any) {
+      console.error("Error:", err);
       setError(err.message || "Error al guardar la tarea");
     } finally {
       setLoading(false);
     }
   };
 
-  // Si no tiene permisos, mostrar mensaje
   if (!puedeCrear && !tareaEdit) {
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
@@ -115,12 +99,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           </div>
           <h3 className="text-lg font-bold text-slate-800">Sin Permisos</h3>
           <p className="text-sm text-slate-500 mt-2">No tienes permisos para crear tareas</p>
-          <button
-            onClick={onClose}
-            className="mt-6 px-6 py-2 bg-slate-200 rounded-xl text-sm font-bold"
-          >
-            Cerrar
-          </button>
+          <button onClick={onClose} className="mt-6 px-6 py-2 bg-slate-200 rounded-xl text-sm font-bold">Cerrar</button>
         </div>
       </div>
     );
@@ -136,13 +115,10 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
               {tareaEdit ? '✏️ Editar Tarea' : '➕ Nueva Tarea'}
             </h2>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-              {tareaEdit ? 'Modifica los campos necesarios' : 'Completa el formulario para asignar'}
+              {tareaEdit ? 'Modifica los campos necesarios' : 'Completa el formulario'}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"
-          >
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all">
             <X size={20} />
           </button>
         </div>
@@ -157,12 +133,10 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           )}
 
           <div>
-            <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-              Título de la tarea *
-            </label>
+            <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Título de la tarea *</label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500"
               placeholder="Ej: Revisar documentación del proyecto"
               value={form.titulo}
               onChange={(e) => setForm({...form, titulo: e.target.value})}
@@ -171,11 +145,9 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           </div>
 
           <div>
-            <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-              Descripción
-            </label>
+            <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Descripción</label>
             <textarea
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all resize-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 resize-none"
               placeholder="Detalla las actividades a realizar..."
               rows={3}
               value={form.descripcion}
@@ -185,11 +157,9 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Prioridad
-              </label>
+              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Prioridad</label>
               <select
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none"
                 value={form.prioridad}
                 onChange={(e) => setForm({...form, prioridad: e.target.value})}
               >
@@ -200,36 +170,30 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Responsable *
-              </label>
+              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Responsable *</label>
               <div className="relative">
                 <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <select
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none"
                   value={form.asignado_a}
                   onChange={(e) => setForm({...form, asignado_a: e.target.value})}
                   required
                 >
                   <option value="">Seleccionar responsable...</option>
                   {usuarios.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombre} {u.apellido}
-                    </option>
+                    <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
                   ))}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Proyecto
-              </label>
+              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Proyecto</label>
               <div className="relative">
                 <Briefcase size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none"
                   placeholder="Nombre del proyecto"
                   value={form.proyecto}
                   onChange={(e) => setForm({...form, proyecto: e.target.value})}
@@ -238,29 +202,12 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Horas estimadas
-              </label>
-              <input
-                type="number"
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
-                placeholder="Ej: 8"
-                min="0"
-                step="0.5"
-                value={form.horas_estimadas}
-                onChange={(e) => setForm({...form, horas_estimadas: parseFloat(e.target.value) || 0})}
-              />
-            </div>
-
-            <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Fecha inicio
-              </label>
+              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Fecha inicio</label>
               <div className="relative">
                 <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="date"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none"
                   value={form.fecha_inicio}
                   onChange={(e) => setForm({...form, fecha_inicio: e.target.value})}
                 />
@@ -268,14 +215,12 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             </div>
 
             <div>
-              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">
-                Fecha límite
-              </label>
+              <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Fecha límite</label>
               <div className="relative">
                 <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="date"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-sm font-bold outline-none"
                   value={form.fecha_limite}
                   onChange={(e) => setForm({...form, fecha_limite: e.target.value})}
                 />
@@ -284,17 +229,13 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-100 transition-all"
-            >
+            <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-100">
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 disabled:opacity-50"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               {tareaEdit ? 'Actualizar Tarea' : 'Crear Tarea'}

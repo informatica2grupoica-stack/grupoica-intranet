@@ -50,9 +50,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
   };
 
   const puedeActualizarEstado = (tarea: any) => {
-    // El admin puede siempre
     if (esAdmin) return true;
-    // El asignado puede cambiar estado
     if (String(perfilUsuario?.id) === String(tarea.asignado_a)) return true;
     return false;
   };
@@ -126,25 +124,26 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
       proyecto: tarea.proyecto || "",
       fecha_inicio: tarea.fecha_inicio || "",
       fecha_limite: tarea.fecha_limite || "",
-      horas_estimadas: tarea.horas_estimadas || 0
     });
   };
 
   const guardarEdicion = async () => {
     setLoadingEdit(true);
     try {
+      const updateData: any = {
+        titulo: formEdit.titulo,
+        descripcion: formEdit.descripcion,
+        prioridad: formEdit.prioridad,
+        asignado_a: formEdit.asignado_a,
+        proyecto: formEdit.proyecto,
+      };
+      
+      if (formEdit.fecha_inicio) updateData.fecha_inicio = formEdit.fecha_inicio;
+      if (formEdit.fecha_limite) updateData.fecha_limite = formEdit.fecha_limite;
+      
       const { error } = await supabase
         .from('tareas')
-        .update({
-          titulo: formEdit.titulo,
-          descripcion: formEdit.descripcion,
-          prioridad: formEdit.prioridad,
-          asignado_a: formEdit.asignado_a,
-          proyecto: formEdit.proyecto,
-          fecha_inicio: formEdit.fecha_inicio || null,
-          fecha_limite: formEdit.fecha_limite || null,
-          horas_estimadas: formEdit.horas_estimadas
-        })
+        .update(updateData)
         .eq('id', editandoTarea);
 
       if (error) throw error;
@@ -184,7 +183,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Cronograma</th>
               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Estado</th>
               <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-            </tr>
+             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {tareas.map((t) => {
@@ -212,7 +211,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                           placeholder="Descripción"
                           rows={2}
                         />
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           <select
                             className="p-2 border rounded-lg text-xs"
                             value={formEdit.prioridad}
@@ -244,13 +243,6 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                             value={formEdit.fecha_limite}
                             onChange={(e) => setFormEdit({...formEdit, fecha_limite: e.target.value})}
                           />
-                          <input
-                            type="number"
-                            className="p-2 border rounded-lg text-xs"
-                            placeholder="Horas estimadas"
-                            value={formEdit.horas_estimadas}
-                            onChange={(e) => setFormEdit({...formEdit, horas_estimadas: parseInt(e.target.value) || 0})}
-                          />
                         </div>
                         <div className="flex justify-end gap-2">
                           <button
@@ -269,8 +261,8 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                           </button>
                         </div>
                       </div>
-                    </td>
-                  </tr>
+                     </td>
+                   </tr>
                 );
               }
 
@@ -288,7 +280,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                     {t.descripcion && (
                       <p className="text-[9px] text-slate-400 mt-1 line-clamp-1">{t.descripcion}</p>
                     )}
-                  </td>
+                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white text-[10px] font-black shadow-inner flex-shrink-0">
@@ -301,12 +293,12 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         <span className="text-[9px] font-bold text-slate-400 uppercase">Operativo</span>
                       </div>
                     </div>
-                  </td>
+                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-[9px] font-black uppercase border ${prioridad.css}`}>
                       {prioridad.label}
                     </span>
-                  </td>
+                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg w-fit">
@@ -318,12 +310,12 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         <Clock size={10} /> {formatFecha(t.fecha_limite)}
                       </div>
                     </div>
-                  </td>
+                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${status.css}`}>
                       {status.label}
                     </span>
-                  </td>
+                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
@@ -395,8 +387,8 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                         </div>
                       </div>
                     )}
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               );
             })}
           </tbody>
