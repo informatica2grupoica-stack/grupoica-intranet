@@ -16,7 +16,9 @@ import {
   CheckSquare,
   Truck,
   TrendingUp,
-  BarChart3  // Agregado para el Dashboard
+  BarChart3,
+  Building2, // Agregado para Proveedores Obuma
+  Server    // Agregado para API Obuma
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -74,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "Analisis de productos",
       items: [
-        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },  // ← NUEVO DASHBOARD
+        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
         { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" }
       ]
@@ -87,7 +89,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     {
       title: "Logística",
-      items: [{ name: "Proveedores", icon: Truck, path: "/proveedores" }]
+      items: [
+        { name: "Proveedores", icon: Truck, path: "/proveedores" },
+        
+      ]
     },
     {
       title: "Recursos Humanos",
@@ -103,9 +108,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "OBUMA",
       items: [
+        { name: "Proveedores Obuma", icon: Building2, path: "/obuma-proveedores" }, // ← NUEVO
         { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
         { name: "Productos", icon: Database, path: "/obuma-productos" },
         { name: "Ordenes de Compras", icon: ShoppingBag, path: "/compras" },
+      ]
+    },
+    {
+      title: "Integración API",
+      items: [
+        { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true }, // Opcional: página de documentación de la API
       ]
     },
     {
