@@ -7,6 +7,7 @@ import { Plus, Loader2, Eye, Edit3, Trash2, Users } from 'lucide-react';
 import FiltrosEmpleados from '@/app/components/rrhh/FiltrosEmpleados';
 import EmpleadoCard from '@/app/components/rrhh/EmpleadoCard';
 import PaginacionRRHH from '@/app/components/rrhh/PaginacionRRHH';
+import ModalDetalleEmpleado from '@/app/components/rrhh/ModalDetalleEmpleado';
 
 type VistaType = 'grid' | 'lista';
 
@@ -14,6 +15,7 @@ export default function EmpleadosPage() {
   const { empleados, loading, pagination, filtros, setFiltros, areasDisponibles, cambiarPagina, eliminarEmpleado } = useRrhh();
   const [vista, setVista] = useState<VistaType>('grid');
   const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null);
+  const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<any>(null);
 
   const handleEliminar = async (id: string) => {
     const result = await eliminarEmpleado(id);
@@ -134,9 +136,13 @@ export default function EmpleadosPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <Link href={`/rrhh/empleados/${emp.id}`} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Ver">
+                        <button 
+                          onClick={() => setEmpleadoSeleccionado(emp)} 
+                          className="p-2 text-slate-400 hover:text-blue-600 transition-colors" 
+                          title="Ver"
+                        >
                           <Eye size={16} />
-                        </Link>
+                        </button>
                         <Link href={`/rrhh/empleados/${emp.id}/editar`} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
                           <Edit3 size={16} />
                         </Link>
@@ -172,6 +178,14 @@ export default function EmpleadosPage() {
           onPageChange={cambiarPagina}
           totalItems={pagination.total}
           itemsPerPage={pagination.per_page}
+        />
+      )}
+
+      {/* Modal de detalles */}
+      {empleadoSeleccionado && (
+        <ModalDetalleEmpleado
+          empleado={empleadoSeleccionado}
+          onClose={() => setEmpleadoSeleccionado(null)}
         />
       )}
     </div>
