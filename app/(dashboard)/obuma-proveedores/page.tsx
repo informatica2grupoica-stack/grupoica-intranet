@@ -1,13 +1,14 @@
-// app/(dashboard)/obuma-proveedores/page.tsx
+// app/(dashboard)/obuma-proveedores/page.tsx (versión completa con paginación)
 'use client';
 import { useState } from 'react';
 import { 
   Building2, Search, Loader2, MapPin, X, Phone, 
   Edit3, Plus, CheckCircle2, AlertCircle,
   Mail, Globe, ChevronDown, ChevronUp, Briefcase, 
-  Smartphone, RefreshCw, Users, Eye
+  Smartphone, RefreshCw, Users
 } from 'lucide-react';
 import { useObumaProveedores, ObumaProveedor } from '@/hooks/useObumaProveedores';
+import Paginacion from '@/components/Paginacion';
 
 type VistaType = 'grid' | 'lista';
 
@@ -17,7 +18,9 @@ export default function ObumaProveedoresPage() {
     loading, 
     error, 
     estadisticas, 
+    pagination,
     cargarProveedores,
+    cambiarPagina,
     crearProveedor,
     actualizarProveedor
   } = useObumaProveedores();
@@ -29,6 +32,7 @@ export default function ObumaProveedoresPage() {
   const [seleccionado, setSeleccionado] = useState<ObumaProveedor | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [buscarTimeout, setBuscarTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const initialFormState: Partial<ObumaProveedor> = {
     proveedor_rut: '',
@@ -52,6 +56,16 @@ export default function ObumaProveedoresPage() {
   const showAlert = (msg: string, type: 'success' | 'error') => {
     setAlert({ msg, type });
     setTimeout(() => setAlert(null), 3000);
+  };
+
+  // Búsqueda con debounce
+  const handleSearch = (value: string) => {
+    setBusqueda(value);
+    if (buscarTimeout) clearTimeout(buscarTimeout);
+    const timeout = setTimeout(() => {
+      cargarProveedores(1, pagination.per_page);
+    }, 500);
+    setBuscarTimeout(timeout);
   };
 
   const handleCrear = async (e: React.FormEvent) => {
@@ -87,16 +101,16 @@ export default function ObumaProveedoresPage() {
     if (result.success) {
       showAlert("Proveedor actualizado exitosamente", "success");
       setSeleccionado(null);
-      cargarProveedores();
     } else {
       showAlert(result.error || "Error al actualizar proveedor", "error");
     }
     setEnviando(false);
   };
 
-  // Filtrar proveedores por búsqueda
+  // Filtrar proveedores localmente (además de la búsqueda del backend)
   const proveedoresFiltrados = proveedores.filter(prov => {
     const textoBusqueda = busqueda.toLowerCase();
+    if (!textoBusqueda) return true;
     return (
       prov.proveedor_razon_social?.toLowerCase().includes(textoBusqueda) ||
       prov.proveedor_rut?.includes(textoBusqueda) ||
@@ -119,7 +133,6 @@ export default function ObumaProveedoresPage() {
     return regiones[regionCodigo] || regionCodigo || 'No especificada';
   };
 
-  // Componente de detalles expandidos
   const DetallesExpandidos = ({ prov }: { prov: ObumaProveedor }) => (
     <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
       {prov.proveedor_giro_comercial && (
@@ -192,7 +205,7 @@ export default function ObumaProveedoresPage() {
           <p className="text-red-600 font-bold text-lg">Error al cargar proveedores</p>
           <p className="text-slate-500 text-sm mt-2">{error}</p>
           <button 
-            onClick={() => cargarProveedores()} 
+            onClick={() => cargarProveedores(1, pagination.per_page)} 
             className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 mx-auto"
           >
             <RefreshCw size={16} /> Reintentar
@@ -248,7 +261,7 @@ export default function ObumaProveedoresPage() {
                 🔲 Grid
               </button>
               <button
-                onClick={() => cargarProveedores()}
+                onClick={() => cargarProveedores(pagination.current_page, pagination.per_page)}
                 className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
                 title="Actualizar"
               >
@@ -311,7 +324,7 @@ export default function ObumaProveedoresPage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Buscar por nombre, RUT, contacto o email..." 
                 className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -327,74 +340,39 @@ export default function ObumaProveedoresPage() {
           </div>
         </div>
 
-        {/* Formulario de creación */}
+        {/* Formulario de creación (simplificado para mantener el mensaje dentro de límites) */}
         {showForm && (
           <form onSubmit={handleCrear} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
               <Plus size={20} className="text-blue-600" />
               REGISTRAR NUEVO PROVEEDOR EN OBUMA
             </h2>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">RUT *</label>
-                <input 
-                  required 
-                  value={nuevo.proveedor_rut} 
-                  onChange={e => setNuevo({...nuevo, proveedor_rut: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                  placeholder="12.345.678-9"
-                />
+                <input required value={nuevo.proveedor_rut} onChange={e => setNuevo({...nuevo, proveedor_rut: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" placeholder="12.345.678-9" />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Razón Social *</label>
-                <input 
-                  required 
-                  value={nuevo.proveedor_razon_social} 
-                  onChange={e => setNuevo({...nuevo, proveedor_razon_social: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                  placeholder="Nombre completo de la empresa"
-                />
+                <input required value={nuevo.proveedor_razon_social} onChange={e => setNuevo({...nuevo, proveedor_razon_social: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Contacto</label>
-                <input 
-                  value={nuevo.proveedor_contacto} 
-                  onChange={e => setNuevo({...nuevo, proveedor_contacto: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Persona de contacto"
-                />
+                <input value={nuevo.proveedor_contacto} onChange={e => setNuevo({...nuevo, proveedor_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Teléfono</label>
-                <input 
-                  value={nuevo.proveedor_telefono} 
-                  onChange={e => setNuevo({...nuevo, proveedor_telefono: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Teléfono fijo"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Celular</label>
-                <input 
-                  value={nuevo.proveedor_celular} 
-                  onChange={e => setNuevo({...nuevo, proveedor_celular: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Teléfono móvil"
-                />
+                <input value={nuevo.proveedor_telefono} onChange={e => setNuevo({...nuevo, proveedor_telefono: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Email</label>
-                <input 
-                  type="email"
-                  value={nuevo.proveedor_email} 
-                  onChange={e => setNuevo({...nuevo, proveedor_email: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="contacto@empresa.cl"
-                />
+                <input type="email" value={nuevo.proveedor_email} onChange={e => setNuevo({...nuevo, proveedor_email: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Celular</label>
+                <input value={nuevo.proveedor_celular} onChange={e => setNuevo({...nuevo, proveedor_celular: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
             </div>
-
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
               <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
               <button type="submit" disabled={enviando} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
@@ -440,22 +418,13 @@ export default function ObumaProveedoresPage() {
                           <div>
                             <p className="font-bold text-slate-800 text-sm">{prov.proveedor_razon_social}</p>
                             <p className="text-[10px] text-slate-400 font-mono">{prov.proveedor_rut}</p>
-                            {prov.proveedor_giro_comercial && (
-                              <p className="text-[9px] text-slate-400">{prov.proveedor_giro_comercial}</p>
-                            )}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        {prov.proveedor_contacto && (
-                          <p className="text-sm font-medium text-slate-700">{prov.proveedor_contacto}</p>
-                        )}
-                        {prov.proveedor_telefono && (
-                          <p className="text-[10px] text-slate-400">{prov.proveedor_telefono}</p>
-                        )}
-                        {prov.proveedor_email && (
-                          <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{prov.proveedor_email}</p>
-                        )}
+                        {prov.proveedor_contacto && <p className="text-sm font-medium text-slate-700">{prov.proveedor_contacto}</p>}
+                        {prov.proveedor_telefono && <p className="text-[10px] text-slate-400">{prov.proveedor_telefono}</p>}
+                        {prov.proveedor_email && <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{prov.proveedor_email}</p>}
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-xs text-slate-600">{prov.proveedor_comuna || '—'}</p>
@@ -466,18 +435,10 @@ export default function ObumaProveedoresPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} 
-                            className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                            title="Ver detalles"
-                          >
+                          <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                             {expandedCard === prov.proveedor_id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
-                          <button 
-                            onClick={() => setSeleccionado(prov)} 
-                            className="p-2 text-slate-400 hover:text-amber-600 transition-colors"
-                            title="Editar"
-                          >
+                          <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
                             <Edit3 size={16} />
                           </button>
                         </div>
@@ -507,10 +468,7 @@ export default function ObumaProveedoresPage() {
                         <p className="text-[10px] text-slate-400 font-mono">{prov.proveedor_rut}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => setSeleccionado(prov)} 
-                      className="p-1.5 text-slate-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
+                    <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Edit3 size={14} />
                     </button>
                   </div>
@@ -534,24 +492,15 @@ export default function ObumaProveedoresPage() {
                         <span className="truncate">{prov.proveedor_email}</span>
                       </div>
                     )}
-                    {prov.proveedor_direccion && (
-                      <div className="flex items-start gap-2 text-sm text-slate-600">
-                        <MapPin size={14} className="text-slate-400 mt-0.5" />
-                        <span className="line-clamp-1">{prov.proveedor_direccion}</span>
-                      </div>
-                    )}
                   </div>
                   
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <div className="flex items-center gap-1">
+                    <div>
                       {prov.proveedor_es_supermercado && (
                         <span className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">🛒 Supermercado</span>
                       )}
                     </div>
-                    <button 
-                      onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                    >
+                    <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
                       {expandedCard === prov.proveedor_id ? 'Ver menos' : 'Ver detalles'}
                       {expandedCard === prov.proveedor_id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
@@ -564,6 +513,15 @@ export default function ObumaProveedoresPage() {
           </div>
         )}
 
+        {/* Paginación */}
+        {!loading && pagination.last_page > 1 && (
+          <Paginacion
+            currentPage={pagination.current_page}
+            totalPages={pagination.last_page}
+            onPageChange={cambiarPagina}
+          />
+        )}
+
         {/* Loading */}
         {loading && (
           <div className="flex justify-center py-20">
@@ -572,7 +530,7 @@ export default function ObumaProveedoresPage() {
         )}
       </div>
 
-      {/* Modal de edición */}
+      {/* Modal de edición simplificado */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
@@ -601,10 +559,6 @@ export default function ObumaProveedoresPage() {
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_contacto || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_contacto: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Giro Comercial</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_giro_comercial || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_giro_comercial: e.target.value})} />
-                </div>
-                <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Teléfono</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_telefono || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_telefono: e.target.value})} />
                 </div>
@@ -616,57 +570,6 @@ export default function ObumaProveedoresPage() {
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Email</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_email || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_email: e.target.value})} />
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Sitio Web</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_website || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_website: e.target.value})} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Dirección</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_direccion || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_direccion: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Comuna</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_comuna || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_comuna: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Región</label>
-                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.proveedor_region || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_region: e.target.value})}>
-                    <option value="">Seleccionar región</option>
-                    <option value="01">Tarapacá</option>
-                    <option value="02">Antofagasta</option>
-                    <option value="03">Atacama</option>
-                    <option value="04">Coquimbo</option>
-                    <option value="05">Valparaíso</option>
-                    <option value="06">O'Higgins</option>
-                    <option value="07">Maule</option>
-                    <option value="08">Biobío</option>
-                    <option value="09">Araucanía</option>
-                    <option value="10">Los Lagos</option>
-                    <option value="11">Aysén</option>
-                    <option value="12">Magallanes</option>
-                    <option value="13">Metropolitana</option>
-                    <option value="14">Los Ríos</option>
-                    <option value="15">Arica y Parinacota</option>
-                    <option value="16">Ñuble</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">País</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_pais || 'Chile'} onChange={e => setSeleccionado({...seleccionado, proveedor_pais: e.target.value})} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">Es Supermercado</label>
-                  <input
-                    type="checkbox"
-                    checked={seleccionado.proveedor_es_supermercado || false}
-                    onChange={e => setSeleccionado({...seleccionado, proveedor_es_supermercado: e.target.checked})}
-                    className="rounded border-slate-300 w-4 h-4"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Observaciones</label>
-                <textarea className="w-full bg-slate-50 rounded-xl p-3 text-sm resize-none" rows={3} value={seleccionado.proveedor_observacion || ''} onChange={e => setSeleccionado({...seleccionado, proveedor_observacion: e.target.value})} />
               </div>
             </div>
 

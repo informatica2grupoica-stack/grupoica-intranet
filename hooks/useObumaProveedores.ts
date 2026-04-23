@@ -21,10 +21,23 @@ export interface ObumaProveedor {
   cuenta_contable?: string;
 }
 
+interface PaginationInfo {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
 export function useObumaProveedores() {
   const [proveedores, setProveedores] = useState<ObumaProveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    current_page: 1,
+    last_page: 1,
+    per_page: 20,
+    total: 0,
+  });
   const [estadisticas, setEstadisticas] = useState({
     total: 0,
     conContacto: 0,
@@ -32,44 +45,52 @@ export function useObumaProveedores() {
     conTelefono: 0,
   });
 
-  const cargarProveedores = useCallback(async () => {
+  const cargarProveedores = useCallback(async (page: number = 1, limit: number = 20) => {
     setLoading(true);
     setError(null);
     
     try {
-      console.log('📢 Cargando proveedores desde API...');
-      const response = await fetch('/api/obuma/proveedores');
-      
-      console.log('📢 Response status:', response.status);
+      const response = await fetch(`/api/obuma/proveedores?page=${page}&limit=${limit}`);
       
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Error ${response.status}`);
       }
       
-      const data = await response.json();
-      console.log('📢 Datos recibidos:', data);
+      const result = await response.json();
       
-      // La API de Obuma devuelve un objeto con una propiedad 'data'
       let listaProveedores: ObumaProveedor[] = [];
-      if (Array.isArray(data)) {
-        listaProveedores = data;
-      } else if (data.data && Array.isArray(data.data)) {
-        listaProveedores = data.data;
-      } else if (data.proveedores && Array.isArray(data.proveedores)) {
-        listaProveedores = data.proveedores;
+      if (Array.isArray(result.data)) {
+        listaProveedores = result.data;
+      } else if (Array.isArray(result.proveedores)) {
+        listaProveedores = result.proveedores;
+      } else if (Array.isArray(result)) {
+        listaProveedores = result;
       } else {
         listaProveedores = [];
       }
       
       setProveedores(listaProveedores);
       
-      setEstadisticas({
-        total: listaProveedores.length,
-        conContacto: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_contacto).length,
-        conEmail: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_email).length,
-        conTelefono: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_telefono || p.proveedor_celular).length,
+      // Actualizar paginación
+      setPagination({
+        current_page: result.pagination?.current_page || page,
+        last_page: result.pagination?.last_page || 1,
+        per_page: result.pagination?.per_page || limit,
+        total: result.pagination?.total || listaProveedores.length,
       });
+      
+      // Calcular estadísticas con todos los datos (si vienen del backend)
+      if (result.stats) {
+        setEstadisticas(result.stats);
+      } else {
+        setEstadisticas({
+          total: result.pagination?.total || listaProveedores.length,
+          conContacto: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_contacto).length,
+          conEmail: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_email).length,
+          conTelefono: listaProveedores.filter((p: ObumaProveedor) => p.proveedor_telefono || p.proveedor_celular).length,
+        });
+      }
     } catch (err: any) {
       console.error('❌ Error cargando proveedores Obuma:', err);
       setError(err.message || 'Error al cargar los proveedores');
@@ -77,6 +98,12 @@ export function useObumaProveedores() {
       setLoading(false);
     }
   }, []);
+
+  const cambiarPagina = (page: number) => {
+    if (page >= 1 && page <= pagination.last_page) {
+      cargarProveedores(page, pagination.per_page);
+    }
+  };
 
   const crearProveedor = async (datos: Partial<ObumaProveedor>) => {
     setLoading(true);
@@ -93,7 +120,7 @@ export function useObumaProveedores() {
         throw new Error(result.error || 'Error al crear proveedor');
       }
       
-      await cargarProveedores();
+      await cargarProveedores(1, pagination.per_page);
       return { success: true, data: result.data };
     } catch (err: any) {
       console.error('Error creando proveedor:', err);
@@ -118,7 +145,7 @@ export function useObumaProveedores() {
         throw new Error(result.error || 'Error al actualizar proveedor');
       }
       
-      await cargarProveedores();
+      await cargarProveedores(pagination.current_page, pagination.per_page);
       return { success: true, data: result.data };
     } catch (err: any) {
       console.error('Error actualizando proveedor:', err);
@@ -129,7 +156,7 @@ export function useObumaProveedores() {
   };
 
   useEffect(() => {
-    cargarProveedores();
+    cargarProveedores(1, 20);
   }, [cargarProveedores]);
 
   return {
@@ -137,7 +164,9 @@ export function useObumaProveedores() {
     loading,
     error,
     estadisticas,
+    pagination,
     cargarProveedores,
+    cambiarPagina,
     crearProveedor,
     actualizarProveedor,
   };

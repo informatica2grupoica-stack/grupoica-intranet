@@ -1,9 +1,14 @@
 // app/api/obuma/proveedores/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
-  const OBUMA_API_URL = process.env.OBUMA_API_URL;
-  const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
+const OBUMA_API_URL = process.env.OBUMA_API_URL;
+const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const page = searchParams.get('page') || '1';
+  const limit = searchParams.get('limit') || '20';
+  const search = searchParams.get('search') || '';
 
   if (!OBUMA_API_TOKEN) {
     console.error('❌ OBUMA_API_TOKEN no configurado');
@@ -14,14 +19,19 @@ export async function GET() {
   }
 
   try {
-    const url = `${OBUMA_API_URL}/proveedores.list.json`;
+    const url = new URL(`${OBUMA_API_URL}/proveedores.list.json`);
+    url.searchParams.append('page', page);
+    url.searchParams.append('limit', limit);
+    if (search) {
+      url.searchParams.append('search', search);
+    }
     
-    console.log('📡 Llamando a:', url);
+    console.log('📡 Llamando a:', url.toString());
     
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
-        'access-token': OBUMA_API_TOKEN,  // ← CLAVE: así se envía el token
+        'access-token': OBUMA_API_TOKEN,
         'Content-Type': 'application/json',
       },
     });
@@ -33,7 +43,7 @@ export async function GET() {
     try {
       data = JSON.parse(text);
     } catch (e) {
-      console.error('❌ Respuesta no es JSON:', text);
+      console.error('❌ Respuesta no es JSON:', text.substring(0, 200));
       return NextResponse.json(
         { error: `API respondió con: ${text.substring(0, 200)}` },
         { status: response.status }
@@ -44,8 +54,30 @@ export async function GET() {
       throw new Error(data.message || data.error || `Error ${response.status}`);
     }
 
+    // Extraer proveedores y paginación
+    const proveedores = data.data || data.proveedores || [];
+    const pagination = data.pagination || {
+      current_page: parseInt(page),
+      last_page: 1,
+      per_page: parseInt(limit),
+      total: proveedores.length
+    };
+
+    // Calcular estadísticas
+    const stats = {
+      total: pagination.total || proveedores.length,
+      conContacto: proveedores.filter((p: any) => p.proveedor_contacto).length,
+      conEmail: proveedores.filter((p: any) => p.proveedor_email).length,
+      conTelefono: proveedores.filter((p: any) => p.proveedor_telefono || p.proveedor_celular).length,
+    };
+
     console.log('✅ Proveedores obtenidos correctamente');
-    return NextResponse.json(data);
+    return NextResponse.json({
+      success: true,
+      data: proveedores,
+      pagination,
+      stats,
+    });
   } catch (error: any) {
     console.error('❌ Error en GET /api/obuma/proveedores:', error.message);
     return NextResponse.json(
