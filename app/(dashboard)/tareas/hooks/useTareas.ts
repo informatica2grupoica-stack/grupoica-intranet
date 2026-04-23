@@ -121,7 +121,7 @@ export function useTareas() {
             console.log("Perfil usuario cargado:", perfil?.nombre, "Rol:", perfil?.rol);
 
             // 🔥 CONSULTA CORREGIDA - Usando el nombre correcto de las foreign keys
-            let query = supabase
+            const { data: tareasData, error: tareasError } = await supabase
                 .from('tareas')
                 .select(`
                     id,
@@ -135,23 +135,18 @@ export function useTareas() {
                     fecha_inicio,
                     fecha_limite,
                     created_at,
-                    responsable:perfiles!tareas_asignado_a_fkey(
-                        id,
+                    responsable:asignado_a(
                         nombre,
-                        apellido
+                        apellido,
+                        id
                     ),
-                    creador:perfiles!tareas_creado_por_fkey(
-                        id,
+                    creador:creado_por(
                         nombre,
-                        apellido
+                        apellido,
+                        id
                     )
-                `);
-
-            if (perfil?.rol === 'user') {
-                query = query.or(`asignado_a.eq.${perfil.id},creado_por.eq.${perfil.id}`);
-            }
-
-            const { data: tareasData, error: tareasError } = await query.order('created_at', { ascending: false });
+                `)
+                .order('created_at', { ascending: false });
 
             if (tareasError) {
                 console.error("Error cargando tareas:", tareasError);
@@ -174,12 +169,8 @@ export function useTareas() {
                         fecha_inicio: tarea.fecha_inicio,
                         fecha_limite: tarea.fecha_limite,
                         created_at: tarea.created_at,
-                        responsable: tarea.responsable && tarea.responsable.length > 0 
-                            ? tarea.responsable[0] 
-                            : undefined,
-                        creador: tarea.creador && tarea.creador.length > 0 
-                            ? tarea.creador[0] 
-                            : undefined
+                        responsable: tarea.responsable || undefined,
+                        creador: tarea.creador || undefined
                     };
                 });
                 
