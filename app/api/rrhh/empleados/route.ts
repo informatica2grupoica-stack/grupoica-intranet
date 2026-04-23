@@ -7,6 +7,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// ✅ Función helper para limpiar UUIDs vacíos
+const limpiarUUID = (valor: string | null | undefined): string | null => {
+  if (!valor || valor === '' || valor === 'null') return null;
+  return valor;
+};
+
 // GET: Listar empleados con filtros
 export async function GET(request: NextRequest) {
   try {
@@ -20,54 +26,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('empleados')
       .select(`
-        id,
-        perfil_id,
-        rut,
-        nombre_completo,
-        apellido_paterno,
-        apellido_materno,
-        email_personal,
-        email_corporativo,
-        telefono,
-        telefono_emergencia,
-        fecha_nacimiento,
-        genero,
-        estado_civil,
-        nacionalidad,
-        numero_hijos,
-        direccion,
-        comuna,
-        ciudad,
-        region,
-        cargo,
-        area,
-        departamento,
-        jefe_directo_id,
-        fecha_ingreso,
-        fecha_termino,
-        tipo_contrato,
-        jornada,
-        sueldo_base,
-        banco,
-        cuenta_tipo,
-        cuenta_numero,
-        afp,
-        salud,
-        isapre_nombre,
-        mutual_seguridad,
-        cesantia,
-        dias_vacacion_anual,
-        dias_vacacion_disponibles,
-        dias_permiso_anual,
-        dias_permiso_disponibles,
-        estado,
-        activo,
-        contacto_emergencia_nombre,
-        contacto_emergencia_telefono,
-        contacto_emergencia_parentesco,
-        created_at,
-        updated_at,
-        created_by,
+        *,
         jefe_directo:empleados!empleados_jefe_directo_id_fkey(
           id,
           nombre_completo,
@@ -75,7 +34,6 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' });
     
-    // Aplicar filtros
     if (search) {
       query = query.or(`nombre_completo.ilike.%${search}%,rut.ilike.%${search}%,email_corporativo.ilike.%${search}%`);
     }
@@ -86,7 +44,6 @@ export async function GET(request: NextRequest) {
       query = query.eq('area', area);
     }
     
-    // Paginación
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     
@@ -96,7 +53,6 @@ export async function GET(request: NextRequest) {
     
     if (error) throw error;
     
-    // Obtener áreas únicas para filtros
     const { data: areas } = await supabase
       .from('empleados')
       .select('area')
@@ -132,6 +88,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    console.log('📥 Datos recibidos:', body);
+    
     // Validaciones básicas
     if (!body.rut) {
       return NextResponse.json({ error: 'El RUT es obligatorio' }, { status: 400 });
@@ -148,11 +106,15 @@ export async function POST(request: NextRequest) {
       .from('empleados')
       .select('id')
       .eq('rut', body.rut)
-      .single();
+      .maybeSingle();  // ✅ usar maybeSingle en lugar de single
     
     if (existente) {
       return NextResponse.json({ error: 'Ya existe un empleado con este RUT' }, { status: 400 });
     }
+    
+    // ✅ Limpiar campos UUID vacíos
+    const jefeDirectoId = limpiarUUID(body.jefe_directo_id);
+    const perfilId = limpiarUUID(body.perfil_id);
     
     // Calcular días de vacaciones disponibles según fecha de ingreso
     const fechaIngreso = new Date(body.fecha_ingreso);
@@ -161,26 +123,70 @@ export async function POST(request: NextRequest) {
     const mesIngreso = fechaIngreso.getMonth();
     const mesActual = hoy.getMonth();
     
-    // Ajustar si aún no ha cumplido el año
     if (mesActual < mesIngreso) {
       añosTrabajados--;
     }
     
-    // Calcular días de vacación: 1.25 días por mes trabajado, máximo 15
     const mesesTrabajados = añosTrabajados * 12 + (mesActual - mesIngreso);
     const diasVacacion = Math.min(15, Math.floor(mesesTrabajados * 1.25));
     
-    const nuevoEmpleado = {
-      ...body,
+    // ✅ Construir objeto solo con campos que no sean undefined/null vacíos
+    const nuevoEmpleado: any = {
+      rut: body.rut,
+      nombre_completo: body.nombre_completo,
+      apellido_paterno: body.apellido_paterno || null,
+      apellido_materno: body.apellido_materno || null,
+      email_personal: body.email_personal || null,
+      email_corporativo: body.email_corporativo || null,
+      telefono: body.telefono || null,
+      telefono_emergencia: body.telefono_emergencia || null,
+      fecha_nacimiento: body.fecha_nacimiento || null,
+      genero: body.genero || null,
+      estado_civil: body.estado_civil || null,
+      nacionalidad: body.nacionalidad || 'Chilena',
+      numero_hijos: body.numero_hijos || 0,
+      direccion: body.direccion || null,
+      comuna: body.comuna || null,
+      ciudad: body.ciudad || null,
+      region: body.region || null,
+      cargo: body.cargo || null,
+      area: body.area || null,
+      departamento: body.departamento || null,
+      jefe_directo_id: jefeDirectoId,
+      fecha_ingreso: body.fecha_ingreso,
+      fecha_termino: body.fecha_termino || null,
+      tipo_contrato: body.tipo_contrato || null,
+      jornada: body.jornada || null,
+      sueldo_base: body.sueldo_base ? parseInt(body.sueldo_base) : null,
+      banco: body.banco || null,
+      cuenta_tipo: body.cuenta_tipo || null,
+      cuenta_numero: body.cuenta_numero || null,
+      afp: body.afp || null,
+      salud: body.salud || null,
+      isapre_nombre: body.isapre_nombre || null,
+      mutual_seguridad: body.mutual_seguridad || null,
+      cesantia: body.cesantia === true || body.cesantia === 'true',
       dias_vacacion_anual: 15,
       dias_vacacion_disponibles: Math.max(0, diasVacacion),
       dias_permiso_anual: 12,
       dias_permiso_disponibles: 12,
       activo: true,
       estado: 'activo',
+      contacto_emergencia_nombre: body.contacto_emergencia_nombre || null,
+      contacto_emergencia_telefono: body.contacto_emergencia_telefono || null,
+      contacto_emergencia_parentesco: body.contacto_emergencia_parentesco || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    
+    // ✅ Eliminar propiedades con undefined
+    Object.keys(nuevoEmpleado).forEach(key => {
+      if (nuevoEmpleado[key] === undefined) {
+        delete nuevoEmpleado[key];
+      }
+    });
+    
+    console.log('📤 Datos a insertar:', nuevoEmpleado);
     
     const { data, error } = await supabase
       .from('empleados')
@@ -188,10 +194,13 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error al insertar:', error);
+      throw error;
+    }
     
     // Si tiene email corporativo, crear perfil de usuario automáticamente
-    if (body.email_corporativo) {
+    if (body.email_corporativo && data) {
       const nombrePartes = body.nombre_completo.trim().split(' ');
       const primerNombre = nombrePartes[0] || '';
       const apellidos = nombrePartes.slice(1).join(' ') || '';
@@ -205,8 +214,8 @@ export async function POST(request: NextRequest) {
           rol: 'user',
           empleado_id: data.id,
           rut: body.rut,
-          telefono: body.telefono,
-          cargo: body.cargo,
+          telefono: body.telefono || null,
+          cargo: body.cargo || null,
           activo: true,
           permisos: {
             can_create_tasks: false,
@@ -221,14 +230,13 @@ export async function POST(request: NextRequest) {
         }]);
       
       if (perfilError) {
-        console.error('Error creando perfil:', perfilError);
-        // No fallamos la creación del empleado, solo registramos el error
+        console.error('⚠️ Error creando perfil (no crítico):', perfilError);
       }
     }
     
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
-    console.error('Error en POST /api/rrhh/empleados:', error);
+    console.error('❌ Error en POST /api/rrhh/empleados:', error);
     return NextResponse.json(
       { error: error.message || 'Error al crear empleado' },
       { status: 500 }

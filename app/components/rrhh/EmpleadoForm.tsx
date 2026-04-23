@@ -53,10 +53,47 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
     contacto_emergencia_parentesco: empleado?.contacto_emergencia_parentesco || '',
   });
 
+  // ✅ Función para limpiar datos antes de enviar
+  const limpiarDatosParaEnviar = (datos: any) => {
+    const datosLimpios: any = {};
+    
+    Object.keys(datos).forEach(key => {
+      const valor = datos[key];
+      
+      // ✅ Convertir strings vacíos a null
+      if (valor === '' || valor === 'null') {
+        datosLimpios[key] = null;
+      } 
+      // ✅ Mantener números
+      else if (typeof valor === 'number') {
+        datosLimpios[key] = valor;
+      }
+      // ✅ Mantener booleanos
+      else if (typeof valor === 'boolean') {
+        datosLimpios[key] = valor;
+      }
+      // ✅ Mantener strings con contenido
+      else if (typeof valor === 'string' && valor.trim() !== '') {
+        datosLimpios[key] = valor;
+      }
+      // ✅ Valores válidos
+      else if (valor !== undefined && valor !== null) {
+        datosLimpios[key] = valor;
+      }
+      // ✅ Todo lo demás va como null
+      else {
+        datosLimpios[key] = null;
+      }
+    });
+    
+    return datosLimpios;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
+    // Validaciones básicas
     if (!form.rut) {
       setError('El RUT es obligatorio');
       return;
@@ -70,7 +107,17 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
       return;
     }
 
-    const result = await onSubmit(form);
+    // ✅ Limpiar datos antes de enviar
+    const datosLimpios = limpiarDatosParaEnviar(form);
+    
+    // ✅ Asegurar que jefe_directo_id sea null si está vacío
+    if (!datosLimpios.jefe_directo_id || datosLimpios.jefe_directo_id === '') {
+      datosLimpios.jefe_directo_id = null;
+    }
+
+    console.log('📤 Enviando datos limpios:', datosLimpios);
+    
+    const result = await onSubmit(datosLimpios);
     if (result.success) {
       router.push('/rrhh/empleados');
     } else {
@@ -101,11 +148,22 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">RUT *</label>
-            <input value={form.rut} onChange={e => setForm({...form, rut: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" placeholder="12.345.678-9" />
+            <input 
+              value={form.rut} 
+              onChange={e => setForm({...form, rut: e.target.value})} 
+              className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" 
+              placeholder="12.345.678-9" 
+              required
+            />
           </div>
           <div className="md:col-span-2">
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Nombre Completo *</label>
-            <input value={form.nombre_completo} onChange={e => setForm({...form, nombre_completo: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" />
+            <input 
+              value={form.nombre_completo} 
+              onChange={e => setForm({...form, nombre_completo: e.target.value})} 
+              className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" 
+              required
+            />
           </div>
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Apellido Paterno</label>
@@ -239,8 +297,12 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
             <input value={form.departamento} onChange={e => setForm({...form, departamento: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
           </div>
           <div>
+            <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Jefe Directo ID</label>
+            <input value={form.jefe_directo_id} onChange={e => setForm({...form, jefe_directo_id: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" placeholder="UUID del jefe" />
+          </div>
+          <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Fecha Ingreso *</label>
-            <input type="date" value={form.fecha_ingreso} onChange={e => setForm({...form, fecha_ingreso: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
+            <input type="date" value={form.fecha_ingreso} onChange={e => setForm({...form, fecha_ingreso: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" required />
           </div>
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Tipo Contrato</label>
@@ -318,8 +380,8 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Mutual Seguridad</label>
             <input value={form.mutual_seguridad} onChange={e => setForm({...form, mutual_seguridad: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
           </div>
-          <div>
-            <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
+          <div className="flex items-center">
+            <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500 cursor-pointer">
               <input type="checkbox" checked={form.cesantia} onChange={e => setForm({...form, cesantia: e.target.checked})} className="rounded border-slate-300" />
               Seguro de Cesantía
             </label>
