@@ -2,7 +2,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-// Definir tipos localmente para evitar errores
 export interface Empleado {
   id: string;
   nombre_completo: string;

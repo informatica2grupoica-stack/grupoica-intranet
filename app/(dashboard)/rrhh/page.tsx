@@ -1,13 +1,12 @@
-// components/rrhh/EstadisticasRRHH.tsx - Asegurar valores por defecto
+// components/rrhh/EstadisticasRRHH.tsx
 'use client';
-import { Users, UserCheck, UserX, Calendar, TrendingUp, Briefcase } from 'lucide-react';
+import { Users, UserCheck, Calendar, TrendingUp, Briefcase } from 'lucide-react';
 
 interface EstadisticasRRHHProps {
   stats: {
     total_empleados: number;
     empleados_activos: number;
     empleados_ausentes: number;
-    empleados_baja: number;
     contrataciones_anio: number;
     antiguedad_promedio: number;
     mujeres: number;
@@ -24,7 +23,6 @@ interface EstadisticasRRHHProps {
 }
 
 export default function EstadisticasRRHH({ stats }: EstadisticasRRHHProps) {
-  // Valores por defecto en caso de que algo falte
   const total = stats?.total_empleados || 0;
   const activos = stats?.empleados_activos || 0;
   const ausentes = stats?.empleados_ausentes || 0;
@@ -32,39 +30,13 @@ export default function EstadisticasRRHH({ stats }: EstadisticasRRHHProps) {
   const mujeres = stats?.mujeres || 0;
   const hombres = stats?.hombres || 0;
   const antiguedad = stats?.antiguedad_promedio || 0;
-  const porArea = stats?.por_area || [];
-  const porCargo = stats?.por_cargo || [];
   const cumpleaños = stats?.proximos_cumpleaños || [];
 
   const cards = [
-    {
-      titulo: 'Total Empleados',
-      valor: total,
-      icono: Users,
-      color: 'bg-blue-500',
-      descripcion: 'en toda la empresa'
-    },
-    {
-      titulo: 'Activos',
-      valor: activos,
-      icono: UserCheck,
-      color: 'bg-emerald-500',
-      descripcion: total > 0 ? `${Math.round((activos / total) * 100)}% del total` : '0% del total'
-    },
-    {
-      titulo: 'Ausentes',
-      valor: ausentes,
-      icono: Calendar,
-      color: 'bg-amber-500',
-      descripcion: 'vacaciones o licencia'
-    },
-    {
-      titulo: 'Contrataciones',
-      valor: contrataciones,
-      icono: TrendingUp,
-      color: 'bg-purple-500',
-      descripcion: 'este año'
-    }
+    { titulo: 'Total Empleados', valor: total, icono: Users, color: 'bg-blue-500', descripcion: 'en toda la empresa' },
+    { titulo: 'Activos', valor: activos, icono: UserCheck, color: 'bg-emerald-500', descripcion: `${Math.round((activos / total) * 100)}% del total` },
+    { titulo: 'Ausentes', valor: ausentes, icono: Calendar, color: 'bg-amber-500', descripcion: 'vacaciones o licencia' },
+    { titulo: 'Contrataciones', valor: contrataciones, icono: TrendingUp, color: 'bg-purple-500', descripcion: 'este año' }
   ];
 
   return (
@@ -87,117 +59,90 @@ export default function EstadisticasRRHH({ stats }: EstadisticasRRHHProps) {
         ))}
       </div>
 
-      {/* Gráficos simples */}
+      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribución por género */}
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Users size={16} className="text-blue-500" />
-            Distribución por Género
+          <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
+            <Users size={16} className="text-blue-500" /> Distribución por Género
           </h3>
-          <div className="space-y-3">
-            <div>
+          {[
+            { label: 'Mujeres', value: mujeres, color: 'bg-pink-500' },
+            { label: 'Hombres', value: hombres, color: 'bg-blue-500' }
+          ].map((item) => (
+            <div key={item.label} className="mb-3">
               <div className="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                <span>Mujeres</span>
-                <span>{mujeres} ({total > 0 ? Math.round((mujeres / total) * 100) : 0}%)</span>
+                <span>{item.label}</span>
+                <span>{item.value} ({Math.round((item.value / total) * 100)}%)</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${total > 0 ? (mujeres / total) * 100 : 0}%` }} />
+                <div className={`${item.color} h-2 rounded-full`} style={{ width: `${(item.value / total) * 100}%` }} />
               </div>
             </div>
-            <div>
-              <div className="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                <span>Hombres</span>
-                <span>{hombres} ({total > 0 ? Math.round((hombres / total) * 100) : 0}%)</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${total > 0 ? (hombres / total) * 100 : 0}%` }} />
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <p className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Briefcase size={10} />
-              Antigüedad promedio: {antiguedad} años
-            </p>
-          </div>
+          ))}
+          <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-3 pt-2 border-t border-slate-100">
+            <Briefcase size={10} /> Antigüedad promedio: {antiguedad} años
+          </p>
         </div>
 
         {/* Próximos cumpleaños */}
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Calendar size={16} className="text-amber-500" />
-            Próximos Cumpleaños
+          <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
+            <Calendar size={16} className="text-amber-500" /> Próximos Cumpleaños
           </h3>
-          <div className="space-y-3">
-            {cumpleaños.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">No hay cumpleaños próximos</p>
-            ) : (
-              cumpleaños.map((emp) => (
-                <div key={emp.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
-                      {emp.nombre_completo?.charAt(0) || '?'}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">{emp.nombre_completo}</p>
-                      <p className="text-[9px] text-slate-400">{emp.cargo || 'Sin cargo'}</p>
-                    </div>
+          {cumpleaños.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">No hay cumpleaños próximos</p>
+          ) : (
+            cumpleaños.map((emp) => (
+              <div key={emp.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                    {emp.nombre_completo?.charAt(0) || '?'}
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-amber-600">
-                      {emp.fecha_nacimiento ? new Date(emp.fecha_nacimiento).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }) : '—'}
-                    </p>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{emp.nombre_completo}</p>
+                    <p className="text-[9px] text-slate-400">{emp.cargo || 'Sin cargo'}</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+                <p className="text-xs font-bold text-amber-600">
+                  {new Date(emp.fecha_nacimiento).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })}
+                </p>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Top áreas y cargos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4">Distribución por Área</h3>
-          <div className="space-y-2">
-            {porArea.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">No hay áreas registradas</p>
-            ) : (
-              porArea.slice(0, 5).map((item) => (
-                <div key={item.area}>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>{item.area}</span>
-                    <span>{item.cantidad} empleados</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5">
-                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (item.cantidad / total) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <h3 className="text-sm font-black text-slate-800 mb-4">Distribución por Área</h3>
+          {(stats?.por_area || []).slice(0, 5).map((item) => (
+            <div key={item.area} className="mb-2">
+              <div className="flex justify-between text-xs text-slate-600 mb-1">
+                <span>{item.area}</span>
+                <span>{item.cantidad} empleados</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5">
+                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${(item.cantidad / total) * 100}%` }} />
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4">Principales Cargos</h3>
-          <div className="space-y-2">
-            {porCargo.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-4">No hay cargos registrados</p>
-            ) : (
-              porCargo.slice(0, 5).map((item) => (
-                <div key={item.cargo}>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>{item.cargo}</span>
-                    <span>{item.cantidad} empleados</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5">
-                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${total > 0 ? (item.cantidad / total) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <h3 className="text-sm font-black text-slate-800 mb-4">Principales Cargos</h3>
+          {(stats?.por_cargo || []).slice(0, 5).map((item) => (
+            <div key={item.cargo} className="mb-2">
+              <div className="flex justify-between text-xs text-slate-600 mb-1">
+                <span>{item.cargo}</span>
+                <span>{item.cantidad} empleados</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5">
+                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${(item.cantidad / total) * 100}%` }} />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
