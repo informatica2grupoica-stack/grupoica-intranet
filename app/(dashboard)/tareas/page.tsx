@@ -1,3 +1,4 @@
+// tareas/page.tsx (actualizado)
 'use client';
 import { useState } from 'react';
 import { LayoutList, KanbanSquare, GanttChartSquare } from 'lucide-react';
@@ -7,6 +8,7 @@ import VistaTabla from './components/VistaTabla';
 import VistaGantt from './components/VistaGantt';
 import VistaKanban from './components/VistaKanban';
 import FormularioTarea from './components/FormularioTarea';
+import DrawerDetalleTarea from './components/DrawerDetalleTarea'; // ← Importar el drawer
 
 type Vista = 'tabla' | 'gantt' | 'kanban';
 
@@ -17,6 +19,9 @@ export default function TareasPage() {
   const { tareas, usuarios, perfilUsuario, loading, estadisticas, fetchTareas } = useTareas();
 
   const puedeCrear = perfilUsuario?.rol === 'admin' || perfilUsuario?.rol === 'superuser';
+  
+  // Obtener la tarea seleccionada
+  const tareaSeleccionada = tareas.find(t => t.id === tareaExpandida);
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
@@ -70,27 +75,39 @@ export default function TareasPage() {
         </button>
       )}
 
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-slate-500">Cargando tareas...</p>
+        </div>
+      )}
+
       {/* Vista seleccionada */}
-      {vista === 'tabla' && (
-        <VistaTabla
-          tareas={tareas}
-          usuarios={usuarios}
-          perfilUsuario={perfilUsuario}
-          onTaskClick={setTareaExpandida}
-          onTaskUpdate={fetchTareas}
-        />
-      )}
+      {!loading && (
+        <>
+          {vista === 'tabla' && (
+            <VistaTabla
+              tareas={tareas}
+              usuarios={usuarios}
+              perfilUsuario={perfilUsuario}
+              onTaskClick={setTareaExpandida}
+              onTaskUpdate={fetchTareas}
+            />
+          )}
 
-      {vista === 'gantt' && (
-        <VistaGantt tareas={tareas} onTaskClick={setTareaExpandida} />
-      )}
+          {vista === 'gantt' && (
+            <VistaGantt tareas={tareas} onTaskClick={setTareaExpandida} />
+          )}
 
-      {vista === 'kanban' && (
-        <VistaKanban
-          tareas={tareas}
-          onTaskUpdate={fetchTareas}
-          onTaskClick={setTareaExpandida}
-        />
+          {vista === 'kanban' && (
+            <VistaKanban
+              tareas={tareas}
+              onTaskUpdate={fetchTareas}
+              onTaskClick={setTareaExpandida}
+            />
+          )}
+        </>
       )}
 
       {/* Modal de formulario */}
@@ -106,10 +123,14 @@ export default function TareasPage() {
         />
       )}
 
-      {/* Drawer de detalle (implementar después) */}
-      {tareaExpandida && (
-        // Aquí iría el drawer de detalle de tarea
-        <div>Drawer de detalle - Pendiente implementar</div>
+      {/* Drawer de detalle de tarea */}
+      {tareaExpandida && tareaSeleccionada && (
+        <DrawerDetalleTarea
+          tarea={tareaSeleccionada}
+          perfilUsuario={perfilUsuario}
+          onClose={() => setTareaExpandida(null)}
+          onUpdate={fetchTareas}
+        />
       )}
     </div>
   );

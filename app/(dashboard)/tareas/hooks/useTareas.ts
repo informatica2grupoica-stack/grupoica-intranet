@@ -1,6 +1,19 @@
+// hooks/useTareas.ts (actualizado)
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+
+export interface Comentario {
+    id: string;
+    created_at: string;
+    tarea_id: string;
+    perfil_id: string;
+    contenido: string;
+    perfil?: {
+        nombre: string;
+        apellido: string;
+    };
+}
 
 export interface Tarea {
     id: string;
@@ -16,7 +29,6 @@ export interface Tarea {
     created_at: string;
     responsable?: { nombre: string; apellido: string };
     creador?: { nombre: string; apellido: string };
-    comentarios?: { count: number };
 }
 
 export function useTareas() {
@@ -24,6 +36,7 @@ export function useTareas() {
     const [usuarios, setUsuarios] = useState<any[]>([]);
     const [perfilUsuario, setPerfilUsuario] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [comentarios, setComentarios] = useState<Record<string, Comentario[]>>({});
     const [estadisticas, setEstadisticas] = useState({
         total: 0,
         completadas: 0,
@@ -84,7 +97,6 @@ export function useTareas() {
                 if (!insertError && newPerfil) {
                     perfil = newPerfil;
                 } else {
-                    // Perfil temporal en memoria
                     perfil = {
                         id: session.user.id,
                         user_id: session.user.id,
@@ -108,7 +120,7 @@ export function useTareas() {
             setPerfilUsuario(perfil);
             console.log("Perfil usuario cargado:", perfil?.nombre, "Rol:", perfil?.rol);
 
-            // Consulta de tareas - SOLO columnas que existen
+            // Consulta de tareas con relaciones
             let query = supabase.from('tareas').select(`
                 id,
                 titulo,
@@ -122,11 +134,9 @@ export function useTareas() {
                 fecha_limite,
                 created_at,
                 responsable:perfiles!tareas_asignado_a_fkey(nombre, apellido),
-                creador:perfiles!tareas_creado_por_fkey(nombre, apellido),
-                comentarios:comentarios_tareas(count)
+                creador:perfiles!tareas_creado_por_fkey(nombre, apellido)
             `);
 
-            // Si el usuario no es admin, solo ver sus tareas asignadas o creadas por él
             if (perfil?.rol === 'user') {
                 query = query.or(`asignado_a.eq.${perfil.id},creado_por.eq.${perfil.id}`);
             }
@@ -138,7 +148,6 @@ export function useTareas() {
             }
 
             if (tareasData) {
-                // Transformar los datos para que coincidan con la interfaz Tarea
                 const tareasTransformadas: Tarea[] = tareasData.map((tarea: any) => ({
                     id: tarea.id,
                     titulo: tarea.titulo,
@@ -152,11 +161,13 @@ export function useTareas() {
                     fecha_limite: tarea.fecha_limite,
                     created_at: tarea.created_at,
                     responsable: tarea.responsable && tarea.responsable.length > 0 ? tarea.responsable[0] : undefined,
-                    creador: tarea.creador && tarea.creador.length > 0 ? tarea.creador[0] : undefined,
-                    comentarios: tarea.comentarios && tarea.comentarios.length > 0 ? tarea.comentarios[0] : undefined
+                    creador: tarea.creador && tarea.creador.length > 0 ? tarea.creador[0] : undefined
                 }));
                 
                 setTareas(tareasTransformadas);
+
+                // Cargar comentarios para todas las tareas
+                await fetchComentarios(tareasTransformadas.map(t => t.id));
 
                 // Calcular estadísticas
                 const hoy = new Date();
@@ -201,6 +212,82 @@ export function useTareas() {
         }
     }
 
+    async function fetchComentarios(tareaIds: string[]) {
+        if (tareaIds.length === 0) return;
+
+        const { data, error } = await supabase
+            .from('comentarios_tareas')
+            .select(`
+                *,
+                perfil:perfiles!comentarios_tareas_perfil_id_fkey(
+                    nombre,
+                    apellido
+                )
+            `)
+            .in('tarea_id', tareaIds)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error("Error cargando comentarios:", error);
+            return;
+        }
+
+        // Organizar comentarios por tarea
+        const comentariosPorTarea: Record<string, Comentario[]> = {};
+        data?.forEach((comentario: any) => {
+            if (!comentariosPorTarea[comentario.tarea_id]) {
+                comentariosPorTarea[comentario.tarea_id] = [];
+            }
+            comentariosPorTarea[comentario.tarea_id].push({
+                ...comentario,
+                perfil: comentario.perfil?.[0]
+            });
+        });
+
+        setComentarios(comentariosPorTarea);
+    }
+
+    async function agregarComentario(tareaId: string, contenido: string) {
+        if (!perfilUsuario?.id) {
+            console.error("No hay usuario autenticado");
+            return false;
+        }
+
+        const { data, error } = await supabase
+            .from('comentarios_tareas')
+            .insert([{
+                tarea_id: tareaId,
+                perfil_id: perfilUsuario.id,
+                contenido: contenido
+            }])
+            .select(`
+                *,
+                perfil:perfiles!comentarios_tareas_perfil_id_fkey(
+                    nombre,
+                    apellido
+                )
+            `)
+            .single();
+
+        if (error) {
+            console.error("Error agregando comentario:", error);
+            return false;
+        }
+
+        // Actualizar estado local
+        const nuevoComentario: Comentario = {
+            ...data,
+            perfil: data.perfil?.[0]
+        };
+
+        setComentarios(prev => ({
+            ...prev,
+            [tareaId]: [...(prev[tareaId] || []), nuevoComentario]
+        }));
+
+        return true;
+    }
+
     useEffect(() => {
         fetchTareas();
 
@@ -212,5 +299,14 @@ export function useTareas() {
         return () => { supabase.removeChannel(channel); };
     }, []);
 
-    return { tareas, usuarios, perfilUsuario, loading, estadisticas, fetchTareas };
+    return { 
+        tareas, 
+        usuarios, 
+        perfilUsuario, 
+        loading, 
+        estadisticas, 
+        fetchTareas,
+        comentarios,
+        agregarComentario
+    };
 }
