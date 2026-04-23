@@ -137,9 +137,14 @@ export default function EmpleadosPage() {
                       <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${
                         emp.estado === 'activo' ? 'bg-emerald-100 text-emerald-600' :
                         emp.estado === 'vacaciones' ? 'bg-amber-100 text-amber-600' :
-                        'bg-red-100 text-red-600'
+                        emp.estado === 'licencia' ? 'bg-blue-100 text-blue-600' :
+                        emp.estado === 'despedido' ? 'bg-red-100 text-red-600' :
+                        'bg-slate-100 text-slate-600'
                       }`}>
-                        {emp.estado === 'activo' ? 'Activo' : emp.estado === 'vacaciones' ? 'Vacaciones' : 'Licencia'}
+                        {emp.estado === 'activo' ? 'Activo' : 
+                         emp.estado === 'vacaciones' ? 'Vacaciones' : 
+                         emp.estado === 'licencia' ? 'Licencia' :
+                         emp.estado === 'despedido' ? 'Despedido' : 'Renunció'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -191,62 +196,55 @@ export default function EmpleadosPage() {
       )}
 
       {/* Modal de confirmación de eliminación */}
-      // En app/(dashboard)/rrhh/empleados/page.tsx - Actualizar el modal
-{empleadoAEliminar && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
-      <div className="p-6 border-b border-slate-100">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-800">⚠️ Confirmar eliminación</h3>
-          <button onClick={() => setEmpleadoAEliminar(null)} className="p-1 text-slate-400 hover:text-slate-600">
-            <X size={20} />
-          </button>
+      {empleadoAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-800">⚠️ Confirmar eliminación</h3>
+                <button onClick={() => setEmpleadoAEliminar(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={28} className="text-red-600" />
+              </div>
+              <p className="text-slate-800 font-medium mb-2">
+                ¿Estás seguro de que deseas eliminar permanentemente a <strong>{empleadoAEliminar.nombre_completo}</strong>?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4">
+                <p className="text-xs text-red-700 font-semibold mb-2">
+                  ⚠️ Esta acción es <strong>permanente</strong> y no se puede deshacer.
+                </p>
+                <p className="text-xs text-red-600">
+                  Se eliminarán todos los registros asociados (asistencias, permisos, contratos, capacitaciones, evaluaciones).
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setEmpleadoAEliminar(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-300 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEliminar}
+                disabled={eliminando}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {eliminando && <Loader2 size={14} className="animate-spin" />}
+                <Trash2 size={14} />
+                {eliminando ? 'Eliminando...' : 'Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      
-      <div className="p-6 text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Trash2 size={28} className="text-red-600" />
-        </div>
-        <p className="text-slate-800 font-medium mb-2">
-          ¿Estás seguro de que deseas eliminar a <strong>{empleadoAEliminar.nombre_completo}</strong>?
-        </p>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4">
-          <p className="text-xs text-red-700">
-            ⚠️ Esta acción es <strong>permanente</strong> y no se puede deshacer. 
-            Se eliminarán todos los registros asociados:
-          </p>
-          <ul className="text-xs text-red-600 mt-2 list-disc list-inside">
-            <li>Datos personales del empleado</li>
-            <li>Historial de asistencias</li>
-            <li>Solicitudes de permisos</li>
-            <li>Contratos y documentos</li>
-            <li>Capacitaciones asignadas</li>
-            <li>Evaluaciones de desempeño</li>
-          </ul>
-        </div>
-      </div>
-      
-      <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-        <button
-          onClick={() => setEmpleadoAEliminar(null)}
-          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-300 transition-colors"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleEliminar}
-          disabled={eliminando}
-          className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-        >
-          {eliminando && <Loader2 size={14} className="animate-spin" />}
-          <Trash2 size={14} />
-          {eliminando ? 'Eliminando...' : 'Eliminar permanentemente'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
 }
