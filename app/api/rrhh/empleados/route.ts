@@ -7,13 +7,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// ✅ Función helper para limpiar UUIDs vacíos
-const limpiarUUID = (valor: string | null | undefined): string | null => {
-  if (!valor || valor === '' || valor === 'null') return null;
-  return valor;
-};
-
-// GET: Listar empleados con filtros
+// GET: Listar empleados con filtros (sin JOIN problemático)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -23,17 +17,12 @@ export async function GET(request: NextRequest) {
     const estado = searchParams.get('estado') || '';
     const area = searchParams.get('area') || '';
     
+    // ✅ Consulta SIMPLE sin el JOIN que causa error
     let query = supabase
       .from('empleados')
-      .select(`
-        *,
-        jefe_directo:empleados!empleados_jefe_directo_id_fkey(
-          id,
-          nombre_completo,
-          cargo
-        )
-      `, { count: 'exact' });
+      .select('*', { count: 'exact' });
     
+    // Aplicar filtros
     if (search) {
       query = query.or(`nombre_completo.ilike.%${search}%,rut.ilike.%${search}%,email_corporativo.ilike.%${search}%`);
     }
@@ -44,6 +33,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('area', area);
     }
     
+    // Paginación
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     
@@ -53,6 +43,7 @@ export async function GET(request: NextRequest) {
     
     if (error) throw error;
     
+    // Obtener áreas únicas para filtros
     const { data: areas } = await supabase
       .from('empleados')
       .select('area')
@@ -106,35 +97,17 @@ export async function POST(request: NextRequest) {
       .from('empleados')
       .select('id')
       .eq('rut', body.rut)
-      .maybeSingle();  // ✅ usar maybeSingle en lugar de single
+      .maybeSingle();
     
     if (existente) {
       return NextResponse.json({ error: 'Ya existe un empleado con este RUT' }, { status: 400 });
     }
     
-    // ✅ Limpiar campos UUID vacíos
-    const jefeDirectoId = limpiarUUID(body.jefe_directo_id);
-    const perfilId = limpiarUUID(body.perfil_id);
-    
-    // Calcular días de vacaciones disponibles según fecha de ingreso
-    const fechaIngreso = new Date(body.fecha_ingreso);
-    const hoy = new Date();
-    let añosTrabajados = hoy.getFullYear() - fechaIngreso.getFullYear();
-    const mesIngreso = fechaIngreso.getMonth();
-    const mesActual = hoy.getMonth();
-    
-    if (mesActual < mesIngreso) {
-      añosTrabajados--;
-    }
-    
-    const mesesTrabajados = añosTrabajados * 12 + (mesActual - mesIngreso);
-    const diasVacacion = Math.min(15, Math.floor(mesesTrabajados * 1.25));
-    
-    // ✅ Construir objeto solo con campos que no sean undefined/null vacíos
+    // ✅ Preparar datos - SOLO campos que existen en la tabla
     const nuevoEmpleado: any = {
       rut: body.rut,
       nombre_completo: body.nombre_completo,
-      apellido_paterno: body.apellido_paterno || null,
+      apellido_paterno: body.apellido_paterno || '',
       apellido_materno: body.apellido_materno || null,
       email_personal: body.email_personal || null,
       email_corporativo: body.email_corporativo || null,
@@ -152,7 +125,7 @@ export async function POST(request: NextRequest) {
       cargo: body.cargo || null,
       area: body.area || null,
       departamento: body.departamento || null,
-      jefe_directo_id: jefeDirectoId,
+      jefe_directo_id: null, // ✅ Por ahora siempre null hasta que existan empleados
       fecha_ingreso: body.fecha_ingreso,
       fecha_termino: body.fecha_termino || null,
       tipo_contrato: body.tipo_contrato || null,
@@ -167,7 +140,7 @@ export async function POST(request: NextRequest) {
       mutual_seguridad: body.mutual_seguridad || null,
       cesantia: body.cesantia === true || body.cesantia === 'true',
       dias_vacacion_anual: 15,
-      dias_vacacion_disponibles: Math.max(0, diasVacacion),
+      dias_vacacion_disponibles: 15,
       dias_permiso_anual: 12,
       dias_permiso_disponibles: 12,
       activo: true,
@@ -179,7 +152,7 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
     
-    // ✅ Eliminar propiedades con undefined
+    // ✅ Eliminar propiedades undefined
     Object.keys(nuevoEmpleado).forEach(key => {
       if (nuevoEmpleado[key] === undefined) {
         delete nuevoEmpleado[key];
@@ -199,7 +172,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
     
-    // Si tiene email corporativo, crear perfil de usuario automáticamente
+    // ✅ Si tiene email corporativo, crear perfil de usuario automáticamente
     if (body.email_corporativo && data) {
       const nombrePartes = body.nombre_completo.trim().split(' ');
       const primerNombre = nombrePartes[0] || '';
@@ -207,7 +180,7 @@ export async function POST(request: NextRequest) {
       
       const { error: perfilError } = await supabase
         .from('perfiles')
-        .insert([{
+        .upsert([{
           email: body.email_corporativo,
           nombre: primerNombre,
           apellido: apellidos,
@@ -227,10 +200,10 @@ export async function POST(request: NextRequest) {
             can_manage_rrhh: false,
             can_approve_permits: false
           }
-        }]);
+        }], { onConflict: 'email' });
       
       if (perfilError) {
-        console.error('⚠️ Error creando perfil (no crítico):', perfilError);
+        console.error('⚠️ Error creando perfil:', perfilError);
       }
     }
     

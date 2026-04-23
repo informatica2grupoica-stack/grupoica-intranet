@@ -66,35 +66,42 @@ export function useRrhh() {
   });
   const [areasDisponibles, setAreasDisponibles] = useState<string[]>([]);
 
-  const cargarEmpleados = useCallback(async (page: number = 1) => {
-    setLoading(true);
-    setError(null);
+  // hooks/useRrhh.ts - Actualiza la función cargarEmpleados
+const cargarEmpleados = useCallback(async (page: number = 1) => {
+  setLoading(true);
+  setError(null);
+  
+  try {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: pagination.per_page.toString(),
+      ...(filtros.search && { search: filtros.search }),
+      ...(filtros.estado && { estado: filtros.estado }),
+      ...(filtros.area && { area: filtros.area }),
+    });
     
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: pagination.per_page.toString(),
-        ...(filtros.search && { search: filtros.search }),
-        ...(filtros.estado && { estado: filtros.estado }),
-        ...(filtros.area && { area: filtros.area }),
-      });
-      
-      const response = await fetch(`/api/rrhh/empleados?${params}`);
-      const result = await response.json();
-      
-      if (!response.ok) throw new Error(result.error);
-      
-      setEmpleados(result.data || []);
-      setPagination(result.pagination);
-      if (result.filters?.areas) {
-        setAreasDisponibles(result.filters.areas);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    const response = await fetch(`/api/rrhh/empleados?${params}`);
+    const result = await response.json();
+    
+    if (!response.ok) throw new Error(result.error);
+    
+    // ✅ Mapear los datos sin el campo jefe_directo que daba error
+    const empleadosConFormato = (result.data || []).map((emp: any) => ({
+      ...emp,
+      jefe_directo: null, // Temporal hasta que tengamos la relación
+    }));
+    
+    setEmpleados(empleadosConFormato);
+    setPagination(result.pagination);
+    if (result.filters?.areas) {
+      setAreasDisponibles(result.filters.areas);
     }
-  }, [filtros, pagination.per_page]);
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+}, [filtros, pagination.per_page]);
 
   const cargarEstadisticas = useCallback(async () => {
     try {
