@@ -1,13 +1,13 @@
 // app/api/obuma/proveedores/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-const OBUMA_API_URL = process.env.OBUMA_API_URL || 'https://api.obuma.cl/v1.0';
-const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const OBUMA_API_URL = process.env.OBUMA_API_URL;
+  const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
+
   try {
     const { id } = await params;
     
@@ -21,18 +21,22 @@ export async function GET(
     const response = await fetch(`${OBUMA_API_URL}/proveedores.findById.json/${id}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${OBUMA_API_TOKEN}`,
+        'access-token': OBUMA_API_TOKEN,
         'Content-Type': 'application/json',
       },
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error(`Error al obtener proveedor: ${response.statusText}`);
+      return NextResponse.json(
+        { error: data.message || 'Error al obtener proveedor' },
+        { status: response.status }
+      );
     }
 
-    const data = await response.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error en GET /api/obuma/proveedores/[id]:', error);
     return NextResponse.json(
       { error: 'Error al obtener el proveedor' },
@@ -45,6 +49,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const OBUMA_API_URL = process.env.OBUMA_API_URL;
+  const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -59,7 +66,7 @@ export async function POST(
     const response = await fetch(`${OBUMA_API_URL}/proveedores.update.json`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OBUMA_API_TOKEN}`,
+        'access-token': OBUMA_API_TOKEN,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -78,7 +85,7 @@ export async function POST(
     }
 
     return NextResponse.json({ success: true, data });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error en POST /api/obuma/proveedores/[id]:', error);
     return NextResponse.json(
       { error: 'Error al actualizar el proveedor' },
