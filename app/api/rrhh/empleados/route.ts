@@ -1,4 +1,6 @@
-// app/api/rrhh/empleados/route.ts
+// app/api/rrhh/empleados/route.ts - VERSIÓN CORREGIDA
+// ELIMINA la sección que crea el perfil automáticamente
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET: Listar empleados con filtros (sin JOIN problemático)
+// GET: Listar empleados con filtros
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -17,12 +19,10 @@ export async function GET(request: NextRequest) {
     const estado = searchParams.get('estado') || '';
     const area = searchParams.get('area') || '';
     
-    // ✅ Consulta SIMPLE sin el JOIN que causa error
     let query = supabase
       .from('empleados')
       .select('*', { count: 'exact' });
     
-    // Aplicar filtros
     if (search) {
       query = query.or(`nombre_completo.ilike.%${search}%,rut.ilike.%${search}%,email_corporativo.ilike.%${search}%`);
     }
@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
       query = query.eq('area', area);
     }
     
-    // Paginación
     const from = (page - 1) * limit;
     const to = from + limit - 1;
     
@@ -43,7 +42,6 @@ export async function GET(request: NextRequest) {
     
     if (error) throw error;
     
-    // Obtener áreas únicas para filtros
     const { data: areas } = await supabase
       .from('empleados')
       .select('area')
@@ -74,14 +72,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Crear nuevo empleado
+// POST: Crear nuevo empleado (SIN CREAR PERFIL AUTOMÁTICAMENTE)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
     console.log('📥 Datos recibidos:', body);
     
-    // Validaciones básicas
     if (!body.rut) {
       return NextResponse.json({ error: 'El RUT es obligatorio' }, { status: 400 });
     }
@@ -103,7 +100,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ya existe un empleado con este RUT' }, { status: 400 });
     }
     
-    // ✅ Preparar datos - SOLO campos que existen en la tabla
+    // ✅ Preparar datos
     const nuevoEmpleado: any = {
       rut: body.rut,
       nombre_completo: body.nombre_completo,
@@ -125,7 +122,7 @@ export async function POST(request: NextRequest) {
       cargo: body.cargo || null,
       area: body.area || null,
       departamento: body.departamento || null,
-      jefe_directo_id: null, // ✅ Por ahora siempre null hasta que existan empleados
+      jefe_directo_id: null,
       fecha_ingreso: body.fecha_ingreso,
       fecha_termino: body.fecha_termino || null,
       tipo_contrato: body.tipo_contrato || null,
@@ -152,7 +149,6 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
     
-    // ✅ Eliminar propiedades undefined
     Object.keys(nuevoEmpleado).forEach(key => {
       if (nuevoEmpleado[key] === undefined) {
         delete nuevoEmpleado[key];
@@ -172,40 +168,9 @@ export async function POST(request: NextRequest) {
       throw error;
     }
     
-    // ✅ Si tiene email corporativo, crear perfil de usuario automáticamente
-    if (body.email_corporativo && data) {
-      const nombrePartes = body.nombre_completo.trim().split(' ');
-      const primerNombre = nombrePartes[0] || '';
-      const apellidos = nombrePartes.slice(1).join(' ') || '';
-      
-      const { error: perfilError } = await supabase
-        .from('perfiles')
-        .upsert([{
-          email: body.email_corporativo,
-          nombre: primerNombre,
-          apellido: apellidos,
-          rol: 'user',
-          empleado_id: data.id,
-          rut: body.rut,
-          telefono: body.telefono || null,
-          cargo: body.cargo || null,
-          activo: true,
-          permisos: {
-            can_create_tasks: false,
-            can_assign_tasks: false,
-            can_view_billing: false,
-            can_manage_devices: false,
-            can_create_products: false,
-            can_view_rrhh: false,
-            can_manage_rrhh: false,
-            can_approve_permits: false
-          }
-        }], { onConflict: 'email' });
-      
-      if (perfilError) {
-        console.error('⚠️ Error creando perfil:', perfilError);
-      }
-    }
+    // ✅ IMPORTANTE: NO CREAR PERFIL AUTOMÁTICAMENTE
+    // El perfil debe crearse manualmente desde el panel de usuarios
+    // Esto evita que se sobrescriban perfiles existentes
     
     return NextResponse.json({ success: true, data });
   } catch (error: any) {

@@ -32,16 +32,26 @@ export default function RegistroAsistencia({
   const JORNADA_DIARIA = 7;
   const HORA_COLACION = 1;
 
+  // ✅ CORREGIDO: Cargar asistencia existente correctamente
   useEffect(() => {
     if (asistenciaExistente) {
+      console.log('📝 Cargando asistencia existente:', asistenciaExistente);
       setForm({
         hora_entrada: asistenciaExistente.hora_entrada || '',
         hora_salida: asistenciaExistente.hora_salida || '',
         estado: asistenciaExistente.estado || 'presente',
         justificacion: asistenciaExistente.justificacion || '',
       });
+    } else {
+      // Resetear formulario si no hay asistencia
+      setForm({
+        hora_entrada: '',
+        hora_salida: '',
+        estado: 'presente',
+        justificacion: '',
+      });
     }
-  }, [asistenciaExistente]);
+  }, [asistenciaExistente, fecha]);
 
   // Calcular horas trabajadas según ley chilena (restar hora de colación)
   const calcularHorasTrabajadas = (entrada: string, salida: string): number => {
@@ -108,6 +118,9 @@ export default function RegistroAsistencia({
     { value: 'justificado', label: 'Justificado', color: 'text-blue-600 bg-blue-50' },
   ];
 
+  // Formatear fecha para mostrar correctamente
+  const fechaFormateada = new Date(fecha + 'T12:00:00').toLocaleDateString('es-CL');
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -115,7 +128,7 @@ export default function RegistroAsistencia({
           <div>
             <h2 className="text-lg font-bold text-slate-800">Registro de Asistencia</h2>
             <p className="text-xs text-slate-500">{empleadoNombre}</p>
-            <p className="text-[10px] text-slate-400">{new Date(fecha).toLocaleDateString('es-CL')}</p>
+            <p className="text-[10px] text-slate-400">{fechaFormateada}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
             <X size={20} />

@@ -42,9 +42,9 @@ export default function CalendarioAsistencias({
     return asistencias.find(a => a.fecha === fecha);
   };
 
-  // Obtener el primer día de la semana (0 = domingo, ajustar a lunes)
-  const primerDiaSemana = new Date(anioActual, mesActual - 1, 1).getDay();
-  const diasEnMes = new Date(anioActual, mesActual, 0).getDate();
+  // ✅ CORREGIDO: Usar UTC para evitar problemas de zona horaria
+  const primerDiaSemana = new Date(Date.UTC(anioActual, mesActual - 1, 1)).getUTCDay();
+  const diasEnMes = new Date(Date.UTC(anioActual, mesActual, 0)).getUTCDate();
   
   const dias = [];
 
@@ -56,7 +56,7 @@ export default function CalendarioAsistencias({
 
   // Días del mes
   for (let i = 1; i <= diasEnMes; i++) {
-    // ✅ CORRECCIÓN: Construir fecha correctamente
+    // ✅ CORRECCIÓN: Construir fecha en formato YYYY-MM-DD (sin timezone)
     const fechaCorrecta = `${anioActual}-${mesActual.toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
     const asistencia = obtenerAsistenciaPorFecha(fechaCorrecta);
     dias.push({ dia: i, fecha: fechaCorrecta, asistencia });
@@ -136,7 +136,7 @@ export default function CalendarioAsistencias({
                 }`}
               >
                 <div className="flex flex-col items-center">
-                  <span>{item.dia}</span>
+                  <span className="text-xs">{item.dia}</span>
                   {item.asistencia && (
                     <span className="text-[8px] font-bold">
                       {getEstadoIcon(item.asistencia.estado)}
