@@ -94,7 +94,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { name: "Permisos", icon: FileCheck, path: "/rrhh/permisos" },
         { name: "Contratos", icon: FileSignature, path: "/rrhh/contratos" },
         { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
-        { name: "Evaluaciones", icon: Star, path: "/rrhh/evaluaciones" },
         { name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
         { name: 'Evaluaciones', icon: Star, path: '/rrhh/evaluaciones' },
       ]
