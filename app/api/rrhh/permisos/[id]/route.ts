@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET: Obtener permiso por ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,7 +18,7 @@ export async function GET(
       .from('permisos_empleados')
       .select(`
         *,
-        empleado:empleados(
+        empleado:empleados!permisos_empleados_empleado_id_fkey(
           id,
           nombre_completo,
           rut,
@@ -27,7 +26,7 @@ export async function GET(
           area,
           dias_vacacion_disponibles
         ),
-        aprobador:perfiles(
+        aprobador:perfiles!permisos_empleados_aprobado_por_fkey(
           id,
           nombre,
           apellido
@@ -38,7 +37,14 @@ export async function GET(
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, data });
+    // Transformar datos
+    const dataFormateada = {
+      ...data,
+      empleado: data.empleado?.[0] || null,
+      aprobador: data.aprobador?.[0] || null,
+    };
+
+    return NextResponse.json({ success: true, data: dataFormateada });
   } catch (error: any) {
     console.error('Error en GET /api/rrhh/permisos/[id]:', error);
     return NextResponse.json(
@@ -48,7 +54,7 @@ export async function GET(
   }
 }
 
-// PUT: Actualizar permiso (aprobar/rechazar)
+// PUT: Actualizar permiso
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -56,39 +62,6 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-
-    console.log('📥 Actualizando permiso:', id, body);
-
-    // Obtener el permiso actual
-    const { data: permisoActual, error: findError } = await supabase
-      .from('permisos_empleados')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (findError || !permisoActual) {
-      return NextResponse.json({ error: 'Permiso no encontrado' }, { status: 404 });
-    }
-
-    // Si se está aprobando y es vacaciones, descontar días
-    if (body.estado === 'aprobado' && 
-        permisoActual.tipo === 'vacaciones' && 
-        permisoActual.estado !== 'aprobado') {
-      
-      const { data: empleado } = await supabase
-        .from('empleados')
-        .select('dias_vacacion_disponibles')
-        .eq('id', permisoActual.empleado_id)
-        .single();
-
-      if (empleado) {
-        const nuevosDias = empleado.dias_vacacion_disponibles - permisoActual.dias_solicitados;
-        await supabase
-          .from('empleados')
-          .update({ dias_vacacion_disponibles: nuevosDias })
-          .eq('id', permisoActual.empleado_id);
-      }
-    }
 
     const { data, error } = await supabase
       .from('permisos_empleados')
@@ -114,14 +87,12 @@ export async function PUT(
   }
 }
 
-// DELETE: Eliminar permiso
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-
     const { error } = await supabase
       .from('permisos_empleados')
       .delete()

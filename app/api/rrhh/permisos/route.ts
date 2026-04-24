@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET: Listar permisos con filtros
+// GET: Listar permisos
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -17,18 +17,24 @@ export async function GET(request: NextRequest) {
     const estado = searchParams.get('estado') || '';
     const tipo = searchParams.get('tipo') || '';
 
+    // ✅ Consulta especificando las foreign keys
     let query = supabase
       .from('permisos_empleados')
       .select(`
         *,
-        empleado:empleados(
+        empleado:empleados!permisos_empleados_empleado_id_fkey(
           id,
           nombre_completo,
           rut,
           cargo,
           area
         ),
-        aprobador:perfiles(
+        aprobador:perfiles!permisos_empleados_aprobado_por_fkey(
+          id,
+          nombre,
+          apellido
+        ),
+        creador:perfiles!permisos_empleados_creado_por_fkey(
           id,
           nombre,
           apellido
@@ -57,9 +63,17 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
+    // Transformar los datos (Supabase devuelve arrays para las relaciones)
+    const permisosFormateados = data?.map(permiso => ({
+      ...permiso,
+      empleado: permiso.empleado?.[0] || null,
+      aprobador: permiso.aprobador?.[0] || null,
+      creador: permiso.creador?.[0] || null,
+    }));
+
     return NextResponse.json({
       success: true,
-      data: data || [],
+      data: permisosFormateados || [],
       pagination: {
         current_page: page,
         per_page: limit,
@@ -103,15 +117,11 @@ export async function POST(request: NextRequest) {
 
     // Si es vacaciones, verificar días disponibles
     if (body.tipo === 'vacaciones') {
-      const { data: empleado, error: empError } = await supabase
+      const { data: empleado } = await supabase
         .from('empleados')
         .select('dias_vacacion_disponibles')
         .eq('id', body.empleado_id)
         .single();
-
-      if (empError) {
-        console.error('Error obteniendo empleado:', empError);
-      }
 
       if (empleado && empleado.dias_vacacion_disponibles < diasSolicitados) {
         return NextResponse.json({
