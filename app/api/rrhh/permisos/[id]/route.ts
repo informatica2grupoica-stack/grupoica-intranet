@@ -37,7 +37,6 @@ export async function GET(
 
     if (error) throw error;
 
-    // Transformar datos
     const dataFormateada = {
       ...data,
       empleado: data.empleado?.[0] || null,
@@ -54,7 +53,6 @@ export async function GET(
   }
 }
 
-// PUT: Actualizar permiso
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

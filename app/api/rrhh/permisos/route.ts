@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const estado = searchParams.get('estado') || '';
     const tipo = searchParams.get('tipo') || '';
 
-    // ✅ Consulta especificando las foreign keys
+    // ✅ Consulta CORREGIDA - SOLO con las relaciones que existen
     let query = supabase
       .from('permisos_empleados')
       .select(`
@@ -30,11 +30,6 @@ export async function GET(request: NextRequest) {
           area
         ),
         aprobador:perfiles!permisos_empleados_aprobado_por_fkey(
-          id,
-          nombre,
-          apellido
-        ),
-        creador:perfiles!permisos_empleados_creado_por_fkey(
           id,
           nombre,
           apellido
@@ -63,12 +58,11 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    // Transformar los datos (Supabase devuelve arrays para las relaciones)
+    // Transformar los datos (Supabase devuelve arrays)
     const permisosFormateados = data?.map(permiso => ({
       ...permiso,
       empleado: permiso.empleado?.[0] || null,
       aprobador: permiso.aprobador?.[0] || null,
-      creador: permiso.creador?.[0] || null,
     }));
 
     return NextResponse.json({
