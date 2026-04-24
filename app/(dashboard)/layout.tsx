@@ -27,6 +27,7 @@ import {
   PieChart,
   Bell,
   UserCheck,
+  GitBranch,
   Clock,
   FileSignature,
   Download
@@ -96,6 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
         { name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
         { name: 'Evaluaciones', icon: Star, path: '/rrhh/evaluaciones' },
+        { name: 'Organigrama', icon: GitBranch, path: '/rrhh/organigrama' },
       ]
     },
     {
