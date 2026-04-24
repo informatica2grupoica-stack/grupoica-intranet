@@ -1,9 +1,9 @@
 // app/(dashboard)/rrhh/asistencias/page.tsx
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRrhh } from '@/app/hooks/useRrhh';
 import { useAsistencias } from '@/app/hooks/useAsistencias';
-import { Loader2, RefreshCw, Calendar, Filter } from 'lucide-react';
+import { Loader2, RefreshCw, Calendar as CalendarIcon } from 'lucide-react';
 import CalendarioAsistencias from '@/app/components/rrhh/CalendarioAsistencias';
 import ResumenAsistenciaMes from '@/app/components/rrhh/ResumenAsistenciaMes';
 import RegistroAsistencia from '@/app/components/rrhh/RegistroAsistencia';
@@ -21,11 +21,12 @@ export default function AsistenciasPage() {
     cargarResumen,
   } = useAsistencias();
 
-  const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<string>('');
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string | null>(null);
   const [mostrarModal, setMostrarModal] = useState(false);
 
-  const empleadoActual = empleados.find(e => e.id === empleadoSeleccionado);
+  const empleadoActual = empleados.find(e => e.id === filtros.empleadoId);
+  
+  // ✅ Encontrar asistencia existente para la fecha seleccionada
   const asistenciaEnFecha = asistencias.find(a => a.fecha === fechaSeleccionada);
 
   const handleDayClick = (fecha: string) => {
@@ -44,6 +45,12 @@ export default function AsistenciasPage() {
   const handleCambiarMes = (mes: number, anio: number) => {
     setFiltros({ ...filtros, mes, anio });
   };
+
+  // ✅ RESETEAR MODAL cuando cambia el empleado
+  useEffect(() => {
+    setMostrarModal(false);
+    setFechaSeleccionada(null);
+  }, [filtros.empleadoId]);
 
   if (loadingEmpleados) {
     return (
@@ -67,17 +74,6 @@ export default function AsistenciasPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <select
-            value={empleadoSeleccionado}
-            onChange={(e) => setEmpleadoSeleccionado(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Todos los empleados</option>
-            {empleados.filter(e => e.activo).map((emp) => (
-              <option key={emp.id} value={emp.id}>{emp.nombre_completo}</option>
-            ))}
-          </select>
-
           <button
             onClick={() => cargarResumen()}
             className="p-2.5 text-slate-500 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-100"
@@ -88,47 +84,70 @@ export default function AsistenciasPage() {
         </div>
       </div>
 
-      {/* Resumen del mes */}
-      <ResumenAsistenciaMes
-        resumen={resumen}
-        empleadoNombre={empleadoActual?.nombre_completo}
-      />
+      {/* Selector de empleado */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200">
+        <label className="text-[10px] font-bold uppercase text-slate-500 block mb-2">
+          Seleccionar Empleado
+        </label>
+        <select
+          value={filtros.empleadoId}
+          onChange={(e) => {
+            // ✅ Limpiar selección de fecha y modal al cambiar empleado
+            setFechaSeleccionada(null);
+            setMostrarModal(false);
+            setFiltros({ ...filtros, empleadoId: e.target.value });
+          }}
+          className="w-full md:w-96 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">-- Seleccione un empleado --</option>
+          {empleados.filter(e => e.activo).map((emp) => (
+            <option key={emp.id} value={emp.id}>{emp.nombre_completo} - {emp.cargo || 'Sin cargo'}</option>
+          ))}
+        </select>
+      </div>
 
-      {/* Calendario */}
-      <CalendarioAsistencias
-        asistencias={asistencias}
-        onDayClick={handleDayClick}
-        mesActual={filtros.mes}
-        anioActual={filtros.anio}
-        onChangeMes={handleCambiarMes}
-      />
-
-      {/* Modal de registro */}
-      {mostrarModal && fechaSeleccionada && empleadoSeleccionado && empleadoActual && (
-        <RegistroAsistencia
-          empleadoId={empleadoSeleccionado}
-          empleadoNombre={empleadoActual.nombre_completo}
-          fecha={fechaSeleccionada}
-          asistenciaExistente={asistenciaEnFecha}
-          onSave={handleGuardarAsistencia}
-          onClose={() => setMostrarModal(false)}
-        />
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-8">
-          <Loader2 className="animate-spin text-blue-600" size={32} />
+      {/* Contenido solo si hay empleado seleccionado */}
+      {!filtros.empleadoId ? (
+        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
+          <CalendarIcon size={48} className="mx-auto text-slate-300 mb-4" />
+          <p className="text-slate-500">Selecciona un empleado para ver sus asistencias</p>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Resumen del mes */}
+          <ResumenAsistenciaMes
+            resumen={resumen}
+            empleadoNombre={empleadoActual?.nombre_completo}
+          />
 
-      {/* Instrucciones si no hay empleado seleccionado */}
-      {!empleadoSeleccionado && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-          <p className="text-sm text-amber-700">
-            👆 Selecciona un empleado para comenzar a registrar asistencias
-          </p>
-        </div>
+          {/* Calendario */}
+          <CalendarioAsistencias
+            asistencias={asistencias}
+            onDayClick={handleDayClick}
+            mesActual={filtros.mes}
+            anioActual={filtros.anio}
+            onChangeMes={handleCambiarMes}
+          />
+
+          {/* Loading */}
+          {loading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin text-blue-600" size={32} />
+            </div>
+          )}
+
+          {/* Modal de registro */}
+          {mostrarModal && fechaSeleccionada && (
+            <RegistroAsistencia
+              empleadoId={filtros.empleadoId}
+              empleadoNombre={empleadoActual?.nombre_completo || ''}
+              fecha={fechaSeleccionada}
+              asistenciaExistente={asistenciaEnFecha}
+              onSave={handleGuardarAsistencia}
+              onClose={() => setMostrarModal(false)}
+            />
+          )}
+        </>
       )}
     </div>
   );

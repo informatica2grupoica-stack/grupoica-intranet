@@ -8,13 +8,8 @@ export interface Asistencia {
   fecha: string;
   hora_entrada: string | null;
   hora_salida: string | null;
-  hora_entrada_tarde: string | null;
-  hora_salida_tarde: string | null;
   horas_trabajadas: number | null;
   horas_extras: number | null;
-  horas_extras_25: number | null;
-  horas_extras_50: number | null;
-  tipo_dia: string;
   estado: string;
   justificacion: string | null;
   empleado?: {
@@ -25,24 +20,11 @@ export interface Asistencia {
   };
 }
 
-interface ResumenAsistencia {
-  total_dias: number;
-  dias_presente: number;
-  dias_ausente: number;
-  dias_tarde: number;
-  dias_justificado: number;
-  porcentaje_asistencia: number;
-  total_horas: number;
-  total_horas_extras: number;
-  total_horas_extras_25: number;
-  total_horas_extras_50: number;
-}
-
 export function useAsistencias() {
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [resumen, setResumen] = useState<ResumenAsistencia | null>(null);
+  const [resumen, setResumen] = useState<any>(null);
   const [pagination, setPagination] = useState({
     current_page: 1,
     per_page: 50,
@@ -55,7 +37,20 @@ export function useAsistencias() {
     anio: new Date().getFullYear(),
   });
 
+  // ✅ Función para limpiar/resetear datos al cambiar empleado
+  const limpiarDatos = () => {
+    setAsistencias([]);
+    setResumen(null);
+  };
+
   const cargarAsistencias = useCallback(async (page: number = 1) => {
+    if (!filtros.empleadoId) {
+      // Si no hay empleado seleccionado, limpiar datos
+      limpiarDatos();
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
 
@@ -63,7 +58,7 @@ export function useAsistencias() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: pagination.per_page.toString(),
-        ...(filtros.empleadoId && { empleadoId: filtros.empleadoId }),
+        empleadoId: filtros.empleadoId,
         mes: filtros.mes.toString(),
         anio: filtros.anio.toString(),
       });
@@ -83,9 +78,14 @@ export function useAsistencias() {
   }, [filtros, pagination.per_page]);
 
   const cargarResumen = useCallback(async () => {
+    if (!filtros.empleadoId) {
+      setResumen(null);
+      return;
+    }
+    
     try {
       const params = new URLSearchParams({
-        ...(filtros.empleadoId && { empleadoId: filtros.empleadoId }),
+        empleadoId: filtros.empleadoId,
         mes: filtros.mes.toString(),
         anio: filtros.anio.toString(),
       });
@@ -114,6 +114,7 @@ export function useAsistencias() {
 
       if (!response.ok) throw new Error(result.error);
 
+      // ✅ Recargar los datos después de guardar
       await cargarAsistencias(pagination.current_page);
       await cargarResumen();
 
@@ -152,7 +153,7 @@ export function useAsistencias() {
   const eliminarAsistencia = async (id: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/rrhh/asistencias/${id}`, {
+      const response = await fetch(`/api/rrhh/asistencias?id=${id}`, {
         method: 'DELETE',
       });
 
@@ -177,10 +178,15 @@ export function useAsistencias() {
     }
   };
 
+  // ✅ Cuando cambia el empleado, recargar todo
   useEffect(() => {
-    cargarAsistencias(1);
-    cargarResumen();
-  }, [filtros]);
+    if (filtros.empleadoId) {
+      cargarAsistencias(1);
+      cargarResumen();
+    } else {
+      limpiarDatos();
+    }
+  }, [filtros.empleadoId, filtros.mes, filtros.anio]);
 
   return {
     asistencias,
@@ -196,5 +202,6 @@ export function useAsistencias() {
     cambiarPagina,
     cargarAsistencias,
     cargarResumen,
+    limpiarDatos,
   };
 }
