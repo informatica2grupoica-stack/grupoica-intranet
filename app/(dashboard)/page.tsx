@@ -11,7 +11,7 @@ import {
   Star, Award, Coffee, Zap, Eye
 } from "lucide-react";
 
-// Componentes de Recharts
+// Componentes de Recharts (opcionales)
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell
@@ -156,11 +156,14 @@ export default function HomePage() {
     const idsEquipo = empleadosACargo?.map(e => e.id) || [];
     
     // Estadísticas del equipo
+    const hoy = new Date();
+    const fechaHoy = hoy.toISOString().split('T')[0];
+    
     const { data: asistenciasEquipo } = await supabase
       .from('asistencias')
       .select('estado, empleado_id')
       .in('empleado_id', idsEquipo)
-      .gte('fecha', new Date().toISOString().split('T')[0]);
+      .eq('fecha', fechaHoy);
     
     const { data: permisosPendientes } = await supabase
       .from('permisos_empleados')
@@ -179,49 +182,78 @@ export default function HomePage() {
     await cargarDatosUsuarioNormal(perfilId);
   };
 
-  // 📊 DATOS PARA ADMIN/RRHH
+  // 📊 DATOS PARA ADMIN/RRHH (GLOBALES - sin necesidad de empleado_id)
   const cargarDatosAdmin = async () => {
-    // Estadísticas generales de empleados
-    const { data: empleados } = await supabase
-      .from('empleados')
-      .select('estado, cargo, area')
-      .eq('activo', true);
-    
-    const { data: permisosPendientes } = await supabase
-      .from('permisos_empleados')
-      .select('*, empleado:empleados(nombre_completo, cargo)')
-      .eq('estado', 'pendiente')
-      .limit(5);
-    
-    const { data: cumpleaños } = await supabase
-      .from('empleados')
-      .select('nombre_completo, cargo, fecha_nacimiento')
-      .eq('activo', true);
-    
-    // Próximos cumpleaños (30 días)
-    const hoy = new Date();
-    const proxCumpleaños = cumpleaños?.filter(e => e.fecha_nacimiento)
-      .map(e => {
-        const fechaNac = new Date(e.fecha_nacimiento);
-        const prox = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
-        if (prox < hoy) prox.setFullYear(prox.getFullYear() + 1);
-        const dias = Math.ceil((prox.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-        return { ...e, diasFaltantes: dias };
-      })
-      .filter(e => e.diasFaltantes <= 30)
-      .sort((a, b) => a.diasFaltantes - b.diasFaltantes)
-      .slice(0, 5) || [];
-    
-    setProximosCumpleaños(proxCumpleaños);
-    setMisPermisos(permisosPendientes || []);
-    
-    setEstadisticasEquipo({
-      total: empleados?.length || 0,
-      porArea: empleados?.reduce((acc: any, e) => {
-        if (e.area) acc[e.area] = (acc[e.area] || 0) + 1;
-        return acc;
-      }, {})
-    });
+    try {
+      console.log('Cargando datos globales para Admin/Superuser...');
+      
+      // 1. Obtener TODOS los empleados activos
+      const { data: empleados, error: empError } = await supabase
+        .from('empleados')
+        .select('id, nombre_completo, estado, cargo, area, fecha_nacimiento')
+        .eq('activo', true);
+      
+      if (empError) {
+        console.error('Error cargando empleados:', empError);
+      }
+      
+      console.log('Total empleados activos:', empleados?.length || 0);
+      
+      // 2. Obtener TODOS los permisos pendientes
+      const { data: permisosPendientes, error: perError } = await supabase
+        .from('permisos_empleados')
+        .select('*, empleado:empleados(id, nombre_completo, cargo, area)')
+        .eq('estado', 'pendiente')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (perError) {
+        console.error('Error cargando permisos:', perError);
+      }
+      
+      console.log('Permisos pendientes:', permisosPendientes?.length || 0);
+      
+      // 3. Calcular próximos cumpleaños (próximos 30 días)
+      const hoy = new Date();
+      const proxCumpleaños = (empleados || [])
+        .filter(e => e.fecha_nacimiento)
+        .map(e => {
+          const fechaNac = new Date(e.fecha_nacimiento);
+          const prox = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
+          if (prox < hoy) {
+            prox.setFullYear(prox.getFullYear() + 1);
+          }
+          const dias = Math.ceil((prox.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+          return { ...e, diasFaltantes: dias };
+        })
+        .filter(e => e.diasFaltantes <= 30 && e.diasFaltantes >= 0)
+        .sort((a, b) => a.diasFaltantes - b.diasFaltantes)
+        .slice(0, 10);
+      
+      console.log('Próximos cumpleaños:', proxCumpleaños.length);
+      
+      // 4. Calcular distribución por área
+      const porArea: Record<string, number> = {};
+      (empleados || []).forEach(e => {
+        if (e.area && e.area.trim()) {
+          porArea[e.area] = (porArea[e.area] || 0) + 1;
+        }
+      });
+      
+      console.log('Distribución por área:', porArea);
+      
+      setProximosCumpleaños(proxCumpleaños);
+      setMisPermisos(permisosPendientes || []);
+      
+      setEstadisticasEquipo({
+        total: empleados?.length || 0,
+        porArea: porArea,
+        permisosPendientes: permisosPendientes?.length || 0
+      });
+      
+    } catch (error) {
+      console.error('Error en cargarDatosAdmin:', error);
+    }
   };
 
   if (loading || !isMounted) {
@@ -237,7 +269,6 @@ export default function HomePage() {
   if (userRole === 'user') {
     return (
       <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-8">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-black text-slate-800">
@@ -250,26 +281,22 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Tarjetas rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div onClick={() => router.push('/tareas')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
             <ClipboardCheck className="text-blue-500 mb-2" size={24} />
             <p className="text-2xl font-black text-slate-800">{misTareas.length}</p>
             <p className="text-xs text-slate-500">Tareas pendientes</p>
           </div>
-          
           <div onClick={() => router.push('/chat')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
             <MessageSquare className="text-emerald-500 mb-2" size={24} />
             <p className="text-2xl font-black text-slate-800">{misMensajes}</p>
             <p className="text-xs text-slate-500">Mensajes nuevos</p>
           </div>
-          
           <div onClick={() => router.push('/rrhh/asistencias')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
             <Calendar className="text-amber-500 mb-2" size={24} />
             <p className="text-2xl font-black text-slate-800">{misAsistencias.presente}</p>
             <p className="text-xs text-slate-500">Asistencias este mes</p>
           </div>
-          
           <div onClick={() => router.push('/rrhh/permisos')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
             <Bell className="text-rose-500 mb-2" size={24} />
             <p className="text-2xl font-black text-slate-800">{misPermisos.filter(p => p.estado === 'pendiente').length}</p>
@@ -277,7 +304,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Mis Tareas */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <ClipboardCheck size={18} className="text-blue-500" />
@@ -308,7 +334,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Mis Permisos Recientes */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <Clock size={18} className="text-amber-500" />
@@ -343,7 +368,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Próximas Capacitaciones */}
         {misCapacitaciones.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6">
             <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -371,7 +395,6 @@ export default function HomePage() {
   if (userRole === 'jefe') {
     return (
       <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-8">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-black text-slate-800">
@@ -384,7 +407,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Resumen del equipo */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <Users className="text-blue-500 mb-2" size={24} />
@@ -403,7 +425,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Mis datos personales */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6">
             <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -444,7 +465,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Permisos del equipo pendientes */}
         {estadisticasEquipo?.permisos?.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6">
             <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -477,7 +497,6 @@ export default function HomePage() {
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8">
       
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-black text-slate-800">
@@ -490,7 +509,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Tarjetas principales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <Users className="text-blue-500 mb-2" size={24} />
@@ -514,7 +532,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Próximos Cumpleaños */}
       {proximosCumpleaños.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -535,7 +552,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Permisos Pendientes */}
       {misPermisos.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -563,7 +579,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Distribución por Área */}
       {estadisticasEquipo?.porArea && Object.keys(estadisticasEquipo.porArea).length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
