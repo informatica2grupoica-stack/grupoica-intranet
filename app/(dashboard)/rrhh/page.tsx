@@ -1,16 +1,11 @@
 // app/(dashboard)/rrhh/page.tsx
 'use client';
-import { useState } from 'react';
 import { useRrhh } from '@/app/hooks/useRrhh';
 import EstadisticasRRHH from '@/app/components/rrhh/EstadisticasRRHH';
-import DashboardAvanzado from '@/app/components/rrhh/DashboardAvanzado';
-import { Loader2, RefreshCw, BarChart3, PieChart } from 'lucide-react';
-
-type TipoVista = 'basico' | 'avanzado';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 export default function RRHHDashboardPage() {
   const { estadisticas, loading, cargarEstadisticas } = useRrhh();
-  const [vista, setVista] = useState<TipoVista>('avanzado');
 
   if (loading && !estadisticas) {
     return (
@@ -37,7 +32,7 @@ export default function RRHHDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black text-slate-800 uppercase italic">
             Dashboard <span className="text-blue-600">RRHH</span>
@@ -46,45 +41,17 @@ export default function RRHHDashboardPage() {
             Visión general del talento humano
           </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-            <button
-              onClick={() => setVista('basico')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                vista === 'basico' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-              }`}
-            >
-              <PieChart size={14} />
-              Básico
-            </button>
-            <button
-              onClick={() => setVista('avanzado')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                vista === 'avanzado' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-              }`}
-            >
-              <BarChart3 size={14} />
-              Avanzado
-            </button>
-          </div>
-
-          <button
-            onClick={() => cargarEstadisticas()}
-            className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
-            title="Actualizar"
-          >
-            <RefreshCw size={20} />
-          </button>
-        </div>
+        <button
+          onClick={() => cargarEstadisticas()}
+          className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
+          title="Actualizar"
+        >
+          <RefreshCw size={20} />
+        </button>
       </div>
 
-      {/* Estadísticas según vista */}
-      {vista === 'basico' ? (
-        <EstadisticasRRHH stats={estadisticas} />
-      ) : (
-        <DashboardAvanzado />
-      )}
+      {/* Estadísticas */}
+      <EstadisticasRRHH stats={estadisticas} />
     </div>
   );
 }
