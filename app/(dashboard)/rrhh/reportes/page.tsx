@@ -60,7 +60,22 @@ export default function ReportesPage() {
       const result = await response.json();
       
       if (response.ok) {
-        setReporteData(result);
+        // ✅ Para permisos, enriquecer con datos de empleados
+        if (tipo === 'permisos' && result.data) {
+          const permisosEnriquecidos = result.data.map((permiso: any) => {
+            const empleado = empleados.find(e => e.id === permiso.empleado_id);
+            return {
+              ...permiso,
+              empleado_nombre: empleado?.nombre_completo || 'Desconocido',
+              empleado_rut: empleado?.rut || 'N/A',
+              empleado_cargo: empleado?.cargo || 'N/A',
+              empleado_area: empleado?.area || 'N/A',
+            };
+          });
+          setReporteData({ ...result, data: permisosEnriquecidos });
+        } else {
+          setReporteData(result);
+        }
       } else {
         throw new Error(result.error);
       }
@@ -97,12 +112,16 @@ export default function ReportesPage() {
         ];
       case 'permisos':
         return [
-          { key: 'empleado.nombre_completo', label: 'Empleado' },
+          { key: 'empleado_nombre', label: 'Empleado' },
+          { key: 'empleado_rut', label: 'RUT' },
+          { key: 'empleado_cargo', label: 'Cargo' },
+          { key: 'empleado_area', label: 'Área' },
           { key: 'tipo', label: 'Tipo' },
           { key: 'fecha_inicio', label: 'Fecha Inicio' },
           { key: 'fecha_fin', label: 'Fecha Fin' },
           { key: 'dias_solicitados', label: 'Días' },
           { key: 'estado', label: 'Estado' },
+          { key: 'motivo', label: 'Motivo' },
         ];
       case 'contratos':
         return [
@@ -283,6 +302,19 @@ export default function ReportesPage() {
                         }
                         if (col.key === 'horas_trabajadas' || col.key === 'horas_extras') {
                           value = value ? `${value} hrs` : '—';
+                        }
+                        if (col.key === 'tipo' && value) {
+                          const tipos: Record<string, string> = {
+                            vacaciones: 'Vacaciones',
+                            licencia_medica: 'Licencia Médica',
+                            permiso_administrativo: 'Permiso Administrativo',
+                            estudio: 'Estudio',
+                            personal: 'Personal',
+                            matrimonio: 'Matrimonio',
+                            luto: 'Luto',
+                            otro: 'Otro',
+                          };
+                          value = tipos[value] || value;
                         }
                         return (
                           <td key={col.key} className="px-4 py-3 text-xs text-slate-600">
