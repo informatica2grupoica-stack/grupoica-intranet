@@ -1,28 +1,27 @@
 // app/(dashboard)/rrhh/permisos/page.tsx
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRrhh } from '@/app/hooks/useRrhh';
 import { usePermisos } from '@/app/hooks/usePermisos';
 import { useAuth } from '@/app/hooks/useAuth';
-import { Plus, Loader2, Eye } from 'lucide-react';
+import { Plus, Loader2, Eye, Edit3, Trash2, X } from 'lucide-react';
 import SolicitarPermisoModal from '@/app/components/rrhh/SolicitarPermisoModal';
 import AprobarPermisoModal from '@/app/components/rrhh/AprobarPermisoModal';
 
 export default function PermisosPage() {
   const { empleados, loading: loadingEmpleados } = useRrhh();
-  const { permisos, loading, filtros, setFiltros, crearPermiso, aprobarPermiso, rechazarPermiso } = usePermisos();
-  const { puedeAprobarPermisos } = useAuth();
+  const { permisos, loading, filtros, setFiltros, crearPermiso, aprobarPermiso, rechazarPermiso, eliminarPermiso, cambiarPagina, pagination } = usePermisos();
+  const { perfil, puedeAprobarPermisos } = useAuth();
 
   const [mostrarModalSolicitud, setMostrarModalSolicitud] = useState(false);
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState('');
   const [permisoSeleccionado, setPermisoSeleccionado] = useState<any>(null);
   const [mostrarModalAprobacion, setMostrarModalAprobacion] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState<string | null>(null);
 
-  // Buscar el empleado actual con sus días de vacaciones
   const empleadoActual = empleados.find(e => e.id === empleadoSeleccionado);
-  
-  // Obtener días de vacaciones disponibles (con valor por defecto 15)
-  const diasVacacionDisponibles = empleadoActual?.dias_vacacion_disponibles ?? 15;
+  const puedeAprobar = puedeAprobarPermisos();
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
@@ -49,6 +48,39 @@ export default function PermisosPage() {
       otro: '📝 Otro',
     };
     return tipos[tipo] || tipo;
+  };
+
+  // ✅ Función para obtener el nombre del empleado
+  const getNombreEmpleado = (permiso: any) => {
+    // Si viene en el objeto empleado
+    if (permiso.empleado?.nombre_completo) {
+      return permiso.empleado.nombre_completo;
+    }
+    // Si tenemos el empleado_id, buscar en la lista de empleados
+    if (permiso.empleado_id && empleados.length > 0) {
+      const emp = empleados.find(e => e.id === permiso.empleado_id);
+      if (emp) return emp.nombre_completo;
+    }
+    return 'Cargando...';
+  };
+
+  // ✅ Función para obtener el cargo del empleado
+  const getCargoEmpleado = (permiso: any) => {
+    if (permiso.empleado?.cargo) {
+      return permiso.empleado.cargo;
+    }
+    if (permiso.empleado_id && empleados.length > 0) {
+      const emp = empleados.find(e => e.id === permiso.empleado_id);
+      if (emp) return emp.cargo;
+    }
+    return null;
+  };
+
+  const handleEliminar = async (id: string) => {
+    const result = await eliminarPermiso(id);
+    if (result.success) {
+      setConfirmarEliminar(null);
+    }
   };
 
   if (loadingEmpleados) {
@@ -95,15 +127,6 @@ export default function PermisosPage() {
         </div>
       </div>
 
-      {/* Advertencia si no hay empleado seleccionado */}
-      {!empleadoSeleccionado && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-          <p className="text-sm text-amber-700">
-            ⚠️ Selecciona un empleado para solicitar un permiso
-          </p>
-        </div>
-      )}
-
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3 bg-white rounded-2xl p-4 border border-slate-200">
         <select
@@ -146,14 +169,12 @@ export default function PermisosPage() {
       ) : permisos.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
           <p className="text-slate-500">No hay solicitudes de permiso</p>
-          {empleadoSeleccionado && (
-            <button
-              onClick={() => setMostrarModalSolicitud(true)}
-              className="mt-3 text-blue-600 text-sm font-bold"
-            >
-              + Crear primera solicitud
-            </button>
-          )}
+          <button
+            onClick={() => setMostrarModalSolicitud(true)}
+            className="mt-3 text-blue-600 text-sm font-bold"
+          >
+            + Crear primera solicitud
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -172,12 +193,17 @@ export default function PermisosPage() {
               <tbody>
                 {permisos.map((perm) => {
                   const estadoBadge = getEstadoBadge(perm.estado);
+                  const nombreEmpleado = getNombreEmpleado(perm);
+                  const cargoEmpleado = getCargoEmpleado(perm);
+                  
                   return (
                     <tr key={perm.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div>
-                          <p className="font-bold text-slate-800 text-sm">{perm.empleado?.nombre_completo || '—'}</p>
-                          <p className="text-[10px] text-slate-400">{perm.empleado?.cargo || '—'}</p>
+                          <p className="font-bold text-slate-800 text-sm">{nombreEmpleado}</p>
+                          {cargoEmpleado && (
+                            <p className="text-[10px] text-slate-400">{cargoEmpleado}</p>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -185,14 +211,14 @@ export default function PermisosPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-xs text-slate-600">
-                          {perm.fecha_inicio ? new Date(perm.fecha_inicio).toLocaleDateString() : '—'}
+                          {new Date(perm.fecha_inicio).toLocaleDateString()}
                         </p>
                         <p className="text-[9px] text-slate-400">
-                          → {perm.fecha_fin ? new Date(perm.fecha_fin).toLocaleDateString() : '—'}
+                          → {new Date(perm.fecha_fin).toLocaleDateString()}
                         </p>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="font-bold text-slate-700">{perm.dias_solicitados || 0}</span>
+                        <span className="font-bold text-slate-700">{perm.dias_solicitados}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${estadoBadge.color}`}>
@@ -211,6 +237,13 @@ export default function PermisosPage() {
                           >
                             <Eye size={16} />
                           </button>
+                          <button
+                            onClick={() => setConfirmarEliminar(perm.id)}
+                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -222,12 +255,42 @@ export default function PermisosPage() {
         </div>
       )}
 
+      {/* Modal de confirmación de eliminación */}
+      {confirmarEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={28} className="text-red-600" />
+              </div>
+              <p className="text-slate-800 font-medium mb-4">
+                ¿Eliminar esta solicitud de permiso?
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setConfirmarEliminar(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleEliminar(confirmarEliminar)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-bold"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de solicitud */}
       {mostrarModalSolicitud && empleadoSeleccionado && empleadoActual && (
         <SolicitarPermisoModal
           empleadoId={empleadoSeleccionado}
           empleadoNombre={empleadoActual.nombre_completo}
-          diasVacacionDisponibles={diasVacacionDisponibles}
+          diasVacacionDisponibles={empleadoActual.dias_vacacion_disponibles}
           onSave={crearPermiso}
           onClose={() => setMostrarModalSolicitud(false)}
         />
