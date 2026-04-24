@@ -1,6 +1,4 @@
-// app/api/rrhh/empleados/route.ts - VERSIÓN CORREGIDA
-// ELIMINA la sección que crea el perfil automáticamente
-
+// app/api/rrhh/empleados/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -79,6 +77,7 @@ export async function POST(request: NextRequest) {
     
     console.log('📥 Datos recibidos:', body);
     
+    // Validaciones básicas
     if (!body.rut) {
       return NextResponse.json({ error: 'El RUT es obligatorio' }, { status: 400 });
     }
@@ -122,7 +121,7 @@ export async function POST(request: NextRequest) {
       cargo: body.cargo || null,
       area: body.area || null,
       departamento: body.departamento || null,
-      jefe_directo_id: null,
+      jefe_directo_id: body.jefe_directo_id || null,
       fecha_ingreso: body.fecha_ingreso,
       fecha_termino: body.fecha_termino || null,
       tipo_contrato: body.tipo_contrato || null,
@@ -145,10 +144,12 @@ export async function POST(request: NextRequest) {
       contacto_emergencia_nombre: body.contacto_emergencia_nombre || null,
       contacto_emergencia_telefono: body.contacto_emergencia_telefono || null,
       contacto_emergencia_parentesco: body.contacto_emergencia_parentesco || null,
+      es_jefe: body.es_jefe === true || body.es_jefe === 'true',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     
+    // Eliminar propiedades undefined
     Object.keys(nuevoEmpleado).forEach(key => {
       if (nuevoEmpleado[key] === undefined) {
         delete nuevoEmpleado[key];

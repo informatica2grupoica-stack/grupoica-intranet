@@ -1,8 +1,8 @@
 // components/rrhh/EmpleadoForm.tsx
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Save, X } from 'lucide-react';
+import { Loader2, Save, X, Users, UserCheck } from 'lucide-react';
 
 interface EmpleadoFormProps {
   empleado?: any;
@@ -13,6 +13,8 @@ interface EmpleadoFormProps {
 export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [empleadosJefes, setEmpleadosJefes] = useState<any[]>([]);
+  const [cargandoJefes, setCargandoJefes] = useState(false);
 
   const [form, setForm] = useState({
     rut: empleado?.rut || '',
@@ -51,36 +53,54 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
     contacto_emergencia_nombre: empleado?.contacto_emergencia_nombre || '',
     contacto_emergencia_telefono: empleado?.contacto_emergencia_telefono || '',
     contacto_emergencia_parentesco: empleado?.contacto_emergencia_parentesco || '',
+    es_jefe: empleado?.es_jefe || false,
   });
 
-  // ✅ Función para limpiar datos antes de enviar
+  // Cargar empleados que son jefes para el selector
+  useEffect(() => {
+    const cargarJefes = async () => {
+      setCargandoJefes(true);
+      try {
+        const response = await fetch('/api/rrhh/empleados?limit=1000');
+        const result = await response.json();
+        if (result.success) {
+          // Filtrar empleados que son jefes y que no son el mismo empleado
+          const jefes = result.data.filter((emp: any) => 
+            emp.es_jefe === true && emp.id !== empleado?.id
+          );
+          setEmpleadosJefes(jefes);
+        }
+      } catch (error) {
+        console.error('Error cargando jefes:', error);
+      } finally {
+        setCargandoJefes(false);
+      }
+    };
+    cargarJefes();
+  }, [empleado?.id]);
+
+  // Función para limpiar datos antes de enviar
   const limpiarDatosParaEnviar = (datos: any) => {
     const datosLimpios: any = {};
     
     Object.keys(datos).forEach(key => {
       const valor = datos[key];
       
-      // ✅ Convertir strings vacíos a null
       if (valor === '' || valor === 'null') {
         datosLimpios[key] = null;
       } 
-      // ✅ Mantener números
       else if (typeof valor === 'number') {
         datosLimpios[key] = valor;
       }
-      // ✅ Mantener booleanos
       else if (typeof valor === 'boolean') {
         datosLimpios[key] = valor;
       }
-      // ✅ Mantener strings con contenido
       else if (typeof valor === 'string' && valor.trim() !== '') {
         datosLimpios[key] = valor;
       }
-      // ✅ Valores válidos
       else if (valor !== undefined && valor !== null) {
         datosLimpios[key] = valor;
       }
-      // ✅ Todo lo demás va como null
       else {
         datosLimpios[key] = null;
       }
@@ -93,7 +113,6 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
     e.preventDefault();
     setError(null);
 
-    // Validaciones básicas
     if (!form.rut) {
       setError('El RUT es obligatorio');
       return;
@@ -107,10 +126,8 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
       return;
     }
 
-    // ✅ Limpiar datos antes de enviar
     const datosLimpios = limpiarDatosParaEnviar(form);
     
-    // ✅ Asegurar que jefe_directo_id sea null si está vacío
     if (!datosLimpios.jefe_directo_id || datosLimpios.jefe_directo_id === '') {
       datosLimpios.jefe_directo_id = null;
     }
@@ -296,10 +313,50 @@ export default function EmpleadoForm({ empleado, onSubmit, loading }: EmpleadoFo
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Departamento</label>
             <input value={form.departamento} onChange={e => setForm({...form, departamento: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
           </div>
+          
+          {/* ✅ SELECTOR DE JEFE DIRECTO - MEJORADO */}
           <div>
-            <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Jefe Directo ID</label>
-            <input value={form.jefe_directo_id} onChange={e => setForm({...form, jefe_directo_id: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" placeholder="UUID del jefe" />
+            <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1 flex items-center gap-2">
+              <UserCheck size={12} />
+              Jefe Directo
+            </label>
+            <select
+              value={form.jefe_directo_id || ''}
+              onChange={(e) => setForm({ ...form, jefe_directo_id: e.target.value || null })}
+              className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
+              disabled={cargandoJefes}
+            >
+              <option value="">Sin jefe asignado</option>
+              {empleadosJefes.map((jefe) => (
+                <option key={jefe.id} value={jefe.id}>
+                  {jefe.nombre_completo} - {jefe.cargo || 'Sin cargo'} {jefe.area ? `(${jefe.area})` : ''}
+                </option>
+              ))}
+            </select>
+            {cargandoJefes && (
+              <p className="text-[8px] text-slate-400 mt-1">Cargando jefes disponibles...</p>
+            )}
+            {empleadosJefes.length === 0 && !cargandoJefes && (
+              <p className="text-[8px] text-amber-500 mt-1">
+                No hay empleados marcados como jefes. Marca "Es Jefe" en algún empleado primero.
+              </p>
+            )}
           </div>
+
+          {/* ✅ CHECKBOX: ¿ES JEFE? - NUEVO */}
+          <div className="flex items-center gap-3 mt-2">
+            <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.es_jefe}
+                onChange={(e) => setForm({ ...form, es_jefe: e.target.checked })}
+                className="rounded border-slate-300 w-4 h-4"
+              />
+              <Users size={12} />
+              Es Jefe / Encargado de Área
+            </label>
+          </div>
+
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Fecha Ingreso *</label>
             <input type="date" value={form.fecha_ingreso} onChange={e => setForm({...form, fecha_ingreso: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" required />
