@@ -57,18 +57,24 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const { data: permisoActual } = await supabase
+    console.log('📥 Actualizando permiso:', id, body);
+
+    // Obtener el permiso actual
+    const { data: permisoActual, error: findError } = await supabase
       .from('permisos_empleados')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (!permisoActual) {
+    if (findError || !permisoActual) {
       return NextResponse.json({ error: 'Permiso no encontrado' }, { status: 404 });
     }
 
     // Si se está aprobando y es vacaciones, descontar días
-    if (body.estado === 'aprobado' && permisoActual.tipo === 'vacaciones' && permisoActual.estado !== 'aprobado') {
+    if (body.estado === 'aprobado' && 
+        permisoActual.tipo === 'vacaciones' && 
+        permisoActual.estado !== 'aprobado') {
+      
       const { data: empleado } = await supabase
         .from('empleados')
         .select('dias_vacacion_disponibles')
@@ -88,9 +94,9 @@ export async function PUT(
       .from('permisos_empleados')
       .update({
         estado: body.estado,
-        aprobado_por: body.aprobado_por,
+        aprobado_por: body.aprobado_por || null,
         fecha_aprobacion: new Date().toISOString(),
-        comentarios_aprobador: body.comentarios_aprobador,
+        comentarios_aprobador: body.comentarios_aprobador || null,
       })
       .eq('id', id)
       .select()

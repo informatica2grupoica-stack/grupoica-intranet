@@ -52,7 +52,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error en query:', error);
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
@@ -78,6 +81,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    console.log('📥 Datos recibidos:', body);
+
     if (!body.empleado_id) {
       return NextResponse.json({ error: 'El empleado es obligatorio' }, { status: 400 });
     }
@@ -98,11 +103,15 @@ export async function POST(request: NextRequest) {
 
     // Si es vacaciones, verificar días disponibles
     if (body.tipo === 'vacaciones') {
-      const { data: empleado } = await supabase
+      const { data: empleado, error: empError } = await supabase
         .from('empleados')
         .select('dias_vacacion_disponibles')
         .eq('id', body.empleado_id)
         .single();
+
+      if (empError) {
+        console.error('Error obteniendo empleado:', empError);
+      }
 
       if (empleado && empleado.dias_vacacion_disponibles < diasSolicitados) {
         return NextResponse.json({
@@ -112,11 +121,17 @@ export async function POST(request: NextRequest) {
     }
 
     const nuevoPermiso = {
-      ...body,
+      empleado_id: body.empleado_id,
+      tipo: body.tipo,
+      fecha_inicio: body.fecha_inicio,
+      fecha_fin: body.fecha_fin,
       dias_solicitados: diasSolicitados,
+      motivo: body.motivo || null,
       estado: 'pendiente',
       created_at: new Date().toISOString(),
     };
+
+    console.log('📤 Datos a insertar:', nuevoPermiso);
 
     const { data, error } = await supabase
       .from('permisos_empleados')
@@ -124,11 +139,14 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error al insertar:', error);
+      throw error;
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
-    console.error('Error en POST /api/rrhh/permisos:', error);
+    console.error('❌ Error en POST /api/rrhh/permisos:', error);
     return NextResponse.json(
       { error: error.message || 'Error al crear solicitud' },
       { status: 500 }

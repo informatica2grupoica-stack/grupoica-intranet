@@ -85,7 +85,9 @@ export function usePermisos() {
 
       const result = await response.json();
 
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al crear permiso');
+      }
 
       await cargarPermisos(pagination.current_page);
 
@@ -180,9 +182,9 @@ export function usePermisos() {
 
   useEffect(() => {
     cargarPermisos(1);
-  }, [filtros]);
+  }, [filtros.empleadoId, filtros.estado, filtros.tipo]);
 
- return {
+  return {
     permisos,
     loading,
     error,
@@ -193,7 +195,7 @@ export function usePermisos() {
     aprobarPermiso,
     rechazarPermiso,
     eliminarPermiso,
-    cambiarPagina,  // ← Asegurar que está incluido
+    cambiarPagina,
     cargarPermisos,
   };
 }
