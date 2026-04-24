@@ -1,50 +1,39 @@
 // app/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { 
   Users, ClipboardCheck, Activity, ShieldCheck, Calendar, Loader2, 
-  MessageSquare, ArrowRight, ExternalLink, Bell, 
-  Receipt, AlertTriangle, TrendingUp, CheckCircle2, Cake, 
-  FileText, Clock, UserCheck, Briefcase, Award
+  MessageSquare, ArrowRight, Bell, AlertTriangle, CheckCircle2, 
+  Cake, Clock, UserCheck, Briefcase, FileText, Home, TrendingUp,
+  Star, Award, Coffee, Zap, Eye
 } from "lucide-react";
+
+// Componentes de Recharts
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, PieChart, Pie
+  BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
-
-// --- COMPONENTES DE ICONOS SOCIALES ---
-const FacebookIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>);
-const InstagramIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>);
-const TikTokIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>);
 
 export default function HomePage() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ 
-    usuarios: 0, 
-    tareasPendientes: 0, 
-    chatsSinLeer: 0,
-    ordenesEmitidas: 0,
-    ordenesFacturadas: 0,
-    montoPendiente: 0,
-    listaEmitidas: [] as any[],
-    dataGrafico: [] as any[]
-  });
+  const [userRole, setUserRole] = useState<string>("");
+  const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState("");
+  const [perfilId, setPerfilId] = useState("");
   
-  // ✅ Nuevos estados para RRHH
-  const [rrhhStats, setRrhhStats] = useState({
-    totalEmpleados: 0,
-    empleadosActivos: 0,
-    vacacionesProximas: [] as any[],
-    cumpleañosProximos: [] as any[],
-    permisosPendientes: 0,
-    contratosPorVencer: 0,
-    solicitudesPendientes: [] as any[]
-  });
+  // Datos según rol
+  const [misTareas, setMisTareas] = useState<any[]>([]);
+  const [misMensajes, setMisMensajes] = useState<number>(0);
+  const [misAsistencias, setMisAsistencias] = useState({ presente: 0, ausente: 0, tarde: 0 });
+  const [misPermisos, setMisPermisos] = useState<any[]>([]);
+  const [misCapacitaciones, setMisCapacitaciones] = useState<any[]>([]);
+  const [proximosCumpleaños, setProximosCumpleaños] = useState<any[]>([]);
+  const [estadisticasEquipo, setEstadisticasEquipo] = useState<any>(null);
   
   const [fechaActual, setFechaActual] = useState("");
 
@@ -52,460 +41,545 @@ export default function HomePage() {
     setIsMounted(true);
     const opciones: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     setFechaActual(new Date().toLocaleDateString('es-ES', opciones));
-    cargarDatosBase();
-    cargarDatosRRHH();
-    
-    const setupSubscriptions = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const tareasSub = supabase.channel('cambios-tareas')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas' }, () => fetchTareasCount())
-          .subscribe();
-
-        const mensajesSub = supabase.channel('cambios-mensajes')
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, () => fetchMensajesCount())
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(tareasSub);
-          supabase.removeChannel(mensajesSub);
-        };
-    };
-    setupSubscriptions();
+    cargarDatosUsuario();
   }, []);
 
-  const fetchTareasCount = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { count } = await supabase.from('tareas').select('*', { count: 'exact', head: true }).eq('asignado_a', session.user.id).eq('estado', 'pendiente');
-      setStats(prev => ({ ...prev, tareasPendientes: count || 0 }));
-    }
-  };
-
-  const fetchMensajesCount = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { count } = await supabase.from('mensajes').select('*', { count: 'exact', head: true }).eq('receptor_id', session.user.id).eq('leido', false);
-      setStats(prev => ({ ...prev, chatsSinLeer: count || 0 }));
-    }
-  };
-
-  const cargarDatosRRHH = async () => {
-    try {
-      // Obtener empleados
-      const { data: empleados } = await supabase
-        .from('empleados')
-        .select('*')
-        .eq('activo', true);
-      
-      const total = empleados?.length || 0;
-      const activos = empleados?.filter(e => e.estado === 'activo').length || 0;
-      
-      // Próximos cumpleaños
-      const hoy = new Date();
-      const proximosCumpleaños = empleados?.filter(e => e.fecha_nacimiento)
-        .map(e => {
-          const fechaNac = new Date(e.fecha_nacimiento);
-          const proximoCumple = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
-          if (proximoCumple < hoy) {
-            proximoCumple.setFullYear(proximoCumple.getFullYear() + 1);
-          }
-          const diasFaltantes = Math.ceil((proximoCumple.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-          return { ...e, diasFaltantes };
-        })
-        .filter(e => e.diasFaltantes <= 30)
-        .sort((a, b) => a.diasFaltantes - b.diasFaltantes)
-        .slice(0, 5) || [];
-      
-      // Próximas vacaciones (permisos aprobados)
-      const { data: permisosAprobados } = await supabase
-        .from('permisos_empleados')
-        .select('*, empleado:empleados(nombre_completo, cargo)')
-        .eq('estado', 'aprobado')
-        .eq('tipo', 'vacaciones')
-        .gte('fecha_inicio', new Date().toISOString().split('T')[0])
-        .order('fecha_inicio', { ascending: true })
-        .limit(5);
-      
-      // Solicitudes pendientes
-      const { count: solicitudesPendientes } = await supabase
-        .from('permisos_empleados')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'pendiente');
-      
-      // Contratos por vencer (próximos 30 días)
-      const fechaLimite = new Date();
-      fechaLimite.setDate(fechaLimite.getDate() + 30);
-      const { count: contratosVencer } = await supabase
-        .from('contratos_empleados')
-        .select('*', { count: 'exact', head: true })
-        .eq('vigente', true)
-        .lte('fecha_fin', fechaLimite.toISOString().split('T')[0]);
-      
-      setRrhhStats({
-        totalEmpleados: total,
-        empleadosActivos: activos,
-        vacacionesProximas: permisosAprobados || [],
-        cumpleañosProximos: proximosCumpleaños,
-        permisosPendientes: solicitudesPendientes || 0,
-        contratosPorVencer: contratosVencer || 0,
-        solicitudesPendientes: permisosAprobados || []
-      });
-    } catch (error) {
-      console.error('Error cargando datos RRHH:', error);
-    }
-  };
-
-  const cargarDatosBase = async () => {
+  const cargarDatosUsuario = async () => {
     try {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push("/login"); return; }
-
-      const [resUsers, resObuma] = await Promise.all([
-        supabase.from('perfiles').select('*', { count: 'exact', head: true }),
-        fetch('/api/obuma/oc').then(r => r.json()).catch(() => ({ data: [] }))
-      ]);
-
-      let emitidasArr = [];
-      let facturadasCount = 0;
-      let sumaMontoPendiente = 0;
-      let chartData: any[] = [];
-
-      if (resObuma?.data && Array.isArray(resObuma.data)) {
-        emitidasArr = resObuma.data.filter((oc: any) => oc.compra_oc_estado === 'EMITIDA' || oc.compra_oc_estado === 'PENDIENTE');
-        facturadasCount = resObuma.data.filter((oc: any) => oc.compra_oc_estado === 'FACTURADA').length;
-        sumaMontoPendiente = emitidasArr.reduce((acc: number, curr: any) => acc + (Number(curr.compra_oc_total) || 0), 0);
-
-        chartData = resObuma.data.slice(0, 10).reverse().map((oc: any) => ({
-          name: `F-${oc.compra_oc_folio}`,
-          valor: Number(oc.compra_oc_total) || 0
-        }));
+      if (!session) {
+        router.push("/login");
+        return;
       }
 
-      setStats(prev => ({
-        ...prev,
-        usuarios: resUsers.count || 0,
-        ordenesEmitidas: emitidasArr.length,
-        ordenesFacturadas: facturadasCount,
-        montoPendiente: sumaMontoPendiente,
-        listaEmitidas: emitidasArr,
-        dataGrafico: chartData
-      }));
+      // Obtener perfil del usuario
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single();
 
-      fetchTareasCount();
-      fetchMensajesCount();
-    } catch (err) {
-      console.error("Error en sincronización:", err);
+      if (!perfil) {
+        router.push("/login");
+        return;
+      }
+
+      setUserRole(perfil.rol);
+      setUserName(perfil.nombre);
+      setUserId(session.user.id);
+      setPerfilId(perfil.id);
+
+      // Cargar datos según el rol
+      if (perfil.rol === 'admin' || perfil.rol === 'superuser' || perfil.rol === 'rrhh') {
+        await cargarDatosAdmin();
+      } else if (perfil.rol === 'jefe') {
+        await cargarDatosJefe(perfil.id);
+      } else {
+        await cargarDatosUsuarioNormal(perfil.id);
+      }
+      
+    } catch (error) {
+      console.error("Error cargando datos:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const eficienciaOC = useMemo(() => {
-    const total = stats.ordenesFacturadas + stats.ordenesEmitidas;
-    return total === 0 ? 0 : Math.round((stats.ordenesFacturadas / total) * 100);
-  }, [stats.ordenesFacturadas, stats.ordenesEmitidas]);
+  // 📋 DATOS PARA USUARIO NORMAL
+  const cargarDatosUsuarioNormal = async (perfilId: string) => {
+    // Mis tareas pendientes
+    const { data: tareas } = await supabase
+      .from('tareas')
+      .select('*')
+      .eq('asignado_a', perfilId)
+      .eq('estado', 'pendiente')
+      .order('fecha_limite', { ascending: true })
+      .limit(5);
+    setMisTareas(tareas || []);
 
-  if (loading || !isMounted) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
-      <Loader2 className="w-12 h-12 animate-spin text-[#00338d] mb-4" />
-      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Iniciando Radar ICA...</p>
-    </div>
-  );
+    // Mis mensajes no leídos
+    const { count: mensajes } = await supabase
+      .from('mensajes')
+      .select('*', { count: 'exact', head: true })
+      .eq('receptor_id', userId)
+      .eq('leido', false);
+    setMisMensajes(mensajes || 0);
 
-  return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 space-y-8">
-      
-      {/* HEADER */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-slate-100 pb-8">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-5xl font-black text-[#00338d] tracking-tighter uppercase italic">
-              DASHBOARD <span className="text-orange-600">ICA</span>
+    // Mis asistencias del mes
+    const hoy = new Date();
+    const mes = hoy.getMonth() + 1;
+    const anio = hoy.getFullYear();
+    const startDate = `${anio}-${mes.toString().padStart(2, '0')}-01`;
+    const endDate = new Date(anio, mes, 0).toISOString().split('T')[0];
+    
+    const { data: asistencias } = await supabase
+      .from('asistencias')
+      .select('estado')
+      .eq('empleado_id', perfilId)
+      .gte('fecha', startDate)
+      .lte('fecha', endDate);
+    
+    setMisAsistencias({
+      presente: asistencias?.filter(a => a.estado === 'presente').length || 0,
+      ausente: asistencias?.filter(a => a.estado === 'ausente').length || 0,
+      tarde: asistencias?.filter(a => a.estado === 'tarde').length || 0,
+    });
+
+    // Mis permisos
+    const { data: permisos } = await supabase
+      .from('permisos_empleados')
+      .select('*')
+      .eq('empleado_id', perfilId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    setMisPermisos(permisos || []);
+
+    // Mis capacitaciones
+    const { data: capacitaciones } = await supabase
+      .from('empleados_capacitaciones')
+      .select('*, capacitacion:capacitaciones(*)')
+      .eq('empleado_id', perfilId)
+      .eq('completado', false)
+      .limit(5);
+    setMisCapacitaciones(capacitaciones || []);
+  };
+
+  // 👔 DATOS PARA JEFE
+  const cargarDatosJefe = async (perfilId: string) => {
+    // Primero, obtener los empleados a cargo (que tienen este jefe)
+    const { data: empleadosACargo } = await supabase
+      .from('empleados')
+      .select('id, nombre_completo, cargo')
+      .eq('jefe_directo_id', perfilId);
+    
+    const idsEquipo = empleadosACargo?.map(e => e.id) || [];
+    
+    // Estadísticas del equipo
+    const { data: asistenciasEquipo } = await supabase
+      .from('asistencias')
+      .select('estado, empleado_id')
+      .in('empleado_id', idsEquipo)
+      .gte('fecha', new Date().toISOString().split('T')[0]);
+    
+    const { data: permisosPendientes } = await supabase
+      .from('permisos_empleados')
+      .select('*, empleado:empleados(nombre_completo)')
+      .in('empleado_id', idsEquipo)
+      .eq('estado', 'pendiente');
+    
+    setEstadisticasEquipo({
+      total: empleadosACargo?.length || 0,
+      presentes: asistenciasEquipo?.filter(a => a.estado === 'presente').length || 0,
+      permisosPendientes: permisosPendientes?.length || 0,
+      permisos: permisosPendientes || []
+    });
+    
+    // También cargar datos personales
+    await cargarDatosUsuarioNormal(perfilId);
+  };
+
+  // 📊 DATOS PARA ADMIN/RRHH
+  const cargarDatosAdmin = async () => {
+    // Estadísticas generales de empleados
+    const { data: empleados } = await supabase
+      .from('empleados')
+      .select('estado, cargo, area')
+      .eq('activo', true);
+    
+    const { data: permisosPendientes } = await supabase
+      .from('permisos_empleados')
+      .select('*, empleado:empleados(nombre_completo, cargo)')
+      .eq('estado', 'pendiente')
+      .limit(5);
+    
+    const { data: cumpleaños } = await supabase
+      .from('empleados')
+      .select('nombre_completo, cargo, fecha_nacimiento')
+      .eq('activo', true);
+    
+    // Próximos cumpleaños (30 días)
+    const hoy = new Date();
+    const proxCumpleaños = cumpleaños?.filter(e => e.fecha_nacimiento)
+      .map(e => {
+        const fechaNac = new Date(e.fecha_nacimiento);
+        const prox = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
+        if (prox < hoy) prox.setFullYear(prox.getFullYear() + 1);
+        const dias = Math.ceil((prox.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        return { ...e, diasFaltantes: dias };
+      })
+      .filter(e => e.diasFaltantes <= 30)
+      .sort((a, b) => a.diasFaltantes - b.diasFaltantes)
+      .slice(0, 5) || [];
+    
+    setProximosCumpleaños(proxCumpleaños);
+    setMisPermisos(permisosPendientes || []);
+    
+    setEstadisticasEquipo({
+      total: empleados?.length || 0,
+      porArea: empleados?.reduce((acc: any, e) => {
+        if (e.area) acc[e.area] = (acc[e.area] || 0) + 1;
+        return acc;
+      }, {})
+    });
+  };
+
+  if (loading || !isMounted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
+        <Loader2 className="w-12 h-12 animate-spin text-[#00338d] mb-4" />
+        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Cargando tu espacio...</p>
+      </div>
+    );
+  }
+
+  // 👤 RENDER PARA USUARIO NORMAL
+  if (userRole === 'user') {
+    return (
+      <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-black text-slate-800">
+              Hola, <span className="text-blue-600">{userName}</span>
             </h1>
-            <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter animate-pulse">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> Sincronizado
+            <p className="text-slate-400 text-sm mt-1">{fechaActual}</p>
+          </div>
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-2xl text-white shadow-lg">
+            <UserCheck size={24} />
+          </div>
+        </div>
+
+        {/* Tarjetas rápidas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div onClick={() => router.push('/tareas')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
+            <ClipboardCheck className="text-blue-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{misTareas.length}</p>
+            <p className="text-xs text-slate-500">Tareas pendientes</p>
+          </div>
+          
+          <div onClick={() => router.push('/chat')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
+            <MessageSquare className="text-emerald-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{misMensajes}</p>
+            <p className="text-xs text-slate-500">Mensajes nuevos</p>
+          </div>
+          
+          <div onClick={() => router.push('/rrhh/asistencias')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
+            <Calendar className="text-amber-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{misAsistencias.presente}</p>
+            <p className="text-xs text-slate-500">Asistencias este mes</p>
+          </div>
+          
+          <div onClick={() => router.push('/rrhh/permisos')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all">
+            <Bell className="text-rose-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{misPermisos.filter(p => p.estado === 'pendiente').length}</p>
+            <p className="text-xs text-slate-500">Permisos pendientes</p>
+          </div>
+        </div>
+
+        {/* Mis Tareas */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <ClipboardCheck size={18} className="text-blue-500" />
+            Mis Tareas Pendientes
+          </h2>
+          {misTareas.length > 0 ? (
+            <div className="space-y-3">
+              {misTareas.map((tarea) => (
+                <div key={tarea.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-slate-800">{tarea.titulo}</p>
+                    <p className="text-xs text-slate-400">Vence: {new Date(tarea.fecha_limite).toLocaleDateString()}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    tarea.prioridad === 'alta' ? 'bg-red-100 text-red-600' :
+                    tarea.prioridad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                  }`}>
+                    {tarea.prioridad}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-400">
+              <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
+              <p>No tienes tareas pendientes 🎉</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mis Permisos Recientes */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Clock size={18} className="text-amber-500" />
+            Mis Solicitudes Recientes
+          </h2>
+          {misPermisos.length > 0 ? (
+            <div className="space-y-3">
+              {misPermisos.slice(0, 5).map((permiso) => (
+                <div key={permiso.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-slate-800">
+                      {permiso.tipo === 'vacaciones' ? '🏖️ Vacaciones' : '📋 Permiso'}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {new Date(permiso.fecha_inicio).toLocaleDateString()} - {new Date(permiso.fecha_fin).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    permiso.estado === 'aprobado' ? 'bg-emerald-100 text-emerald-600' :
+                    permiso.estado === 'rechazado' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                  }`}>
+                    {permiso.estado === 'aprobado' ? 'Aprobado' : permiso.estado === 'rechazado' ? 'Rechazado' : 'Pendiente'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-400">
+              <Clock size={32} className="mx-auto mb-2 opacity-30" />
+              <p>No hay solicitudes recientes</p>
+            </div>
+          )}
+        </div>
+
+        {/* Próximas Capacitaciones */}
+        {misCapacitaciones.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Star size={18} className="text-purple-500" />
+              Mis Capacitaciones Pendientes
+            </h2>
+            <div className="space-y-3">
+              {misCapacitaciones.map((cap) => (
+                <div key={cap.id} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-slate-800">{cap.capacitacion?.nombre}</p>
+                    <p className="text-xs text-slate-400">{cap.capacitacion?.proveedor}</p>
+                  </div>
+                  <span className="text-xs text-purple-600">{cap.capacitacion?.horas_total} horas</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex items-center gap-4 mt-2">
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-[0.2em]">Gestión de Operaciones</p>
+        )}
+      </div>
+    );
+  }
+
+  // 👔 RENDER PARA JEFE
+  if (userRole === 'jefe') {
+    return (
+      <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-black text-slate-800">
+              Panel de <span className="text-blue-600">Jefatura</span>
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">Bienvenido, {userName}</p>
+          </div>
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-2xl text-white shadow-lg">
+            <Briefcase size={24} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex flex-col items-end mr-4">
-             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sistema Operativo</span>
-             <span className="text-xs font-bold text-slate-700">{fechaActual}</span>
+
+        {/* Resumen del equipo */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <Users className="text-blue-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{estadisticasEquipo?.total || 0}</p>
+            <p className="text-xs text-slate-500">Miembros del equipo</p>
           </div>
-          <button onClick={() => { cargarDatosBase(); cargarDatosRRHH(); }} className="bg-white border border-slate-200 p-3 rounded-2xl hover:bg-slate-50 transition-all">
-            <Activity size={18} className="text-blue-600" />
-          </button>
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <UserCheck className="text-emerald-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{estadisticasEquipo?.presentes || 0}</p>
+            <p className="text-xs text-slate-500">Presentes hoy</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer" onClick={() => router.push('/rrhh/permisos')}>
+            <Bell className="text-rose-500 mb-2" size={24} />
+            <p className="text-2xl font-black text-slate-800">{estadisticasEquipo?.permisosPendientes || 0}</p>
+            <p className="text-xs text-slate-500">Permisos pendientes</p>
+          </div>
+        </div>
+
+        {/* Mis datos personales */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <ClipboardCheck size={18} className="text-blue-500" />
+              Mis Tareas Pendientes
+            </h2>
+            {misTareas.length > 0 ? (
+              misTareas.map((tarea) => (
+                <div key={tarea.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2">
+                  <span className="text-sm">{tarea.titulo}</span>
+                  <span className="text-xs text-amber-600">{new Date(tarea.fecha_limite).toLocaleDateString()}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-slate-400 py-4">Sin tareas pendientes</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Clock size={18} className="text-amber-500" />
+              Mis Solicitudes Recientes
+            </h2>
+            {misPermisos.length > 0 ? (
+              misPermisos.slice(0, 5).map((permiso) => (
+                <div key={permiso.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2">
+                  <span className="text-sm">{permiso.tipo}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    permiso.estado === 'aprobado' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+                  }`}>
+                    {permiso.estado}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-slate-400 py-4">Sin solicitudes</p>
+            )}
+          </div>
+        </div>
+
+        {/* Permisos del equipo pendientes */}
+        {estadisticasEquipo?.permisos?.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Bell size={18} className="text-rose-500" />
+              Solicitudes de Permiso del Equipo
+            </h2>
+            <div className="space-y-3">
+              {estadisticasEquipo.permisos.map((permiso: any) => (
+                <div key={permiso.id} className="flex justify-between items-center p-3 bg-rose-50 rounded-xl">
+                  <div>
+                    <p className="font-medium text-slate-800">{permiso.empleado?.nombre_completo}</p>
+                    <p className="text-xs text-slate-500">{permiso.tipo} · {permiso.dias_solicitados} días</p>
+                  </div>
+                  <button 
+                    onClick={() => router.push('/rrhh/permisos')}
+                    className="text-xs text-blue-600 font-medium"
+                  >
+                    Revisar →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 📊 RENDER PARA ADMIN / RRHH / SUPERUSER
+  return (
+    <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8">
+      
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800">
+            Dashboard <span className="text-blue-600">RRHH</span>
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">Visión general del talento humano • {fechaActual}</p>
+        </div>
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-2xl text-white shadow-lg">
+          <ShieldCheck size={24} />
         </div>
       </div>
 
-      {/* MÉTRICAS PRINCIPALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-orange-50 rounded-2xl text-orange-600"><TrendingUp size={20}/></div>
-            <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">+{eficienciaOC}%</span>
-          </div>
-          <p className="text-4xl font-black text-slate-900 tracking-tighter">{eficienciaOC}%</p>
-          <p className="text-[10px] font-black text-slate-400 uppercase mt-1 tracking-widest">Eficiencia OC</p>
+      {/* Tarjetas principales */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <Users className="text-blue-500 mb-2" size={24} />
+          <p className="text-2xl font-black text-slate-800">{estadisticasEquipo?.total || 0}</p>
+          <p className="text-xs text-slate-500">Empleados Activos</p>
         </div>
-
-        <div onClick={() => router.push('/tareas')} className="bg-[#00338d] p-8 rounded-[2.5rem] shadow-xl text-white cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden">
-          <ClipboardCheck className="absolute right-[-10px] top-[-10px] w-24 h-24 text-white/10 -rotate-12" />
-          <p className="text-4xl font-black tracking-tighter">{stats.tareasPendientes}</p>
-          <p className="text-[10px] font-black text-blue-200 uppercase mt-1 tracking-widest">Tareas</p>
-          <div className="mt-6 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest">
-            Gestionar <ArrowRight size={12}/>
-          </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer" onClick={() => router.push('/rrhh/permisos')}>
+          <Bell className="text-amber-500 mb-2" size={24} />
+          <p className="text-2xl font-black text-slate-800">{misPermisos.length}</p>
+          <p className="text-xs text-slate-500">Permisos pendientes</p>
         </div>
-
-        <div onClick={() => router.push('/chat')} className={`p-8 rounded-[2.5rem] shadow-xl cursor-pointer transition-all ${stats.chatsSinLeer > 0 ? 'bg-amber-400' : 'bg-white border border-slate-100'}`}>
-          <MessageSquare size={24} className={stats.chatsSinLeer > 0 ? 'text-white' : 'text-slate-300'} />
-          <p className={`text-4xl font-black tracking-tighter mt-4 ${stats.chatsSinLeer > 0 ? 'text-white' : 'text-slate-900'}`}>{stats.chatsSinLeer}</p>
-          <p className={`text-[10px] font-black uppercase mt-1 tracking-widest ${stats.chatsSinLeer > 0 ? 'text-white/80' : 'text-slate-400'}`}>Mensajes</p>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <Calendar className="text-emerald-500 mb-2" size={24} />
+          <p className="text-2xl font-black text-slate-800">{proximosCumpleaños.length}</p>
+          <p className="text-xs text-slate-500">Cumpleaños próximos</p>
         </div>
-
-        <div onClick={() => router.push('/rrhh/empleados')} className="bg-emerald-600 p-8 rounded-[2.5rem] shadow-xl text-white cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden">
-          <Users className="absolute right-[-10px] top-[-10px] w-24 h-24 text-white/10 -rotate-12" />
-          <p className="text-4xl font-black tracking-tighter">{rrhhStats.totalEmpleados}</p>
-          <p className="text-[10px] font-black text-emerald-100 uppercase mt-1 tracking-widest">Empleados Activos</p>
-          <div className="mt-6 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest">
-            Ver Equipo <ArrowRight size={12}/>
-          </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <Briefcase className="text-purple-500 mb-2" size={24} />
+          <p className="text-2xl font-black text-slate-800">{Object.keys(estadisticasEquipo?.porArea || {}).length}</p>
+          <p className="text-xs text-slate-500">Áreas / Departamentos</p>
         </div>
       </div>
 
-      {/* SECCIÓN RRHH - ALERTAS Y PRÓXIMOS EVENTOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Próximos Cumpleaños */}
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-6 shadow-sm">
-          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-6 flex items-center gap-2">
-            <Cake size={16} className="text-amber-500" />
+      {/* Próximos Cumpleaños */}
+      {proximosCumpleaños.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Cake size={18} className="text-amber-500" />
             Próximos Cumpleaños 🎂
-          </h3>
-          <div className="space-y-3">
-            {rrhhStats.cumpleañosProximos.length > 0 ? (
-              rrhhStats.cumpleañosProximos.map((emp) => (
-                <div key={emp.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-500 rounded-xl flex items-center justify-center text-white font-bold">
-                      {emp.nombre_completo?.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">{emp.nombre_completo}</p>
-                      <p className="text-[9px] text-slate-500">{emp.cargo || 'Sin cargo'}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-amber-600">{emp.diasFaltantes} días</p>
-                    <p className="text-[9px] text-slate-400">{new Date(emp.fecha_nacimiento).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                <Cake size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-xs">No hay cumpleaños próximos</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Solicitudes Pendientes */}
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-6 shadow-sm">
-          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-6 flex items-center gap-2">
-            <Bell size={16} className="text-rose-500" />
-            Solicitudes Pendientes {rrhhStats.permisosPendientes > 0 && `(${rrhhStats.permisosPendientes})`}
-          </h3>
-          <div className="space-y-3">
-            {rrhhStats.solicitudesPendientes.length > 0 ? (
-              rrhhStats.solicitudesPendientes.slice(0, 5).map((permiso) => (
-                <div key={permiso.id} className="flex items-center justify-between p-3 rounded-xl bg-rose-50 border border-rose-100 cursor-pointer hover:bg-rose-100" onClick={() => router.push('/rrhh/permisos')}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-rose-500 rounded-xl flex items-center justify-center text-white text-lg">
-                      {permiso.tipo === 'vacaciones' ? '🏖️' : '📋'}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">{permiso.empleado?.nombre_completo || 'Empleado'}</p>
-                      <p className="text-[9px] text-slate-500">{permiso.tipo === 'vacaciones' ? 'Vacaciones' : permiso.tipo}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-amber-600">{permiso.dias_solicitados} días</p>
-                    <p className="text-[9px] text-slate-400">Pendiente</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-xs">No hay solicitudes pendientes</p>
-              </div>
-            )}
-            {rrhhStats.permisosPendientes > 5 && (
-              <button onClick={() => router.push('/rrhh/permisos')} className="w-full mt-2 text-center text-[10px] font-bold text-blue-600 hover:text-blue-700">
-                Ver todas ({rrhhStats.permisosPendientes}) →
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* SECCIÓN DE VACACIONES Y CONTRATOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Próximas Vacaciones */}
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-6 shadow-sm">
-          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-6 flex items-center gap-2">
-            <Calendar size={16} className="text-blue-500" />
-            Próximas Vacaciones 🌴
-          </h3>
-          <div className="space-y-3">
-            {rrhhStats.vacacionesProximas.length > 0 ? (
-              rrhhStats.vacacionesProximas.map((vac) => (
-                <div key={vac.id} className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
-                  <div>
-                    <p className="font-bold text-slate-800 text-sm">{vac.empleado?.nombre_completo}</p>
-                    <p className="text-[9px] text-slate-500">{vac.empleado?.cargo}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-blue-600">
-                      {new Date(vac.fecha_inicio).toLocaleDateString()} - {new Date(vac.fecha_fin).toLocaleDateString()}
-                    </p>
-                    <p className="text-[9px] text-slate-400">{vac.dias_solicitados} días</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                <Calendar size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-xs">No hay vacaciones programadas</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Alertas RRHH */}
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-6 shadow-sm">
-          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-6 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-500" />
-            Alertas RRHH ⚠️
-          </h3>
-          <div className="space-y-3">
-            {rrhhStats.contratosPorVencer > 0 && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white">
-                    <FileText size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800 text-sm">Contratos por vencer</p>
-                    <p className="text-[9px] text-slate-500">Próximos 30 días</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-amber-600">{rrhhStats.contratosPorVencer}</p>
-                  <button onClick={() => router.push('/rrhh/contratos')} className="text-[9px] text-blue-600">Revisar →</button>
-                </div>
-              </div>
-            )}
-            
-            {rrhhStats.permisosPendientes > 0 && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50 border border-rose-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-rose-500 rounded-xl flex items-center justify-center text-white">
-                    <Clock size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800 text-sm">Permisos pendientes</p>
-                    <p className="text-[9px] text-slate-500">Esperando aprobación</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-rose-600">{rrhhStats.permisosPendientes}</p>
-                  <button onClick={() => router.push('/rrhh/permisos')} className="text-[9px] text-blue-600">Revisar →</button>
-                </div>
-              </div>
-            )}
-
-            {rrhhStats.empleadosActivos > 0 && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
-                    <UserCheck size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-800 text-sm">Equipo Activo</p>
-                    <p className="text-[9px] text-slate-500">Talento humano</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-emerald-600">{rrhhStats.empleadosActivos}</p>
-                  <button onClick={() => router.push('/rrhh/empleados')} className="text-[9px] text-blue-600">Ver equipo →</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* GRÁFICO FINANCIERO */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm min-h-[400px]">
-          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-8 flex items-center gap-2">
-            <Activity size={16} className="text-blue-600"/> Flujo Financiero Reciente (Obuma)
-          </h3>
-          
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.dataGrafico}>
-                <defs>
-                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00338d" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#00338d" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis hide />
-                <Tooltip 
-                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                />
-                <Area type="monotone" dataKey="valor" stroke="#00338d" strokeWidth={3} fill="url(#colorVal)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* OC Pendientes */}
-        <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm flex flex-col">
-          <h3 className="font-black text-slate-800 uppercase text-[10px] tracking-[0.2em] mb-6 flex items-center gap-2">
-            <Bell size={14} className="text-rose-500" /> OC Pendientes Críticas
-          </h3>
-          <div className="space-y-3 flex-1 overflow-y-auto max-h-[320px] pr-2">
-            {stats.listaEmitidas.length > 0 ? stats.listaEmitidas.slice(0, 6).map((oc) => (
-              <div key={oc.compra_oc_id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center">
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {proximosCumpleaños.map((emp) => (
+              <div key={emp.nombre_completo} className="flex justify-between items-center p-3 bg-amber-50 rounded-xl">
                 <div>
-                  <p className="font-black text-[11px] text-slate-800">#{oc.compra_oc_folio}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase truncate w-32">{oc.compra_oc_referencia || 'Pendiente'}</p>
+                  <p className="font-medium text-slate-800">{emp.nombre_completo}</p>
+                  <p className="text-xs text-slate-500">{emp.cargo || 'Sin cargo'}</p>
                 </div>
-                <p className="font-black text-[11px] text-rose-600">${Number(oc.compra_oc_total).toLocaleString('es-CL')}</p>
+                <span className="text-xs font-bold text-amber-600">{emp.diasFaltantes} días</span>
               </div>
-            )) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-300 italic py-10">
-                <CheckCircle2 size={32} className="mb-2 opacity-20" />
-                <p className="text-[10px] font-bold">Sin alertas pendientes</p>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Permisos Pendientes */}
+      {misPermisos.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Clock size={18} className="text-rose-500" />
+            Solicitudes de Permiso Pendientes
+          </h2>
+          <div className="space-y-3">
+            {misPermisos.map((permiso) => (
+              <div key={permiso.id} className="flex justify-between items-center p-3 bg-rose-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-slate-800">{permiso.empleado?.nombre_completo || 'Empleado'}</p>
+                  <p className="text-xs text-slate-500">
+                    {permiso.tipo === 'vacaciones' ? 'Vacaciones' : permiso.tipo} · {permiso.dias_solicitados} días
+                  </p>
+                </div>
+                <button 
+                  onClick={() => router.push('/rrhh/permisos')}
+                  className="text-xs text-blue-600 font-medium"
+                >
+                  Revisar →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Distribución por Área */}
+      {estadisticasEquipo?.porArea && Object.keys(estadisticasEquipo.porArea).length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Briefcase size={18} className="text-purple-500" />
+            Distribución por Área
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {Object.entries(estadisticasEquipo.porArea).map(([area, cantidad]) => (
+              <div key={area} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                <span className="text-sm font-medium text-slate-700">{area}</span>
+                <span className="text-xs font-bold text-blue-600">{cantidad as number} personas</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
