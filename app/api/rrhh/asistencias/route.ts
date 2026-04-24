@@ -7,6 +7,47 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Parámetros Ley Chilena 21.561 (42 horas semanales a partir del 26/04/2026)
+const JORNADA_DIARIA = 7;      // 7 horas diarias (42 horas semanales)
+const HORA_COLACION = 1;       // 1 hora de colación (NO computa como trabajo)
+const HORAS_SEMANALES = 42;    // 42 horas semanales máximas
+
+// Función para calcular horas trabajadas según ley chilena
+const calcularHorasTrabajadasChile = (horaEntrada: string, horaSalida: string): number | null => {
+  if (!horaEntrada || !horaSalida) return null;
+  
+  const [entradaH, entradaM] = horaEntrada.split(':').map(Number);
+  const [salidaH, salidaM] = horaSalida.split(':').map(Number);
+  
+  let horas = salidaH - entradaH;
+  let minutos = salidaM - entradaM;
+  
+  if (minutos < 0) {
+    horas--;
+    minutos += 60;
+  }
+  
+  let totalHoras = horas + (minutos / 60);
+  
+  // Restar hora de colación (1 hora NO trabajada)
+  totalHoras = totalHoras - HORA_COLACION;
+  
+  // Redondear a 1 decimal
+  return Math.round(totalHoras * 10) / 10;
+};
+
+// Función para calcular horas extras (sobre 7 horas diarias)
+const calcularHorasExtras = (horasTrabajadas: number): number => {
+  if (horasTrabajadas <= JORNADA_DIARIA) return 0;
+  return Math.round((horasTrabajadas - JORNADA_DIARIA) * 10) / 10;
+};
+
+// Función helper para limpiar campos vacíos
+const limpiarHora = (hora: string | null | undefined): string | null => {
+  if (!hora || hora === '' || hora === 'null') return null;
+  return hora;
+};
+
 // GET: Listar asistencias con filtros
 export async function GET(request: NextRequest) {
   try {
@@ -82,30 +123,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La fecha es obligatoria' }, { status: 400 });
     }
 
-    // ✅ Función helper para convertir strings vacíos a null
-    const limpiarHora = (hora: string) => {
-      if (!hora || hora === '' || hora === 'null') return null;
-      return hora;
-    };
-
-    // ✅ Limpiar horas
+    // Limpiar horas
     const horaEntrada = limpiarHora(body.hora_entrada);
     const horaSalida = limpiarHora(body.hora_salida);
-    const horaEntradaTarde = limpiarHora(body.hora_entrada_tarde);
-    const horaSalidaTarde = limpiarHora(body.hora_salida_tarde);
 
-    // Calcular horas trabajadas si hay entrada y salida
+    // Calcular horas según ley chilena
     let horasTrabajadas = null;
-    if (horaEntrada && horaSalida) {
-      const entrada = new Date(`2000-01-01T${horaEntrada}`);
-      const salida = new Date(`2000-01-01T${horaSalida}`);
-      horasTrabajadas = (salida.getTime() - entrada.getTime()) / (1000 * 60 * 60);
-    }
-
-    // Calcular horas extras (más de 8 horas)
     let horasExtras = null;
-    if (horasTrabajadas && horasTrabajadas > 8) {
-      horasExtras = horasTrabajadas - 8;
+
+    if (body.estado === 'presente' && horaEntrada && horaSalida) {
+      horasTrabajadas = calcularHorasTrabajadasChile(horaEntrada, horaSalida);
+      if (horasTrabajadas !== null) {
+        horasExtras = calcularHorasExtras(horasTrabajadas);
+      }
     }
 
     const nuevaAsistencia = {
@@ -113,17 +143,16 @@ export async function POST(request: NextRequest) {
       fecha: body.fecha,
       hora_entrada: horaEntrada,
       hora_salida: horaSalida,
-      hora_entrada_tarde: horaEntradaTarde,
-      hora_salida_tarde: horaSalidaTarde,
-      horas_trabajadas: horasTrabajadas ? Math.round(horasTrabajadas * 10) / 10 : null,
-      horas_extras: horasExtras ? Math.round(horasExtras * 10) / 10 : null,
+      horas_trabajadas: horasTrabajadas,
+      horas_extras: horasExtras,
       tipo_dia: body.tipo_dia || 'normal',
       estado: body.estado || 'presente',
       justificacion: body.justificacion || null,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    console.log('📤 Datos a insertar:', nuevaAsistencia);
+    console.log('📤 Datos a insertar (42h Chile):', nuevaAsistencia);
 
     // Verificar si ya existe asistencia para este empleado en esta fecha
     const { data: existente } = await supabase
@@ -146,6 +175,7 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error;
       result = data;
+      console.log('✅ Asistencia actualizada:', result);
     } else {
       // Insertar
       const { data, error } = await supabase
@@ -156,6 +186,7 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error;
       result = data;
+      console.log('✅ Asistencia registrada:', result);
     }
 
     return NextResponse.json({ success: true, data: result });
@@ -163,6 +194,86 @@ export async function POST(request: NextRequest) {
     console.error('❌ Error en POST /api/rrhh/asistencias:', error);
     return NextResponse.json(
       { error: error.message || 'Error al registrar asistencia' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT: Actualizar asistencia (para ediciones posteriores)
+export async function PUT(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const body = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID de asistencia requerido' }, { status: 400 });
+    }
+
+    // Limpiar horas
+    const horaEntrada = limpiarHora(body.hora_entrada);
+    const horaSalida = limpiarHora(body.hora_salida);
+
+    // Recalcular horas según ley chilena
+    let horasTrabajadas = null;
+    let horasExtras = null;
+
+    if (body.estado === 'presente' && horaEntrada && horaSalida) {
+      horasTrabajadas = calcularHorasTrabajadasChile(horaEntrada, horaSalida);
+      if (horasTrabajadas !== null) {
+        horasExtras = calcularHorasExtras(horasTrabajadas);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('asistencias')
+      .update({
+        hora_entrada: horaEntrada,
+        hora_salida: horaSalida,
+        horas_trabajadas: horasTrabajadas,
+        horas_extras: horasExtras,
+        estado: body.estado,
+        justificacion: body.justificacion || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    console.error('❌ Error en PUT /api/rrhh/asistencias:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error al actualizar asistencia' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Eliminar asistencia
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID de asistencia requerido' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('asistencias')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, message: 'Asistencia eliminada' });
+  } catch (error: any) {
+    console.error('❌ Error en DELETE /api/rrhh/asistencias:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error al eliminar asistencia' },
       { status: 500 }
     );
   }

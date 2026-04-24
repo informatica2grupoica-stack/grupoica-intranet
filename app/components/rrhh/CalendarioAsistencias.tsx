@@ -18,8 +18,6 @@ export default function CalendarioAsistencias({
   anioActual,
   onChangeMes,
 }: CalendarioAsistenciasProps) {
-  const [loading, setLoading] = useState(false);
-
   const getEstadoColor = (estado: string) => {
     switch (estado) {
       case 'presente': return 'bg-emerald-500 text-white';
@@ -44,20 +42,24 @@ export default function CalendarioAsistencias({
     return asistencias.find(a => a.fecha === fecha);
   };
 
-  const diasEnMes = new Date(anioActual, mesActual, 0).getDate();
+  // Obtener el primer día de la semana (0 = domingo, ajustar a lunes)
   const primerDiaSemana = new Date(anioActual, mesActual - 1, 1).getDay();
+  const diasEnMes = new Date(anioActual, mesActual, 0).getDate();
+  
   const dias = [];
 
-  // Días vacíos al inicio
-  for (let i = 0; i < primerDiaSemana; i++) {
+  // Días vacíos al inicio (ajustar para que la semana empiece el lunes)
+  const diasVacios = primerDiaSemana === 0 ? 6 : primerDiaSemana - 1;
+  for (let i = 0; i < diasVacios; i++) {
     dias.push(null);
   }
 
   // Días del mes
   for (let i = 1; i <= diasEnMes; i++) {
-    const fecha = `${anioActual}-${mesActual.toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
-    const asistencia = obtenerAsistenciaPorFecha(fecha);
-    dias.push({ dia: i, fecha, asistencia });
+    // ✅ CORRECCIÓN: Construir fecha correctamente
+    const fechaCorrecta = `${anioActual}-${mesActual.toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+    const asistencia = obtenerAsistenciaPorFecha(fechaCorrecta);
+    dias.push({ dia: i, fecha: fechaCorrecta, asistencia });
   }
 
   const meses = [
@@ -111,14 +113,16 @@ export default function CalendarioAsistencias({
         </div>
       </div>
 
+      {/* Días de la semana */}
       <div className="grid grid-cols-7 gap-1 mb-2">
-        {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((dia, idx) => (
+        {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((dia, idx) => (
           <div key={idx} className="text-center text-[10px] font-bold text-slate-400 py-1">
             {dia}
           </div>
         ))}
       </div>
 
+      {/* Calendario */}
       <div className="grid grid-cols-7 gap-1">
         {dias.map((item, idx) => (
           <div key={idx} className="aspect-square">
@@ -166,8 +170,10 @@ export default function CalendarioAsistencias({
           <span className="text-[9px] text-slate-500">Justificado</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-slate-200" />
-          <span className="text-[9px] text-slate-500">Sin registro</span>
+          <div className="w-0.5 h-4 bg-slate-300" />
+        </div>
+        <div className="text-[9px] text-slate-400">
+          Jornada: 42h/sem • 7h/día + 1h colación
         </div>
       </div>
     </div>

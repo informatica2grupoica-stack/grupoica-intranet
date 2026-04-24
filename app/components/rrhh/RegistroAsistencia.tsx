@@ -24,45 +24,77 @@ export default function RegistroAsistencia({
   const [form, setForm] = useState({
     hora_entrada: '',
     hora_salida: '',
-    hora_entrada_tarde: '',
-    hora_salida_tarde: '',
     estado: 'presente',
     justificacion: '',
   });
+
+  // Jornada laboral Chile 42 horas (7 horas diarias + 1 hora colación)
+  const JORNADA_DIARIA = 7;
+  const HORA_COLACION = 1;
 
   useEffect(() => {
     if (asistenciaExistente) {
       setForm({
         hora_entrada: asistenciaExistente.hora_entrada || '',
         hora_salida: asistenciaExistente.hora_salida || '',
-        hora_entrada_tarde: asistenciaExistente.hora_entrada_tarde || '',
-        hora_salida_tarde: asistenciaExistente.hora_salida_tarde || '',
         estado: asistenciaExistente.estado || 'presente',
         justificacion: asistenciaExistente.justificacion || '',
       });
     }
   }, [asistenciaExistente]);
 
+  // Calcular horas trabajadas según ley chilena (restar hora de colación)
+  const calcularHorasTrabajadas = (entrada: string, salida: string): number => {
+    if (!entrada || !salida) return 0;
+    
+    const [entradaH, entradaM] = entrada.split(':').map(Number);
+    const [salidaH, salidaM] = salida.split(':').map(Number);
+    
+    let horas = salidaH - entradaH;
+    let minutos = salidaM - entradaM;
+    
+    if (minutos < 0) {
+      horas--;
+      minutos += 60;
+    }
+    
+    let totalHoras = horas + (minutos / 60);
+    
+    // Restar hora de colación (1 hora NO trabajada)
+    totalHoras = totalHoras - HORA_COLACION;
+    
+    return Math.round(totalHoras * 10) / 10;
+  };
+
+  // Calcular horas extras (sobre 7 horas diarias)
+  const calcularHorasExtras = (horasTrabajadas: number): number => {
+    if (horasTrabajadas <= JORNADA_DIARIA) return 0;
+    return Math.round((horasTrabajadas - JORNADA_DIARIA) * 10) / 10;
+  };
+
+  const horasTrabajadas = calcularHorasTrabajadas(form.hora_entrada, form.hora_salida);
+  const horasExtras = calcularHorasExtras(horasTrabajadas);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // ✅ Solo enviar campos con valores, no strings vacíos
     const datosEnviar: any = {
       empleado_id: empleadoId,
       fecha: fecha,
       estado: form.estado,
     };
 
-    // ✅ Solo agregar horas si están presentes
     if (form.hora_entrada) datosEnviar.hora_entrada = form.hora_entrada;
     if (form.hora_salida) datosEnviar.hora_salida = form.hora_salida;
-    if (form.hora_entrada_tarde) datosEnviar.hora_entrada_tarde = form.hora_entrada_tarde;
-    if (form.hora_salida_tarde) datosEnviar.hora_salida_tarde = form.hora_salida_tarde;
     if (form.justificacion) datosEnviar.justificacion = form.justificacion;
+    
+    if (form.estado === 'presente' && form.hora_entrada && form.hora_salida) {
+      datosEnviar.horas_trabajadas = horasTrabajadas;
+      datosEnviar.horas_extras = horasExtras;
+    }
 
     const result = await onSave(datosEnviar);
-
     setLoading(false);
     if (result.success) {
       onClose();
@@ -141,6 +173,39 @@ export default function RegistroAsistencia({
                   />
                 </div>
               </div>
+
+              {/* Resumen de horas */}
+              {form.hora_entrada && form.hora_salida && (
+                <div className="bg-slate-50 rounded-xl p-3 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Horas en oficina:</span>
+                    <span className="font-medium text-slate-700">
+                      {(() => {
+                        const [eH, eM] = form.hora_entrada.split(':').map(Number);
+                        const [sH, sM] = form.hora_salida.split(':').map(Number);
+                        let horas = sH - eH;
+                        let minutos = sM - eM;
+                        if (minutos < 0) { horas--; minutos += 60; }
+                        return `${horas}:${minutos.toString().padStart(2, '0')} hrs`;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Hora de colación:</span>
+                    <span className="font-medium text-amber-600">- 1 hora</span>
+                  </div>
+                  <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
+                    <span className="font-bold text-slate-600">Horas trabajadas (7h diarias):</span>
+                    <span className="font-bold text-blue-600">{horasTrabajadas} hrs</span>
+                  </div>
+                  {horasExtras > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-red-500">Horas extras:</span>
+                      <span className="font-bold text-red-500">{horasExtras} hrs</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
