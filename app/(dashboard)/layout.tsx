@@ -36,14 +36,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-// --- IMPORTACIÓN DEL COMPONENTE IA ---
+// --- IMPORTACIÓN DEL COMPONENTE IA Y NOTIFICACIONES ---
 import ChatBot from "@/components/ChatBot";
+import CampanaNotificaciones from "@/app/components/rrhh/CampanaNotificaciones";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("Cargando...");
   const [userRol, setUserRol] = useState<string | null>(null);
+  const [perfilId, setPerfilId] = useState<string | null>(null);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -54,13 +56,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         const { data: perfil } = await supabase
           .from('perfiles')
-          .select('nombre, rol')
+          .select('nombre, rol, id')
           .eq('user_id', session.user.id)
           .single();
 
-        if (perfil && perfil.nombre) {
+        if (perfil) {
           setUserName(perfil.nombre);
           setUserRol(perfil.rol);
+          setPerfilId(perfil.id);
         } else {
           setUserName(session.user.email?.split('@')[0] || "Usuario");
         }
@@ -249,14 +252,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 ml-64 p-8">
         <div className="max-w-7xl mx-auto">
-          {/* BREADCRUMB */}
-          <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-8 px-4 bg-white/50 w-fit py-2 rounded-full border border-slate-100 shadow-sm">
-            <LayoutDashboard className="w-3 h-3 text-blue-500" />
-            <span>Sistema Central</span>
-            <ChevronRight className="w-2.5 h-2.5 opacity-50" />
-            <span className="text-slate-600">
-              {pathname === "/" ? "Inicio" : pathname.split('/').filter(Boolean).pop()?.replace(/-/g, " ")}
-            </span>
+          {/* HEADER CON BREADCRUMB Y CAMPANA */}
+          <div className="flex items-center justify-between mb-8">
+            {/* BREADCRUMB */}
+            <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-slate-400 px-4 bg-white/50 w-fit py-2 rounded-full border border-slate-100 shadow-sm">
+              <LayoutDashboard className="w-3 h-3 text-blue-500" />
+              <span>Sistema Central</span>
+              <ChevronRight className="w-2.5 h-2.5 opacity-50" />
+              <span className="text-slate-600">
+                {pathname === "/" ? "Inicio" : pathname.split('/').filter(Boolean).pop()?.replace(/-/g, " ")}
+              </span>
+            </div>
+
+            {/* CAMPANA DE NOTIFICACIONES */}
+            {perfilId && (
+              <div className="flex items-center gap-3">
+                <CampanaNotificaciones usuarioId={perfilId} />
+              </div>
+            )}
           </div>
 
           <div className="px-4">
