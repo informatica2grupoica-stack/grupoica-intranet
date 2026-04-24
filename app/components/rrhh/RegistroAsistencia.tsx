@@ -1,7 +1,7 @@
 // components/rrhh/RegistroAsistencia.tsx
 'use client';
 import { useState, useEffect } from 'react';
-import { X, Clock, Calendar, Save, Loader2 } from 'lucide-react';
+import { X, Clock, Save, Loader2 } from 'lucide-react';
 
 interface RegistroAsistenciaProps {
   empleadoId: string;
@@ -28,14 +28,24 @@ export default function RegistroAsistencia({
     justificacion: '',
   });
 
-  // Jornada laboral Chile 42 horas (7 horas diarias + 1 hora colación)
-  const JORNADA_DIARIA = 7;
-  const HORA_COLACION = 1;
+  // Función para obtener jornada esperada según el día
+  const getJornadaEsperada = (fechaStr: string): number => {
+    const dia = new Date(fechaStr).getDay();
+    switch (dia) {
+      case 1: case 2: case 3: case 4: // Lunes a Jueves
+        return 8.5;
+      case 5: // Viernes
+        return 7.5;
+      default:
+        return 0;
+    }
+  };
 
-  // ✅ CORREGIDO: Cargar asistencia existente correctamente
+  const HORA_COLACION = 1;
+  const jornadaEsperada = getJornadaEsperada(fecha);
+
   useEffect(() => {
     if (asistenciaExistente) {
-      console.log('📝 Cargando asistencia existente:', asistenciaExistente);
       setForm({
         hora_entrada: asistenciaExistente.hora_entrada || '',
         hora_salida: asistenciaExistente.hora_salida || '',
@@ -43,7 +53,6 @@ export default function RegistroAsistencia({
         justificacion: asistenciaExistente.justificacion || '',
       });
     } else {
-      // Resetear formulario si no hay asistencia
       setForm({
         hora_entrada: '',
         hora_salida: '',
@@ -53,7 +62,6 @@ export default function RegistroAsistencia({
     }
   }, [asistenciaExistente, fecha]);
 
-  // Calcular horas trabajadas según ley chilena (restar hora de colación)
   const calcularHorasTrabajadas = (entrada: string, salida: string): number => {
     if (!entrada || !salida) return 0;
     
@@ -69,21 +77,15 @@ export default function RegistroAsistencia({
     }
     
     let totalHoras = horas + (minutos / 60);
-    
-    // Restar hora de colación (1 hora NO trabajada)
     totalHoras = totalHoras - HORA_COLACION;
     
     return Math.round(totalHoras * 10) / 10;
   };
 
-  // Calcular horas extras (sobre 7 horas diarias)
-  const calcularHorasExtras = (horasTrabajadas: number): number => {
-    if (horasTrabajadas <= JORNADA_DIARIA) return 0;
-    return Math.round((horasTrabajadas - JORNADA_DIARIA) * 10) / 10;
-  };
-
   const horasTrabajadas = calcularHorasTrabajadas(form.hora_entrada, form.hora_salida);
-  const horasExtras = calcularHorasExtras(horasTrabajadas);
+  const horasExtras = jornadaEsperada > 0 && horasTrabajadas > jornadaEsperada 
+    ? Math.round((horasTrabajadas - jornadaEsperada) * 10) / 10 
+    : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,8 +120,16 @@ export default function RegistroAsistencia({
     { value: 'justificado', label: 'Justificado', color: 'text-blue-600 bg-blue-50' },
   ];
 
-  // Formatear fecha para mostrar correctamente
-  const fechaFormateada = new Date(fecha + 'T12:00:00').toLocaleDateString('es-CL');
+  const fechaFormateada = new Date(fecha + 'T12:00:00').toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+
+  const obtenerNombreDia = (fechaStr: string) => {
+    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    return dias[new Date(fechaStr).getDay()];
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -128,7 +138,7 @@ export default function RegistroAsistencia({
           <div>
             <h2 className="text-lg font-bold text-slate-800">Registro de Asistencia</h2>
             <p className="text-xs text-slate-500">{empleadoNombre}</p>
-            <p className="text-[10px] text-slate-400">{fechaFormateada}</p>
+            <p className="text-[10px] text-slate-400">{fechaFormateada} - {obtenerNombreDia(fecha)}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
             <X size={20} />
@@ -157,7 +167,7 @@ export default function RegistroAsistencia({
             </div>
           </div>
 
-          {/* Horarios (solo si no es ausente) */}
+          {/* Horarios */}
           {form.estado !== 'ausente' && (
             <>
               <div className="grid grid-cols-2 gap-4">
@@ -208,8 +218,12 @@ export default function RegistroAsistencia({
                     <span className="font-medium text-amber-600">- 1 hora</span>
                   </div>
                   <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
-                    <span className="font-bold text-slate-600">Horas trabajadas (7h diarias):</span>
-                    <span className="font-bold text-blue-600">{horasTrabajadas} hrs</span>
+                    <span className="font-bold text-slate-600">
+                      Horas trabajadas ({jornadaEsperada}h esperadas):
+                    </span>
+                    <span className={`font-bold ${horasTrabajadas > jornadaEsperada ? 'text-amber-600' : 'text-blue-600'}`}>
+                      {horasTrabajadas} hrs
+                    </span>
                   </div>
                   {horasExtras > 0 && (
                     <div className="flex justify-between text-xs">

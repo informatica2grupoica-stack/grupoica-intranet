@@ -25,8 +25,6 @@ export default function AsistenciasPage() {
   const [mostrarModal, setMostrarModal] = useState(false);
 
   const empleadoActual = empleados.find(e => e.id === filtros.empleadoId);
-  
-  // ✅ Encontrar asistencia existente para la fecha seleccionada
   const asistenciaEnFecha = asistencias.find(a => a.fecha === fechaSeleccionada);
 
   const handleDayClick = (fecha: string) => {
@@ -46,7 +44,7 @@ export default function AsistenciasPage() {
     setFiltros({ ...filtros, mes, anio });
   };
 
-  // ✅ RESETEAR MODAL cuando cambia el empleado
+  // Resetear modal al cambiar empleado
   useEffect(() => {
     setMostrarModal(false);
     setFechaSeleccionada(null);
@@ -73,15 +71,13 @@ export default function AsistenciasPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => cargarResumen()}
-            className="p-2.5 text-slate-500 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-100"
-            title="Actualizar"
-          >
-            <RefreshCw size={18} />
-          </button>
-        </div>
+        <button
+          onClick={() => cargarResumen()}
+          className="p-2.5 text-slate-500 hover:text-blue-600 transition-colors rounded-xl hover:bg-slate-100"
+          title="Actualizar"
+        >
+          <RefreshCw size={18} />
+        </button>
       </div>
 
       {/* Selector de empleado */}
@@ -92,7 +88,6 @@ export default function AsistenciasPage() {
         <select
           value={filtros.empleadoId}
           onChange={(e) => {
-            // ✅ Limpiar selección de fecha y modal al cambiar empleado
             setFechaSeleccionada(null);
             setMostrarModal(false);
             setFiltros({ ...filtros, empleadoId: e.target.value });
@@ -106,7 +101,7 @@ export default function AsistenciasPage() {
         </select>
       </div>
 
-      {/* Contenido solo si hay empleado seleccionado */}
+      {/* Contenido */}
       {!filtros.empleadoId ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
           <CalendarIcon size={48} className="mx-auto text-slate-300 mb-4" />
@@ -114,13 +109,11 @@ export default function AsistenciasPage() {
         </div>
       ) : (
         <>
-          {/* Resumen del mes */}
           <ResumenAsistenciaMes
             resumen={resumen}
             empleadoNombre={empleadoActual?.nombre_completo}
           />
 
-          {/* Calendario */}
           <CalendarioAsistencias
             asistencias={asistencias}
             onDayClick={handleDayClick}
@@ -129,14 +122,12 @@ export default function AsistenciasPage() {
             onChangeMes={handleCambiarMes}
           />
 
-          {/* Loading */}
           {loading && (
             <div className="flex justify-center py-8">
               <Loader2 className="animate-spin text-blue-600" size={32} />
             </div>
           )}
 
-          {/* Modal de registro */}
           {mostrarModal && fechaSeleccionada && (
             <RegistroAsistencia
               empleadoId={filtros.empleadoId}

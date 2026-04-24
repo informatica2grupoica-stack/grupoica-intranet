@@ -7,13 +7,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Parámetros Ley Chilena 21.561 (42 horas semanales a partir del 26/04/2026)
-const JORNADA_DIARIA = 7;      // 7 horas diarias (42 horas semanales)
-const HORA_COLACION = 1;       // 1 hora de colación (NO computa como trabajo)
-const HORAS_SEMANALES = 42;    // 42 horas semanales máximas
+// Parámetros específicos GRUPO ICA
+const HORA_COLACION = 1;  // 1 hora de colación
 
-// Función para calcular horas trabajadas según ley chilena
-const calcularHorasTrabajadasChile = (horaEntrada: string, horaSalida: string): number | null => {
+// Horas diarias por día de la semana
+const getJornadaDiaria = (fecha: string): number => {
+  const dia = new Date(fecha).getDay();
+  switch (dia) {
+    case 1: // Lunes
+    case 2: // Martes
+    case 3: // Miércoles
+    case 4: // Jueves
+      return 8.5;  // 8.5 horas trabajadas
+    case 5: // Viernes
+      return 7.5;  // 7.5 horas trabajadas
+    default: // Sábado, Domingo
+      return 0;
+  }
+};
+
+// Calcular horas trabajadas (restar hora de colación)
+const calcularHorasTrabajadas = (horaEntrada: string, horaSalida: string, fecha: string): number | null => {
   if (!horaEntrada || !horaSalida) return null;
   
   const [entradaH, entradaM] = horaEntrada.split(':').map(Number);
@@ -28,27 +42,25 @@ const calcularHorasTrabajadasChile = (horaEntrada: string, horaSalida: string): 
   }
   
   let totalHoras = horas + (minutos / 60);
-  
-  // Restar hora de colación (1 hora NO trabajada)
   totalHoras = totalHoras - HORA_COLACION;
   
-  // Redondear a 1 decimal
   return Math.round(totalHoras * 10) / 10;
 };
 
-// Función para calcular horas extras (sobre 7 horas diarias)
-const calcularHorasExtras = (horasTrabajadas: number): number => {
-  if (horasTrabajadas <= JORNADA_DIARIA) return 0;
-  return Math.round((horasTrabajadas - JORNADA_DIARIA) * 10) / 10;
+// Calcular horas extras (sobre la jornada diaria)
+const calcularHorasExtras = (horasTrabajadas: number, fecha: string): number => {
+  const jornadaDiaria = getJornadaDiaria(fecha);
+  if (jornadaDiaria === 0) return 0;
+  if (horasTrabajadas <= jornadaDiaria) return 0;
+  return Math.round((horasTrabajadas - jornadaDiaria) * 10) / 10;
 };
 
-// Función helper para limpiar campos vacíos
 const limpiarHora = (hora: string | null | undefined): string | null => {
   if (!hora || hora === '' || hora === 'null') return null;
   return hora;
 };
 
-// GET: Listar asistencias con filtros
+// GET: Listar asistencias
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -81,11 +93,9 @@ export async function GET(request: NextRequest) {
     }
 
     const from = (page - 1) * limit;
-    const to = from + limit - 1;
-
     const { data, error, count } = await query
       .order('fecha', { ascending: false })
-      .range(from, to);
+      .range(from, from + limit - 1);
 
     if (error) throw error;
 
@@ -113,28 +123,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    console.log('📥 Datos recibidos:', body);
-
     if (!body.empleado_id) {
       return NextResponse.json({ error: 'El empleado es obligatorio' }, { status: 400 });
     }
-
     if (!body.fecha) {
       return NextResponse.json({ error: 'La fecha es obligatoria' }, { status: 400 });
     }
 
-    // Limpiar horas
     const horaEntrada = limpiarHora(body.hora_entrada);
     const horaSalida = limpiarHora(body.hora_salida);
 
-    // Calcular horas según ley chilena
     let horasTrabajadas = null;
     let horasExtras = null;
 
     if (body.estado === 'presente' && horaEntrada && horaSalida) {
-      horasTrabajadas = calcularHorasTrabajadasChile(horaEntrada, horaSalida);
+      horasTrabajadas = calcularHorasTrabajadas(horaEntrada, horaSalida, body.fecha);
       if (horasTrabajadas !== null) {
-        horasExtras = calcularHorasExtras(horasTrabajadas);
+        horasExtras = calcularHorasExtras(horasTrabajadas, body.fecha);
       }
     }
 
@@ -152,9 +157,6 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    console.log('📤 Datos a insertar (42h Chile):', nuevaAsistencia);
-
-    // Verificar si ya existe asistencia para este empleado en esta fecha
     const { data: existente } = await supabase
       .from('asistencias')
       .select('id')
@@ -165,25 +167,21 @@ export async function POST(request: NextRequest) {
     let result;
 
     if (existente) {
-      // Actualizar
       const { data, error } = await supabase
         .from('asistencias')
         .update(nuevaAsistencia)
         .eq('id', existente.id)
         .select()
         .single();
-
       if (error) throw error;
       result = data;
       console.log('✅ Asistencia actualizada:', result);
     } else {
-      // Insertar
       const { data, error } = await supabase
         .from('asistencias')
         .insert([nuevaAsistencia])
         .select()
         .single();
-
       if (error) throw error;
       result = data;
       console.log('✅ Asistencia registrada:', result);
@@ -199,7 +197,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT: Actualizar asistencia (para ediciones posteriores)
+// PUT: Actualizar asistencia
 export async function PUT(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -210,18 +208,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'ID de asistencia requerido' }, { status: 400 });
     }
 
-    // Limpiar horas
     const horaEntrada = limpiarHora(body.hora_entrada);
     const horaSalida = limpiarHora(body.hora_salida);
 
-    // Recalcular horas según ley chilena
     let horasTrabajadas = null;
     let horasExtras = null;
 
-    if (body.estado === 'presente' && horaEntrada && horaSalida) {
-      horasTrabajadas = calcularHorasTrabajadasChile(horaEntrada, horaSalida);
+    if (body.estado === 'presente' && horaEntrada && horaSalida && body.fecha) {
+      horasTrabajadas = calcularHorasTrabajadas(horaEntrada, horaSalida, body.fecha);
       if (horasTrabajadas !== null) {
-        horasExtras = calcularHorasExtras(horasTrabajadas);
+        horasExtras = calcularHorasExtras(horasTrabajadas, body.fecha);
       }
     }
 
