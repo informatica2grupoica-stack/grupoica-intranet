@@ -56,12 +56,13 @@ export async function POST(request: Request) {
     let totalProveedoresCreados = 0;
     let totalProveedoresActualizados = 0;
     let totalItemsProcesados = 0;
-    let sinRUT = 0;
-    let sinProveedorEncontrado = 0;
+    let sinProveedorId = 0;
+    let sinProducto = 0;
     const errores = [];
     
     // Cache para no llamar a la misma OC varias veces
     const cacheOC = new Map();
+    const cacheProveedores = new Map();
 
     // =============================================
     // 2. Procesar cada item (máximo 500 para evitar timeout)
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
         // 2.1 Obtener el producto del item
         const nombreProducto = item.producto_nombre || item.producto_descripcion;
         if (!nombreProducto) {
+          sinProducto++;
           continue;
         }
 
@@ -102,79 +104,107 @@ export async function POST(request: Request) {
           cacheOC.set(ocId, ocData);
         }
 
-        // 2.3 Obtener el RUT del proveedor (probar diferentes campos)
-        let rutProveedor = ocData.proveedor_rut;
+        // 2.3 Obtener el ID del proveedor desde la OC
+        const proveedorIdObuma = ocData.rel_proveedor_id;
         
-        if (!rutProveedor && ocData.rel_proveedor_id) {
-          // Intentar obtener el proveedor por ID
-          const proveedorResponse = await fetch(`${OBUMA_API_URL}/proveedores.findById.json/${ocData.rel_proveedor_id}`, {
-            method: 'GET',
-            headers: {
-              'access-token': OBUMA_API_TOKEN,
-              'Content-Type': 'application/json',
-            },
-          });
-          const proveedorData = await proveedorResponse.json();
-          rutProveedor = proveedorData.proveedor_rut;
-          console.log(`   🔍 Buscando proveedor por ID ${ocData.rel_proveedor_id}: RUT encontrado = ${rutProveedor}`);
-        }
-        
-        if (!rutProveedor) {
-          sinRUT++;
-          if (sinRUT <= 5) {
-            console.log(`   ⚠️ Item ${totalItemsProcesados}: OC ${ocId} no tiene RUT de proveedor`);
-            console.log(`      Campos disponibles en ocData:`, Object.keys(ocData).join(', '));
+        if (!proveedorIdObuma) {
+          sinProveedorId++;
+          if (sinProveedorId <= 5) {
+            console.log(`   ⚠️ Item ${totalItemsProcesados}: OC ${ocId} no tiene rel_proveedor_id`);
           }
           continue;
         }
-
-        // Limpiar el RUT (eliminar espacios y convertir a mayúsculas)
-        rutProveedor = rutProveedor.trim().toUpperCase();
-        const razonSocial = ocData.proveedor_razon_social || `Proveedor ${rutProveedor}`;
         
         if (totalItemsProcesados <= 10) {
-          console.log(`   🏢 Item ${totalItemsProcesados}: RUT="${rutProveedor}", Producto="${nombreProducto.substring(0, 40)}..."`);
+          console.log(`   🏢 Item ${totalItemsProcesados}: ProveedorID Obuma="${proveedorIdObuma}", Producto="${nombreProducto.substring(0, 40)}..."`);
         }
         
-        // 2.4 Buscar el proveedor en Supabase por RUT
-        let proveedorId = null;
+        // 2.4 Buscar o crear el proveedor usando obuma_id
+        let proveedorId = cacheProveedores.get(proveedorIdObuma);
         
-        const { data: proveedorExistente, error: searchError } = await supabase
-          .from('proveedores')
-          .select('id, nombre_empresa, rut_empresa')
-          .eq('rut_empresa', rutProveedor)
-          .maybeSingle(); // Cambiar de .single() a .maybeSingle()
-
-        if (searchError) {
-          console.error(`   ❌ Error buscando proveedor: ${searchError.message}`);
-        }
-
-        if (proveedorExistente) {
-          proveedorId = proveedorExistente.id;
-          totalProveedoresActualizados++;
-          if (totalItemsProcesados <= 10) {
-            console.log(`      ✅ Proveedor encontrado: ${proveedorExistente.nombre_empresa} (${proveedorExistente.rut_empresa})`);
-          }
-        } else {
-          // Intentar buscar por RUT formateado (sin puntos ni guión)
-          const rutLimpio = rutProveedor.replace(/\./g, '').replace(/-/g, '');
-          const { data: proveedorPorRutLimpio } = await supabase
+        if (!proveedorId) {
+          // Buscar en Supabase por obuma_id
+          const { data: proveedorExistente, error: searchError } = await supabase
             .from('proveedores')
-            .select('id, nombre_empresa')
-            .eq('rut_empresa', rutLimpio)
+            .select('id, nombre_empresa, obuma_id')
+            .eq('obuma_id', proveedorIdObuma)
             .maybeSingle();
-          
-          if (proveedorPorRutLimpio) {
-            proveedorId = proveedorPorRutLimpio.id;
+
+          if (searchError) {
+            console.error(`   ❌ Error buscando proveedor: ${searchError.message}`);
+          }
+
+          if (proveedorExistente) {
+            proveedorId = proveedorExistente.id;
             totalProveedoresActualizados++;
-            console.log(`      ✅ Proveedor encontrado por RUT limpio: ${proveedorPorRutLimpio.nombre_empresa}`);
-          } else {
-            sinProveedorEncontrado++;
-            if (sinProveedorEncontrado <= 10) {
-              console.log(`      ❌ Proveedor NO encontrado para RUT: "${rutProveedor}"`);
-              console.log(`         Razón social en Obuma: "${razonSocial}"`);
+            cacheProveedores.set(proveedorIdObuma, proveedorId);
+            if (totalItemsProcesados <= 10) {
+              console.log(`      ✅ Proveedor encontrado: ${proveedorExistente.nombre_empresa} (obuma_id: ${proveedorIdObuma})`);
             }
-            continue;
+          } else {
+            // Obtener datos completos del proveedor desde Obuma
+            console.log(`      🆕 Creando nuevo proveedor con ID Obuma: ${proveedorIdObuma}`);
+            
+            let nombreProveedor = `Proveedor ${proveedorIdObuma}`;
+            let rutProveedor = `ID_${proveedorIdObuma}`;
+            let direccion = '';
+            let telefono = '';
+            let email = '';
+            
+            try {
+              const provResponse = await fetch(`${OBUMA_API_URL}/proveedores.findById.json/${proveedorIdObuma}`, {
+                method: 'GET',
+                headers: {
+                  'access-token': OBUMA_API_TOKEN,
+                  'Content-Type': 'application/json',
+                },
+              });
+              const proveedorData = await provResponse.json();
+              
+              if (proveedorData) {
+                nombreProveedor = proveedorData.proveedor_razon_social || nombreProveedor;
+                rutProveedor = proveedorData.proveedor_rut || rutProveedor;
+                direccion = proveedorData.proveedor_direccion || '';
+                telefono = proveedorData.proveedor_telefono || '';
+                email = proveedorData.proveedor_email || '';
+                console.log(`      📋 Datos obtenidos: ${nombreProveedor}, RUT: ${rutProveedor}`);
+              }
+            } catch (err) {
+              console.log(`      ⚠️ No se pudieron obtener datos adicionales del proveedor ${proveedorIdObuma}`);
+            }
+            
+            // Crear nuevo proveedor en Supabase con obuma_id
+            const { data: nuevoProveedor, error: createError } = await supabase
+              .from('proveedores')
+              .insert({
+                obuma_id: proveedorIdObuma,
+                nombre_empresa: nombreProveedor,
+                rut_empresa: rutProveedor,
+                direccion: direccion,
+                telefono: telefono,
+                email_contacto: email,
+                categoria: 'General',
+                activo: true,
+                created_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+            
+            if (createError) {
+              console.error(`      ❌ Error creando proveedor: ${createError.message}`);
+              errores.push({
+                proveedor_id_obuma: proveedorIdObuma,
+                error: createError.message
+              });
+              continue;
+            }
+            
+            if (nuevoProveedor) {
+              proveedorId = nuevoProveedor.id;
+              totalProveedoresCreados++;
+              cacheProveedores.set(proveedorIdObuma, proveedorId);
+              console.log(`      ✅ Proveedor creado: ${nuevoProveedor.nombre_empresa} (ID: ${proveedorId})`);
+            }
           }
         }
 
@@ -216,6 +246,7 @@ export async function POST(request: Request) {
             console.error(`      ❌ Error insertando producto: ${insertError.message}`);
             errores.push({
               producto: nombreProducto,
+              proveedor_id: proveedorId,
               error: insertError.message
             });
           }
@@ -251,12 +282,13 @@ export async function POST(request: Request) {
     console.log('📊 ESTADÍSTICAS FINALES DE SINCRONIZACIÓN');
     console.log('='.repeat(60));
     console.log(`   📦 Items procesados: ${totalItemsProcesados}`);
-    console.log(`   🏢 Proveedores actualizados: ${totalProveedoresActualizados}`);
+    console.log(`   🏢 Proveedores actualizados (ya existían): ${totalProveedoresActualizados}`);
     console.log(`   🏢 Proveedores nuevos creados: ${totalProveedoresCreados}`);
     console.log(`   📋 Productos sincronizados: ${totalProductosSincronizados}`);
-    console.log(`   ⚠️ Items sin RUT de proveedor: ${sinRUT}`);
-    console.log(`   ⚠️ Proveedores no encontrados en BD: ${sinProveedorEncontrado}`);
+    console.log(`   ⚠️ Items sin nombre de producto: ${sinProducto}`);
+    console.log(`   ⚠️ Items sin proveedor_id: ${sinProveedorId}`);
     console.log(`   💾 OC en caché: ${cacheOC.size}`);
+    console.log(`   💾 Proveedores en caché: ${cacheProveedores.size}`);
     console.log(`   ❌ Errores: ${errores.length}`);
     console.log('='.repeat(60));
     console.log('🏁 SINCRONIZACIÓN FINALIZADA\n');
@@ -268,9 +300,10 @@ export async function POST(request: Request) {
         proveedores_actualizados: totalProveedoresActualizados,
         proveedores_nuevos: totalProveedoresCreados,
         productos_sincronizados: totalProductosSincronizados,
-        items_sin_rut: sinRUT,
-        proveedores_no_encontrados: sinProveedorEncontrado,
+        items_sin_producto: sinProducto,
+        items_sin_proveedor: sinProveedorId,
         oc_en_cache: cacheOC.size,
+        proveedores_en_cache: cacheProveedores.size,
         errores: errores.length
       },
       errores: errores.slice(0, 10),
@@ -296,6 +329,6 @@ export async function GET() {
   return NextResponse.json({
     message: 'Endpoint de sincronización de productos Obuma',
     usage: 'POST /api/sincronizar-productos-obuma',
-    description: 'Sincroniza productos desde los items de órdenes de compra de Obuma a Supabase'
+    description: 'Sincroniza productos desde los items de órdenes de compra de Obuma a Supabase usando obuma_id'
   });
 }
