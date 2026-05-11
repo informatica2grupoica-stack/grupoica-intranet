@@ -30,7 +30,8 @@ import {
   GitBranch,
   Clock,
   FileSignature,
-  Download
+  Download,
+  Search
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -94,13 +95,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       items: [
         { name: "Dashboard RRHH", icon: PieChart, path: "/rrhh" },
         { name: "Empleados", icon: Users, path: "/rrhh/empleados" },
-        //{ name: "Asistencias", icon: Calendar, path: "/rrhh/asistencias" },
-        //{ name: "Permisos", icon: FileCheck, path: "/rrhh/permisos" },
         { name: "Contratos", icon: FileSignature, path: "/rrhh/contratos" },
         { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
-        //{ name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
         { name: 'Evaluaciones', icon: Star, path: '/rrhh/evaluaciones' },
-        //{ name: 'Organigrama', icon: GitBranch, path: '/rrhh/organigrama' },
       ]
     },
     {
@@ -115,7 +112,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       items: [
         { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
-        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" }
+        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
+        { name: "🔍 Buscar Proveedores", icon: Search, path: "/buscador-proveedores" }
       ]
     },
     {
