@@ -5,7 +5,7 @@ import {
   Building2, Search, Loader2, MapPin, X, Phone, 
   Edit3, Plus, CheckCircle2, AlertCircle,
   Mail, Globe, ChevronDown, ChevronUp, Briefcase, 
-  Smartphone, RefreshCw, Users, Map, CreditCard, Globe as WebIcon
+  Smartphone, RefreshCw, Users
 } from 'lucide-react';
 import { useObumaProveedores, ObumaProveedor } from '@/hooks/useObumaProveedores';
 import Paginacion from '@/components/Paginacion';
@@ -34,14 +34,14 @@ export default function ObumaProveedoresPage() {
   const [seleccionado, setSeleccionado] = useState<ObumaProveedor | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
 
-  // Estado completo del formulario con todos los campos
+  // Estado completo del formulario sin es_supermercado
   const initialFormState: Partial<ObumaProveedor> = {
     proveedor_rut: '',
     proveedor_razon_social: '',
     proveedor_contacto: '',
     proveedor_giro_comercial: '',
-    proveedor_es_supermercado: false,
     proveedor_direccion: '',
     proveedor_comuna: '',
     proveedor_region: '',
@@ -60,10 +60,34 @@ export default function ObumaProveedoresPage() {
     setTimeout(() => setAlert(null), 3000);
   };
 
+  // Función de sincronización
+  const sincronizarProductos = async () => {
+    setSincronizando(true);
+    try {
+      const res = await fetch('/api/sincronizar-productos-obuma', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        showAlert(
+          `✅ Sincronización completada!\n${data.estadisticas.productos_sincronizados} productos sincronizados\n${data.estadisticas.proveedores_nuevos} proveedores nuevos`,
+          "success"
+        );
+        cargarProveedores();
+      } else {
+        showAlert(`❌ Error: ${data.error || data.message || 'Error desconocido'}`, "error");
+      }
+    } catch (error) {
+      console.error(error);
+      showAlert("Error al sincronizar con Obuma", "error");
+    }
+    setSincronizando(false);
+  };
+
   const handleCrear = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validaciones
     if (!nuevo.proveedor_rut) {
       showAlert("El RUT es obligatorio", "error");
       return;
@@ -165,11 +189,6 @@ export default function ObumaProveedoresPage() {
           </a>
         </div>
       )}
-      {prov.proveedor_es_supermercado && (
-        <div className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-600 px-2 py-1 rounded-full">
-          🏪 Es Supermercado
-        </div>
-      )}
       {prov.proveedor_observacion && (
         <p className="text-xs text-slate-500 italic bg-slate-50 p-2 rounded-lg mt-2">
           <strong>Observaciones:</strong> {prov.proveedor_observacion}
@@ -246,9 +265,20 @@ export default function ObumaProveedoresPage() {
               <button
                 onClick={() => cargarProveedores()}
                 className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
-                title="Actualizar"
+                title="Actualizar lista"
               >
                 <RefreshCw size={20} />
+              </button>
+              
+              {/* Botón de sincronización */}
+              <button
+                onClick={sincronizarProductos}
+                disabled={sincronizando}
+                className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                title="Sincronizar productos desde Obuma (histórico de compras)"
+              >
+                {sincronizando ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                Sincronizar Productos
               </button>
             </div>
           </div>
@@ -323,7 +353,7 @@ export default function ObumaProveedoresPage() {
           </div>
         </div>
 
-        {/* Formulario de creación - COMPLETO con todos los campos */}
+        {/* Formulario de creación - SIN es_supermercado */}
         {showForm && (
           <form onSubmit={handleCrear} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
@@ -403,12 +433,6 @@ export default function ObumaProveedoresPage() {
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">País</label>
                 <input value={nuevo.proveedor_pais} onChange={e => setNuevo({...nuevo, proveedor_pais: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" placeholder="Chile" />
               </div>
-              
-              {/* Opciones adicionales */}
-              <div className="flex items-center gap-3">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Es Supermercado</label>
-                <input type="checkbox" checked={nuevo.proveedor_es_supermercado} onChange={e => setNuevo({...nuevo, proveedor_es_supermercado: e.target.checked})} className="rounded border-slate-300 w-4 h-4" />
-              </div>
             </div>
             
             {/* Observaciones */}
@@ -476,9 +500,6 @@ export default function ObumaProveedoresPage() {
                       <td className="px-6 py-4">
                         <p className="text-xs text-slate-600">{prov.proveedor_comuna || '—'}</p>
                         <p className="text-[9px] text-slate-400">{getRegionNombre(prov.proveedor_region || '')}</p>
-                        {prov.proveedor_es_supermercado && (
-                          <span className="inline-block mt-1 text-[8px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded">🏪 Supermercado</span>
-                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
@@ -548,11 +569,7 @@ export default function ObumaProveedoresPage() {
                   </div>
                   
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <div>
-                      {prov.proveedor_es_supermercado && (
-                        <span className="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">🛒 Supermercado</span>
-                      )}
-                    </div>
+                    <div className="flex-1"></div>
                     <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
                       {expandedCard === prov.proveedor_id ? 'Ver menos' : 'Ver detalles'}
                       {expandedCard === prov.proveedor_id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -590,7 +607,7 @@ export default function ObumaProveedoresPage() {
         )}
       </div>
 
-      {/* Modal de edición completo */}
+      {/* Modal de edición - SIN es_supermercado */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
@@ -671,10 +688,6 @@ export default function ObumaProveedoresPage() {
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">País</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.proveedor_pais || 'Chile'} onChange={e => setSeleccionado({...seleccionado, proveedor_pais: e.target.value})} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">Es Supermercado</label>
-                  <input type="checkbox" checked={seleccionado.proveedor_es_supermercado || false} onChange={e => setSeleccionado({...seleccionado, proveedor_es_supermercado: e.target.checked})} className="rounded border-slate-300 w-4 h-4" />
                 </div>
               </div>
               <div>
