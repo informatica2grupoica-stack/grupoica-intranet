@@ -56,6 +56,8 @@ export async function POST(request: Request) {
     let totalProveedoresCreados = 0;
     let totalProveedoresActualizados = 0;
     let totalItemsProcesados = 0;
+    let sinRUT = 0;
+    let sinProveedorEncontrado = 0;
     const errores = [];
     
     // Cache para no llamar a la misma OC varias veces
@@ -100,56 +102,79 @@ export async function POST(request: Request) {
           cacheOC.set(ocId, ocData);
         }
 
-        // 2.3 Obtener el RUT del proveedor
-        const rutProveedor = ocData.proveedor_rut || 
-                            (ocData.rel_proveedor_id ? `ID_${ocData.rel_proveedor_id}` : null);
+        // 2.3 Obtener el RUT del proveedor (probar diferentes campos)
+        let rutProveedor = ocData.proveedor_rut;
+        
+        if (!rutProveedor && ocData.rel_proveedor_id) {
+          // Intentar obtener el proveedor por ID
+          const proveedorResponse = await fetch(`${OBUMA_API_URL}/proveedores.findById.json/${ocData.rel_proveedor_id}`, {
+            method: 'GET',
+            headers: {
+              'access-token': OBUMA_API_TOKEN,
+              'Content-Type': 'application/json',
+            },
+          });
+          const proveedorData = await proveedorResponse.json();
+          rutProveedor = proveedorData.proveedor_rut;
+          console.log(`   🔍 Buscando proveedor por ID ${ocData.rel_proveedor_id}: RUT encontrado = ${rutProveedor}`);
+        }
         
         if (!rutProveedor) {
+          sinRUT++;
+          if (sinRUT <= 5) {
+            console.log(`   ⚠️ Item ${totalItemsProcesados}: OC ${ocId} no tiene RUT de proveedor`);
+            console.log(`      Campos disponibles en ocData:`, Object.keys(ocData).join(', '));
+          }
           continue;
         }
 
+        // Limpiar el RUT (eliminar espacios y convertir a mayúsculas)
+        rutProveedor = rutProveedor.trim().toUpperCase();
         const razonSocial = ocData.proveedor_razon_social || `Proveedor ${rutProveedor}`;
         
-        // 2.4 Buscar o crear el proveedor en Supabase
+        if (totalItemsProcesados <= 10) {
+          console.log(`   🏢 Item ${totalItemsProcesados}: RUT="${rutProveedor}", Producto="${nombreProducto.substring(0, 40)}..."`);
+        }
+        
+        // 2.4 Buscar el proveedor en Supabase por RUT
         let proveedorId = null;
         
-        const { data: proveedorExistente } = await supabase
+        const { data: proveedorExistente, error: searchError } = await supabase
           .from('proveedores')
-          .select('id, nombre_empresa')
+          .select('id, nombre_empresa, rut_empresa')
           .eq('rut_empresa', rutProveedor)
-          .single();
+          .maybeSingle(); // Cambiar de .single() a .maybeSingle()
+
+        if (searchError) {
+          console.error(`   ❌ Error buscando proveedor: ${searchError.message}`);
+        }
 
         if (proveedorExistente) {
           proveedorId = proveedorExistente.id;
           totalProveedoresActualizados++;
-        } else {
-          const { data: nuevoProveedor, error: createError } = await supabase
-            .from('proveedores')
-            .insert({
-              nombre_empresa: razonSocial,
-              rut_empresa: rutProveedor,
-              direccion: ocData.proveedor_direccion || '',
-              telefono: ocData.proveedor_telefono || '',
-              email_contacto: ocData.proveedor_email || '',
-              categoria: 'General',
-              activo: true,
-              created_at: new Date().toISOString(),
-            })
-            .select()
-            .single();
-          
-          if (createError) {
-            errores.push({
-              proveedor: razonSocial,
-              rut: rutProveedor,
-              error: createError.message
-            });
-            continue;
+          if (totalItemsProcesados <= 10) {
+            console.log(`      ✅ Proveedor encontrado: ${proveedorExistente.nombre_empresa} (${proveedorExistente.rut_empresa})`);
           }
+        } else {
+          // Intentar buscar por RUT formateado (sin puntos ni guión)
+          const rutLimpio = rutProveedor.replace(/\./g, '').replace(/-/g, '');
+          const { data: proveedorPorRutLimpio } = await supabase
+            .from('proveedores')
+            .select('id, nombre_empresa')
+            .eq('rut_empresa', rutLimpio)
+            .maybeSingle();
           
-          if (nuevoProveedor) {
-            proveedorId = nuevoProveedor.id;
-            totalProveedoresCreados++;
+          if (proveedorPorRutLimpio) {
+            proveedorId = proveedorPorRutLimpio.id;
+            totalProveedoresActualizados++;
+            console.log(`      ✅ Proveedor encontrado por RUT limpio: ${proveedorPorRutLimpio.nombre_empresa}`);
+          } else {
+            sinProveedorEncontrado++;
+            if (sinProveedorEncontrado <= 10) {
+              console.log(`      ❌ Proveedor NO encontrado para RUT: "${rutProveedor}"`);
+              console.log(`         Razón social en Obuma: "${razonSocial}"`);
+            }
+            continue;
           }
         }
 
@@ -159,16 +184,16 @@ export async function POST(request: Request) {
         // 3. Guardar el producto en proveedor_productos
         // =============================================
         const fechaCompra = ocData.compra_oc_fecha_ingreso?.split('T')[0] || new Date().toISOString().split('T')[0];
-        const precioActual = item.precio || item.subtotal || 0;
+        const precioActual = parseFloat(item.precio) || parseFloat(item.subtotal) || 0;
         const sku = item.codigo_comercial || '';
 
         // Verificar si ya existe la relación
         const { data: existente } = await supabase
           .from('proveedor_productos')
-          .select('id, ultimo_precio, fecha_ultima_compra')
+          .select('id')
           .eq('proveedor_id', proveedorId)
           .eq('producto_nombre', nombreProducto)
-          .single();
+          .maybeSingle();
 
         if (!existente) {
           const { error: insertError } = await supabase
@@ -177,29 +202,41 @@ export async function POST(request: Request) {
               proveedor_id: proveedorId,
               producto_nombre: nombreProducto,
               producto_sku: sku,
-              ultimo_precio: precioActual,
+              ultimo_precio: Math.round(precioActual),
               fecha_ultima_compra: fechaCompra,
               created_at: new Date().toISOString(),
             });
           
           if (!insertError) {
             totalProductosSincronizados++;
+            if (totalProductosSincronizados <= 20) {
+              console.log(`      ✅ Producto INSERTADO: "${nombreProducto.substring(0, 50)}" - $${Math.round(precioActual)}`);
+            }
+          } else {
+            console.error(`      ❌ Error insertando producto: ${insertError.message}`);
+            errores.push({
+              producto: nombreProducto,
+              error: insertError.message
+            });
           }
         } else {
-          const fechaExistente = existente.fecha_ultima_compra || '1900-01-01';
-          if (precioActual !== existente.ultimo_precio || fechaCompra > fechaExistente) {
-            const { error: updateError } = await supabase
-              .from('proveedor_productos')
-              .update({
-                ultimo_precio: precioActual,
-                fecha_ultima_compra: fechaCompra,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', existente.id);
+          // Producto ya existe, actualizar precio y fecha
+          const { error: updateError } = await supabase
+            .from('proveedor_productos')
+            .update({
+              ultimo_precio: Math.round(precioActual),
+              fecha_ultima_compra: fechaCompra,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existente.id);
+          
+          if (!updateError && totalProductosSincronizados <= 20) {
+            console.log(`      🔄 Producto ACTUALIZADO: "${nombreProducto.substring(0, 50)}" - $${Math.round(precioActual)}`);
           }
         }
         
       } catch (itemError: any) {
+        console.error(`   ❌ Error procesando item: ${itemError.message}`);
         errores.push({
           item_id: item.compra_item_id,
           error: itemError.message
@@ -214,9 +251,11 @@ export async function POST(request: Request) {
     console.log('📊 ESTADÍSTICAS FINALES DE SINCRONIZACIÓN');
     console.log('='.repeat(60));
     console.log(`   📦 Items procesados: ${totalItemsProcesados}`);
-    console.log(`   🏢 Proveedores nuevos: ${totalProveedoresCreados}`);
     console.log(`   🏢 Proveedores actualizados: ${totalProveedoresActualizados}`);
+    console.log(`   🏢 Proveedores nuevos creados: ${totalProveedoresCreados}`);
     console.log(`   📋 Productos sincronizados: ${totalProductosSincronizados}`);
+    console.log(`   ⚠️ Items sin RUT de proveedor: ${sinRUT}`);
+    console.log(`   ⚠️ Proveedores no encontrados en BD: ${sinProveedorEncontrado}`);
     console.log(`   💾 OC en caché: ${cacheOC.size}`);
     console.log(`   ❌ Errores: ${errores.length}`);
     console.log('='.repeat(60));
@@ -226,14 +265,16 @@ export async function POST(request: Request) {
       success: true,
       estadisticas: {
         items_procesados: totalItemsProcesados,
-        proveedores_nuevos: totalProveedoresCreados,
         proveedores_actualizados: totalProveedoresActualizados,
+        proveedores_nuevos: totalProveedoresCreados,
         productos_sincronizados: totalProductosSincronizados,
+        items_sin_rut: sinRUT,
+        proveedores_no_encontrados: sinProveedorEncontrado,
         oc_en_cache: cacheOC.size,
         errores: errores.length
       },
       errores: errores.slice(0, 10),
-      mensaje: 'Sincronización completada exitosamente'
+      mensaje: 'Sincronización completada'
     });
 
   } catch (error: any) {
