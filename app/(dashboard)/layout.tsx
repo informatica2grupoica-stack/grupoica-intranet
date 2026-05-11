@@ -94,13 +94,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       items: [
         { name: "Dashboard RRHH", icon: PieChart, path: "/rrhh" },
         { name: "Empleados", icon: Users, path: "/rrhh/empleados" },
-        { name: "Asistencias", icon: Calendar, path: "/rrhh/asistencias" },
-        { name: "Permisos", icon: FileCheck, path: "/rrhh/permisos" },
+        //{ name: "Asistencias", icon: Calendar, path: "/rrhh/asistencias" },
+        //{ name: "Permisos", icon: FileCheck, path: "/rrhh/permisos" },
         { name: "Contratos", icon: FileSignature, path: "/rrhh/contratos" },
         { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
-        { name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
+        //{ name: "Reportes RRHH", icon: Download, path: "/rrhh/reportes" },
         { name: 'Evaluaciones', icon: Star, path: '/rrhh/evaluaciones' },
-        { name: 'Organigrama', icon: GitBranch, path: '/rrhh/organigrama' },
+        //{ name: 'Organigrama', icon: GitBranch, path: '/rrhh/organigrama' },
       ]
     },
     {
