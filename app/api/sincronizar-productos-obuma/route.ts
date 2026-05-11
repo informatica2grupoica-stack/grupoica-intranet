@@ -3,10 +3,19 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
+  console.log('\n' + '='.repeat(60));
+  console.log('🔄 INICIANDO SINCRONIZACIÓN DE PRODUCTOS DESDE OBUMA');
+  console.log('='.repeat(60));
+  console.log(`📅 Fecha/hora: ${new Date().toLocaleString()}`);
+  
   const OBUMA_API_URL = process.env.OBUMA_API_URL;
   const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
 
+  console.log(`🔑 OBUMA_API_TOKEN configurado: ${OBUMA_API_TOKEN ? 'SÍ' : 'NO'}`);
+  console.log(`🌐 OBUMA_API_URL: ${OBUMA_API_URL}`);
+
   if (!OBUMA_API_TOKEN) {
+    console.error('❌ Error: API token de Obuma no configurado');
     return NextResponse.json(
       { error: 'API token de Obuma no configurado' },
       { status: 500 }
@@ -14,12 +23,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    console.log('🔄 Iniciando sincronización de productos desde Obuma...');
-    console.log('📡 Usando endpoint: /comprasOc.listItems.json');
-    
     // =============================================
     // 1. Obtener TODOS los items de las órdenes de compra
     // =============================================
+    console.log('\n📡 PASO 1: Obteniendo items de órdenes de compra...');
+    console.log(`   🔗 Endpoint: ${OBUMA_API_URL}/comprasOc.listItems.json`);
+    
     const itemsResponse = await fetch(`${OBUMA_API_URL}/comprasOc.listItems.json`, {
       method: 'GET',
       headers: {
@@ -28,14 +37,20 @@ export async function POST(request: Request) {
       },
     });
 
+    console.log(`   📊 Response status: ${itemsResponse.status}`);
+    
     const itemsData = await itemsResponse.json();
     
     if (!itemsData.data || !Array.isArray(itemsData.data)) {
+      console.error('❌ Error: No se pudieron obtener los items de las órdenes de compra');
       throw new Error('No se pudieron obtener los items de las órdenes de compra');
     }
 
-    console.log(`📦 ${itemsData.data.length} items encontrados en órdenes de compra`);
-    console.log(`📋 Ejemplo de item:`, JSON.stringify(itemsData.data[0], null, 2).substring(0, 300));
+    console.log(`   ✅ ${itemsData.data.length} items encontrados en órdenes de compra`);
+    
+    if (itemsData.data.length > 0) {
+      console.log(`   📋 Ejemplo de item:`, JSON.stringify(itemsData.data[0], null, 2).substring(0, 400));
+    }
 
     let totalProductosSincronizados = 0;
     let totalProveedoresCreados = 0;
@@ -47,19 +62,25 @@ export async function POST(request: Request) {
     const cacheOC = new Map();
 
     // =============================================
-    // 2. Procesar cada item (limitamos a 500 para evitar timeout)
+    // 2. Procesar cada item (máximo 500 para evitar timeout)
     // =============================================
-    const itemsToProcess = itemsData.data.slice(0, 500);
-    console.log(`🔄 Procesando primeros ${itemsToProcess.length} items...`);
-
-    for (const item of itemsToProcess) {
+    console.log('\n🔄 PASO 2: Procesando items...');
+    const limite = Math.min(itemsData.data.length, 500);
+    console.log(`   📦 Procesando primeros ${limite} items`);
+    
+    for (let i = 0; i < limite; i++) {
+      const item = itemsData.data[i];
+      
       try {
         totalItemsProcesados++;
+        
+        if (totalItemsProcesados % 50 === 0) {
+          console.log(`   📊 Progreso: ${totalItemsProcesados}/${limite} items procesados...`);
+        }
         
         // 2.1 Obtener el producto del item
         const nombreProducto = item.producto_nombre || item.producto_descripcion;
         if (!nombreProducto) {
-          console.log(`⚠️ Item ${item.compra_item_id} no tiene nombre de producto`);
           continue;
         }
 
@@ -77,7 +98,6 @@ export async function POST(request: Request) {
           });
           ocData = await detalleResponse.json();
           cacheOC.set(ocId, ocData);
-          console.log(`📄 OC ${ocId} cargada - Proveedor: ${ocData.proveedor_razon_social || 'Sin nombre'}`);
         }
 
         // 2.3 Obtener el RUT del proveedor
@@ -85,7 +105,6 @@ export async function POST(request: Request) {
                             (ocData.rel_proveedor_id ? `ID_${ocData.rel_proveedor_id}` : null);
         
         if (!rutProveedor) {
-          console.log(`⚠️ Item ${item.compra_item_id} - OC ${ocId} no tiene proveedor asociado`);
           continue;
         }
 
@@ -94,7 +113,7 @@ export async function POST(request: Request) {
         // 2.4 Buscar o crear el proveedor en Supabase
         let proveedorId = null;
         
-        const { data: proveedorExistente, error: searchError } = await supabase
+        const { data: proveedorExistente } = await supabase
           .from('proveedores')
           .select('id, nombre_empresa')
           .eq('rut_empresa', rutProveedor)
@@ -104,8 +123,6 @@ export async function POST(request: Request) {
           proveedorId = proveedorExistente.id;
           totalProveedoresActualizados++;
         } else {
-          console.log(`🆕 Creando proveedor: ${razonSocial} (RUT: ${rutProveedor})`);
-          
           const { data: nuevoProveedor, error: createError } = await supabase
             .from('proveedores')
             .insert({
@@ -122,7 +139,6 @@ export async function POST(request: Request) {
             .single();
           
           if (createError) {
-            console.error(`❌ Error creando proveedor ${razonSocial}:`, createError.message);
             errores.push({
               proveedor: razonSocial,
               rut: rutProveedor,
@@ -134,7 +150,6 @@ export async function POST(request: Request) {
           if (nuevoProveedor) {
             proveedorId = nuevoProveedor.id;
             totalProveedoresCreados++;
-            console.log(`✅ Proveedor creado: ${nuevoProveedor.nombre_empresa}`);
           }
         }
 
@@ -169,9 +184,6 @@ export async function POST(request: Request) {
           
           if (!insertError) {
             totalProductosSincronizados++;
-            console.log(`   ✅ Producto: "${nombreProducto}" - $${precioActual}`);
-          } else {
-            console.error(`   ❌ Error insertando producto:`, insertError.message);
           }
         } else {
           const fechaExistente = existente.fecha_ultima_compra || '1900-01-01';
@@ -184,15 +196,10 @@ export async function POST(request: Request) {
                 updated_at: new Date().toISOString(),
               })
               .eq('id', existente.id);
-            
-            if (!updateError) {
-              console.log(`   🔄 Producto actualizado: "${nombreProducto}" - $${precioActual}`);
-            }
           }
         }
         
       } catch (itemError: any) {
-        console.error(`❌ Error procesando item:`, itemError.message);
         errores.push({
           item_id: item.compra_item_id,
           error: itemError.message
@@ -203,13 +210,17 @@ export async function POST(request: Request) {
     // =============================================
     // 4. Respuesta final
     // =============================================
-    console.log(`\n✅ Sincronización completada:`);
-    console.log(`   - Items procesados: ${totalItemsProcesados}`);
-    console.log(`   - Proveedores nuevos: ${totalProveedoresCreados}`);
-    console.log(`   - Proveedores actualizados: ${totalProveedoresActualizados}`);
-    console.log(`   - Productos sincronizados: ${totalProductosSincronizados}`);
-    console.log(`   - Errores: ${errores.length}`);
-    console.log(`   - Caché OC utilizada: ${cacheOC.size} OC distintas`);
+    console.log('\n' + '='.repeat(60));
+    console.log('📊 ESTADÍSTICAS FINALES DE SINCRONIZACIÓN');
+    console.log('='.repeat(60));
+    console.log(`   📦 Items procesados: ${totalItemsProcesados}`);
+    console.log(`   🏢 Proveedores nuevos: ${totalProveedoresCreados}`);
+    console.log(`   🏢 Proveedores actualizados: ${totalProveedoresActualizados}`);
+    console.log(`   📋 Productos sincronizados: ${totalProductosSincronizados}`);
+    console.log(`   💾 OC en caché: ${cacheOC.size}`);
+    console.log(`   ❌ Errores: ${errores.length}`);
+    console.log('='.repeat(60));
+    console.log('🏁 SINCRONIZACIÓN FINALIZADA\n');
 
     return NextResponse.json({
       success: true,
@@ -218,8 +229,8 @@ export async function POST(request: Request) {
         proveedores_nuevos: totalProveedoresCreados,
         proveedores_actualizados: totalProveedoresActualizados,
         productos_sincronizados: totalProductosSincronizados,
-        errores: errores.length,
-        oc_en_cache: cacheOC.size
+        oc_en_cache: cacheOC.size,
+        errores: errores.length
       },
       errores: errores.slice(0, 10),
       mensaje: 'Sincronización completada exitosamente'
@@ -227,12 +238,12 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('❌ Error fatal en sincronización:', error.message);
+    console.error(error.stack);
     return NextResponse.json(
       { 
         success: false, 
         error: error.message,
-        mensaje: 'Error al sincronizar productos desde Obuma',
-        detalle: error.stack
+        mensaje: 'Error al sincronizar productos desde Obuma'
       },
       { status: 500 }
     );
