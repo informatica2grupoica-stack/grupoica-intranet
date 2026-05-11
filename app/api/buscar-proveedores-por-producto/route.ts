@@ -3,11 +3,20 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET(request: Request) {
+  console.log('='.repeat(60));
+  console.log('🚀 INICIO DE BÚSQUEDA DE PROVEEDORES');
+  console.log('='.repeat(60));
+  
   const { searchParams } = new URL(request.url);
   const producto = searchParams.get('producto');
   const incluirObuma = searchParams.get('incluirObuma') !== 'false';
 
+  console.log(`📝 Parámetros recibidos:`);
+  console.log(`   - producto: "${producto}"`);
+  console.log(`   - incluirObuma: ${incluirObuma}`);
+
   if (!producto || producto.trim().length < 2) {
+    console.log(`❌ Error: Producto muy corto (${producto?.length || 0} caracteres)`);
     return NextResponse.json(
       { error: 'Ingrese al menos 2 caracteres para buscar' },
       { status: 400 }
@@ -17,83 +26,99 @@ export async function GET(request: Request) {
   const productoLower = producto.toLowerCase().trim();
   const resultados = [];
 
-  console.log(`🔍 Buscando proveedores para: "${productoLower}"`);
-
   // =============================================
   // 1. BUSCAR EN SUPABASE
   // =============================================
+  console.log('\n📋 PASO 1: Buscando en Supabase...');
+  
   try {
-    // Primero obtenemos los productos que coinciden
+    console.log(`   🔍 Query: ilike 'producto_nombre', '%${productoLower}%'`);
+    
     const { data: productosData, error: productosError } = await supabase
       .from('proveedor_productos')
       .select('*')
       .ilike('producto_nombre', `%${productoLower}%`);
 
     if (productosError) {
-      console.error('Error buscando productos:', productosError);
-    } else if (productosData && productosData.length > 0) {
-      // Obtenemos los IDs de proveedores únicos
-      const proveedorIds = [...new Set(productosData.map(p => p.proveedor_id))];
+      console.error(`   ❌ Error en Supabase:`, productosError);
+    } else {
+      console.log(`   ✅ Encontrados ${productosData?.length || 0} productos en Supabase`);
       
-      // Obtenemos los datos de los proveedores
-      const { data: proveedoresData, error: proveedoresError } = await supabase
-        .from('proveedores')
-        .select('*')
-        .in('id', proveedorIds);
-
-      if (proveedoresError) {
-        console.error('Error buscando proveedores:', proveedoresError);
-      } else if (proveedoresData) {
-        // Crear un mapa de proveedores por ID
-        const proveedoresMap = new Map();
-        for (const proveedor of proveedoresData) {
-          proveedoresMap.set(proveedor.id, {
-            fuente: '📋 Nuestra Base de Datos',
-            id: proveedor.id,
-            nombre: proveedor.nombre_empresa,
-            rut: proveedor.rut_empresa,
-            telefono: proveedor.telefono,
-            email: proveedor.email_contacto,
-            sitio_web: proveedor.sitio_web,
-            direccion: proveedor.direccion,
-            comuna: proveedor.comuna,
-            ciudad: proveedor.ciudad,
-            calificacion: proveedor.calificacion,
-            productos: []
-          });
-        }
+      if (productosData && productosData.length > 0) {
+        console.log(`   📦 Productos encontrados:`);
+        productosData.forEach((p, i) => {
+          console.log(`      ${i+1}. ${p.producto_nombre} (proveedor_id: ${p.proveedor_id})`);
+        });
         
-        // Agregar productos a cada proveedor
-        for (const productoItem of productosData) {
-          const proveedor = proveedoresMap.get(productoItem.proveedor_id);
-          if (proveedor) {
-            proveedor.productos.push({
-              nombre: productoItem.producto_nombre,
-              sku: productoItem.producto_sku,
-              ultimo_precio: productoItem.ultimo_precio,
-              fecha_compra: productoItem.fecha_ultima_compra,
-              fuente_dato: 'Manual / Histórico Supabase'
+        const proveedorIds = [...new Set(productosData.map(p => p.proveedor_id))];
+        console.log(`   🏢 Proveedores únicos: ${proveedorIds.length}`);
+        
+        const { data: proveedoresData, error: proveedoresError } = await supabase
+          .from('proveedores')
+          .select('*')
+          .in('id', proveedorIds);
+
+        if (proveedoresError) {
+          console.error(`   ❌ Error obteniendo proveedores:`, proveedoresError);
+        } else if (proveedoresData) {
+          console.log(`   ✅ Proveedores encontrados: ${proveedoresData.length}`);
+          
+          const proveedoresMap = new Map();
+          for (const proveedor of proveedoresData) {
+            console.log(`      - ${proveedor.nombre_empresa} (${proveedor.rut_empresa})`);
+            proveedoresMap.set(proveedor.id, {
+              fuente: '📋 Nuestra Base de Datos',
+              id: proveedor.id,
+              nombre: proveedor.nombre_empresa,
+              rut: proveedor.rut_empresa,
+              telefono: proveedor.telefono,
+              email: proveedor.email_contacto,
+              sitio_web: proveedor.sitio_web,
+              direccion: proveedor.direccion,
+              comuna: proveedor.comuna,
+              ciudad: proveedor.ciudad,
+              calificacion: proveedor.calificacion,
+              productos: []
             });
           }
+          
+          for (const productoItem of productosData) {
+            const proveedor = proveedoresMap.get(productoItem.proveedor_id);
+            if (proveedor) {
+              proveedor.productos.push({
+                nombre: productoItem.producto_nombre,
+                sku: productoItem.producto_sku,
+                ultimo_precio: productoItem.ultimo_precio,
+                fecha_compra: productoItem.fecha_ultima_compra,
+                fuente_dato: 'Manual / Histórico Supabase'
+              });
+            }
+          }
+          
+          resultados.push(...Array.from(proveedoresMap.values()));
+          console.log(`   ✅ ${resultados.length} proveedores agregados desde Supabase`);
         }
-        
-        resultados.push(...Array.from(proveedoresMap.values()));
       }
     }
   } catch (error) {
-    console.error('Error en búsqueda Supabase:', error);
+    console.error('   ❌ Excepción en búsqueda Supabase:', error);
   }
 
   // =============================================
   // 2. BUSCAR EN OBUMA
   // =============================================
   if (incluirObuma) {
+    console.log('\n🏢 PASO 2: Buscando en Obuma...');
+    
     const OBUMA_API_URL = process.env.OBUMA_API_URL;
     const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
 
+    console.log(`   🔑 OBUMA_API_TOKEN configurado: ${OBUMA_API_TOKEN ? 'SÍ' : 'NO'}`);
+    console.log(`   🌐 OBUMA_API_URL: ${OBUMA_API_URL}`);
+
     if (OBUMA_API_TOKEN) {
       try {
-        console.log('📡 Buscando en Obuma...');
+        console.log(`   📡 Llamando a: ${OBUMA_API_URL}/comprasOc.list.json`);
         
         const ocResponse = await fetch(`${OBUMA_API_URL}/comprasOc.list.json`, {
           method: 'GET',
@@ -103,12 +128,21 @@ export async function GET(request: Request) {
           },
         });
 
+        console.log(`   📊 Response status: ${ocResponse.status}`);
+        
         const ocData = await ocResponse.json();
+        console.log(`   📦 Órdenes de compra encontradas: ${ocData.data?.length || 0}`);
         
         if (ocData.data && Array.isArray(ocData.data)) {
           const proveedoresObuma = new Map();
+          const limite = Math.min(ocData.data.length, 10);
+          console.log(`   🔄 Procesando primeras ${limite} órdenes...`);
           
-          for (const oc of ocData.data.slice(0, 50)) {
+          for (let i = 0; i < limite; i++) {
+            const oc = ocData.data[i];
+            console.log(`\n   --- OC ${i+1}/${limite} ---`);
+            console.log(`   ID: ${oc.compra_oc_id}, Folio: ${oc.compra_oc_folio}`);
+            
             try {
               const detalleResponse = await fetch(`${OBUMA_API_URL}/comprasOc.findById.json/${oc.compra_oc_id}`, {
                 method: 'GET',
@@ -120,14 +154,22 @@ export async function GET(request: Request) {
               
               const detalle = await detalleResponse.json();
               
-              if (!detalle.compra_detalle) continue;
+              if (!detalle.compra_detalle) {
+                console.log(`   ⚠️ No tiene detalle de productos`);
+                continue;
+              }
+              
+              console.log(`   📦 Productos en OC: ${detalle.compra_detalle.length}`);
               
               const productosCoincidentes = detalle.compra_detalle.filter((item: any) =>
                 item.producto_nombre?.toLowerCase().includes(productoLower)
               );
               
+              console.log(`   🔍 Productos coincidentes con "${productoLower}": ${productosCoincidentes.length}`);
+              
               if (productosCoincidentes.length > 0) {
                 const rutProveedor = detalle.proveedor_rut;
+                console.log(`   ✅ Proveedor encontrado: ${detalle.proveedor_razon_social} (${rutProveedor})`);
                 
                 if (!proveedoresObuma.has(rutProveedor)) {
                   proveedoresObuma.set(rutProveedor, {
@@ -143,6 +185,7 @@ export async function GET(request: Request) {
                 }
                 
                 for (const item of productosCoincidentes) {
+                  console.log(`      📦 Producto: ${item.producto_nombre}, Precio: ${item.precio}`);
                   proveedoresObuma.get(rutProveedor).productos.push({
                     nombre: item.producto_nombre,
                     cantidad: item.cantidad,
@@ -155,19 +198,27 @@ export async function GET(request: Request) {
                 }
               }
             } catch (ocError) {
-              console.error(`Error procesando OC ${oc.compra_oc_id}:`, ocError);
+              console.error(`   ❌ Error procesando OC ${oc.compra_oc_id}:`, ocError);
             }
           }
           
-          resultados.push(...Array.from(proveedoresObuma.values()));
+          const obumaResults = Array.from(proveedoresObuma.values());
+          console.log(`\n   🏢 Total proveedores Obuma encontrados: ${obumaResults.length}`);
+          resultados.push(...obumaResults);
         }
       } catch (error) {
-        console.error('Error buscando en Obuma:', error);
+        console.error('   ❌ Error en búsqueda Obuma:', error);
       }
+    } else {
+      console.warn('   ⚠️ OBUMA_API_TOKEN no configurado');
     }
   }
 
-  // Eliminar duplicados por RUT
+  // =============================================
+  // 3. ELIMINAR DUPLICADOS
+  // =============================================
+  console.log('\n🔄 PASO 3: Eliminando duplicados...');
+  
   const resultadosUnicos = [];
   const rutsVistos = new Set();
   
@@ -175,8 +226,22 @@ export async function GET(request: Request) {
     if (!rutsVistos.has(resultado.rut)) {
       resultadosUnicos.push(resultado);
       rutsVistos.add(resultado.rut);
+      console.log(`   ✅ Manteniendo: ${resultado.nombre} (${resultado.rut})`);
+    } else {
+      console.log(`   ❌ Duplicado eliminado: ${resultado.nombre} (${resultado.rut})`);
     }
   }
+
+  // =============================================
+  // 4. RESPUESTA FINAL
+  // =============================================
+  console.log('\n📊 PASO 4: Estadísticas finales');
+  console.log(`   🔍 Producto buscado: "${producto}"`);
+  console.log(`   🏢 Total proveedores únicos: ${resultadosUnicos.length}`);
+  console.log(`   📋 Fuente Supabase: ${resultados.filter(r => r.fuente.includes('Supabase')).length}`);
+  console.log(`   🏢 Fuente Obuma: ${resultados.filter(r => r.fuente.includes('Obuma')).length}`);
+  console.log('='.repeat(60));
+  console.log('🏁 FIN DE BÚSQUEDA\n');
 
   return NextResponse.json({
     success: true,
