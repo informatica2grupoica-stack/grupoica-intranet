@@ -77,6 +77,25 @@ export async function POST(request: Request) {
     
     console.log(`✅ ${itemsData.data?.length || 0} items encontrados`);
 
+    // =============================================
+    // DEBUG: Mostrar el primer item para ver sus campos
+    // =============================================
+    if (itemsData.data && itemsData.data.length > 0) {
+      const primerItem = itemsData.data[0];
+      console.log('\n📋 ===== DEBUG DEL PRIMER ITEM =====');
+      console.log('📋 CAMPOS DISPONIBLES:');
+      console.log(Object.keys(primerItem).join(', '));
+      console.log('\n📋 VALORES IMPORTANTES:');
+      console.log(`   producto_nombre: "${primerItem.producto_nombre || 'NO EXISTE'}"`);
+      console.log(`   producto_descripcion: "${primerItem.producto_descripcion || 'NO EXISTE'}"`);
+      console.log(`   nombre: "${(primerItem as any).nombre || 'NO EXISTE'}"`);
+      console.log(`   descripcion: "${(primerItem as any).descripcion || 'NO EXISTE'}"`);
+      console.log(`   item_nombre: "${(primerItem as any).item_nombre || 'NO EXISTE'}"`);
+      console.log(`   precio: "${primerItem.precio || 'NO EXISTE'}"`);
+      console.log(`   subtotal: "${primerItem.subtotal || 'NO EXISTE'}"`);
+      console.log('====================================\n');
+    }
+
     // Crear un mapa de OC ID a proveedor_id
     const ocToProveedor = new Map<string, string>();
     for (const oc of ocData.data) {
@@ -93,6 +112,8 @@ export async function POST(request: Request) {
     console.log('\n🔄 Procesando items...');
     
     const productosPorProveedor = new Map<string, Array<{nombre: string, precio: number, sku: string, fecha: string}>>();
+    let itemsSinNombre = 0;
+    let itemsProcesados = 0;
     
     for (const item of itemsData.data.slice(0, 1000)) {
       const ocId = item.compra_oc_id;
@@ -100,8 +121,19 @@ export async function POST(request: Request) {
       
       if (!proveedorIdObuma) continue;
       
-      const nombreProducto = item.producto_nombre || item.producto_descripcion;
-      if (!nombreProducto) continue;
+      // Intentar obtener el nombre del producto de diferentes campos posibles
+      const nombreProducto = item.producto_nombre || 
+                            item.producto_descripcion || 
+                            (item as any).nombre || 
+                            (item as any).item_nombre ||
+                            (item as any).descripcion;
+      
+      if (!nombreProducto) {
+        itemsSinNombre++;
+        continue;
+      }
+      
+      itemsProcesados++;
       
       const precio = parseFloat(item.precio || '0') || parseFloat(item.subtotal || '0') || 0;
       
@@ -121,7 +153,10 @@ export async function POST(request: Request) {
       });
     }
     
-    console.log(`📦 ${productosPorProveedor.size} proveedores con productos`);
+    console.log(`📊 Estadísticas de items:`);
+    console.log(`   Items procesados: ${itemsProcesados}`);
+    console.log(`   Items sin nombre de producto: ${itemsSinNombre}`);
+    console.log(`   Proveedores con productos: ${productosPorProveedor.size}`);
 
     // =============================================
     // 4. Guardar en Supabase
@@ -204,6 +239,7 @@ export async function POST(request: Request) {
     console.log(`   Proveedores existentes: ${proveedoresExistentes}`);
     console.log(`   Proveedores nuevos creados: ${totalProveedoresCreados}`);
     console.log(`   Productos sincronizados: ${totalProductosGuardados}`);
+    console.log(`   Items sin nombre de producto: ${itemsSinNombre}`);
     console.log('='.repeat(60));
 
     return NextResponse.json({
@@ -212,6 +248,7 @@ export async function POST(request: Request) {
         proveedores_existentes: proveedoresExistentes,
         proveedores_nuevos: totalProveedoresCreados,
         productos_sincronizados: totalProductosGuardados,
+        items_sin_nombre: itemsSinNombre,
       },
     });
 
