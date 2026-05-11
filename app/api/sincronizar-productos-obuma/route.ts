@@ -34,38 +34,7 @@ export async function POST(request: Request) {
 
   try {
     // =============================================
-    // 1. Obtener lista COMPLETA de proveedores de Obuma
-    // =============================================
-    console.log('📡 Obteniendo lista completa de proveedores desde Obuma...');
-    const proveedoresResponse = await fetch(`${OBUMA_API_URL}/proveedores.list.json`, {
-      method: 'GET',
-      headers: { 'access-token': OBUMA_API_TOKEN },
-    });
-    const proveedoresData = await proveedoresResponse.json();
-    
-    // Crear mapa de datos completos de proveedores por ID
-    const datosProveedoresMap = new Map();
-    for (const prov of proveedoresData.data || []) {
-      datosProveedoresMap.set(prov.proveedor_id, {
-        nombre_empresa: prov.proveedor_razon_social || '',
-        rut_empresa: prov.proveedor_rut || '',
-        telefono: prov.proveedor_telefono || '',
-        email_contacto: prov.proveedor_email || '',
-        direccion: prov.proveedor_direccion || '',
-        comuna: prov.proveedor_comuna || '',
-        ciudad: prov.proveedor_ciudad || '',
-        region: prov.proveedor_region || '',
-        pais: prov.proveedor_pais || 'Chile',
-        sitio_web: prov.proveedor_website || '',
-        nombre_contacto: prov.proveedor_contacto || '',
-        giro_comercial: prov.proveedor_giro_comercial || '',
-        observacion: prov.proveedor_observacion || '',
-      });
-    }
-    console.log(`✅ ${datosProveedoresMap.size} proveedores con datos completos`);
-
-    // =============================================
-    // 2. Obtener órdenes de compra
+    // 1. Obtener órdenes de compra
     // =============================================
     console.log('📡 Obteniendo órdenes de compra...');
     const ocResponse = await fetch(`${OBUMA_API_URL}/comprasOc.list.json`, {
@@ -76,7 +45,7 @@ export async function POST(request: Request) {
     console.log(`✅ ${ocData.data?.length || 0} órdenes encontradas`);
 
     // =============================================
-    // 3. Obtener items
+    // 2. Obtener items
     // =============================================
     console.log('📡 Obteniendo items...');
     const itemsResponse = await fetch(`${OBUMA_API_URL}/comprasOc.listItems.json`, {
@@ -87,7 +56,7 @@ export async function POST(request: Request) {
     console.log(`✅ ${itemsData.data?.length || 0} items encontrados`);
 
     // =============================================
-    // 4. Mapear OC a proveedor
+    // 3. Mapear OC a proveedor
     // =============================================
     const ocToProveedor = new Map<string, string>();
     for (const oc of ocData.data) {
@@ -98,7 +67,7 @@ export async function POST(request: Request) {
     console.log(`📦 Mapeo: ${ocToProveedor.size} órdenes con proveedor`);
 
     // =============================================
-    // 5. Agrupar productos por proveedor
+    // 4. Agrupar productos por proveedor
     // =============================================
     const productosPorProveedor = new Map<string, Array<{nombre: string, precio: number, sku: string, fecha: string}>>();
     
@@ -129,17 +98,31 @@ export async function POST(request: Request) {
     console.log(`📦 ${productosPorProveedor.size} proveedores con productos`);
 
     // =============================================
-    // 6. Guardar en Supabase con DATOS COMPLETOS
+    // 5. Obtener datos COMPLETOS de cada proveedor usando nuestra API
     // =============================================
     let totalProveedoresActualizados = 0;
-    let totalProveedoresCreados = 0;
     let totalProductosGuardados = 0;
     
     for (const [proveedorIdObuma, productos] of productosPorProveedor) {
-      // Obtener datos completos del proveedor desde el mapa
-      const datosCompletos = datosProveedoresMap.get(proveedorIdObuma);
+      console.log(`\n📋 Procesando proveedor ID: ${proveedorIdObuma} (${productos.length} productos)`);
       
-      let proveedorId: string | null = null;
+      // Obtener datos completos del proveedor desde nuestra API
+      let proveedorData = null;
+      try {
+        const proveedorResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/obuma/proveedores/${proveedorIdObuma}`);
+        proveedorData = await proveedorResponse.json();
+        
+        if (proveedorData && proveedorData.proveedor_razon_social) {
+          console.log(`   ✅ Datos obtenidos: ${proveedorData.proveedor_razon_social}`);
+        } else {
+          console.log(`   ⚠️ No se pudieron obtener datos completos`);
+        }
+      } catch (err) {
+        console.log(`   ⚠️ Error obteniendo datos del proveedor: ${err}`);
+      }
+      
+      // Buscar o actualizar proveedor en Supabase
+      let proveedorId = null;
       
       const { data: existente } = await supabase
         .from('proveedores')
@@ -147,71 +130,54 @@ export async function POST(request: Request) {
         .eq('obuma_id', proveedorIdObuma)
         .maybeSingle();
 
+      const nombreProveedor = proveedorData?.proveedor_razon_social || `Proveedor ${proveedorIdObuma}`;
+      const rutProveedor = proveedorData?.proveedor_rut || `ID_${proveedorIdObuma}`;
+      
       if (existente) {
-        proveedorId = existente.id;
-        totalProveedoresActualizados++;
-        
-        // Actualizar datos del proveedor si es necesario
-        if (datosCompletos && datosCompletos.nombre_empresa) {
-          await supabase
-            .from('proveedores')
-            .update({
-              nombre_empresa: datosCompletos.nombre_empresa,
-              rut_empresa: datosCompletos.rut_empresa,
-              telefono: datosCompletos.telefono,
-              email_contacto: datosCompletos.email_contacto,
-              direccion: datosCompletos.direccion,
-              comuna: datosCompletos.comuna,
-              ciudad: datosCompletos.ciudad,
-              sitio_web: datosCompletos.sitio_web,
-              nombre_contacto: datosCompletos.nombre_contacto,
-              proveedor_giro_comercial: datosCompletos.giro_comercial,
-              observaciones: datosCompletos.observacion,
-              categoria: datosCompletos.giro_comercial?.substring(0, 100) || 'General',
-            })
-            .eq('id', proveedorId);
-        }
-      } else if (datosCompletos) {
-        // Crear nuevo proveedor con datos completos
-        const { data: nuevo, error: createError } = await supabase
+        // Actualizar proveedor existente con datos completos
+        const { error: updateError } = await supabase
           .from('proveedores')
-          .insert({
-            obuma_id: proveedorIdObuma,
-            nombre_empresa: datosCompletos.nombre_empresa || `Proveedor ${proveedorIdObuma}`,
-            rut_empresa: datosCompletos.rut_empresa || `ID_${proveedorIdObuma}`,
-            telefono: datosCompletos.telefono || '',
-            email_contacto: datosCompletos.email_contacto || '',
-            direccion: datosCompletos.direccion || '',
-            comuna: datosCompletos.comuna || '',
-            ciudad: datosCompletos.ciudad || '',
-            sitio_web: datosCompletos.sitio_web || '',
-            nombre_contacto: datosCompletos.nombre_contacto || '',
-            proveedor_giro_comercial: datosCompletos.giro_comercial || '',
-            observaciones: datosCompletos.observacion || '',
-            categoria: datosCompletos.giro_comercial?.substring(0, 100) || 'General',
-            activo: true,
+          .update({
+            nombre_empresa: nombreProveedor,
+            rut_empresa: rutProveedor,
+            telefono: proveedorData?.proveedor_telefono || '',
+            email_contacto: proveedorData?.proveedor_email || '',
+            direccion: proveedorData?.proveedor_direccion || '',
+            comuna: proveedorData?.proveedor_comuna || '',
+            ciudad: proveedorData?.proveedor_ciudad || '',
+            sitio_web: proveedorData?.proveedor_website || '',
+            nombre_contacto: proveedorData?.proveedor_contacto || '',
+            proveedor_giro_comercial: proveedorData?.proveedor_giro_comercial || '',
+            observaciones: proveedorData?.proveedor_observacion || '',
+            updated_at: new Date().toISOString(),
           })
-          .select()
-          .single();
+          .eq('id', existente.id);
         
-        if (createError) {
-          console.error(`❌ Error creando proveedor ${proveedorIdObuma}: ${createError.message}`);
+        if (!updateError) {
+          proveedorId = existente.id;
+          totalProveedoresActualizados++;
+          console.log(`   ✅ Proveedor actualizado: ${nombreProveedor}`);
+        } else {
+          console.error(`   ❌ Error actualizando proveedor: ${updateError.message}`);
           continue;
         }
-        
-        if (nuevo) {
-          proveedorId = nuevo.id;
-          totalProveedoresCreados++;
-          console.log(`✅ Nuevo proveedor: ${datosCompletos.nombre_empresa || proveedorIdObuma}`);
-        }
       } else {
-        // No hay datos completos, crear con datos mínimos
+        // Crear nuevo proveedor
         const { data: nuevo, error: createError } = await supabase
           .from('proveedores')
           .insert({
             obuma_id: proveedorIdObuma,
-            nombre_empresa: `Proveedor ${proveedorIdObuma}`,
-            rut_empresa: `ID_${proveedorIdObuma}`,
+            nombre_empresa: nombreProveedor,
+            rut_empresa: rutProveedor,
+            telefono: proveedorData?.proveedor_telefono || '',
+            email_contacto: proveedorData?.proveedor_email || '',
+            direccion: proveedorData?.proveedor_direccion || '',
+            comuna: proveedorData?.proveedor_comuna || '',
+            ciudad: proveedorData?.proveedor_ciudad || '',
+            sitio_web: proveedorData?.proveedor_website || '',
+            nombre_contacto: proveedorData?.proveedor_contacto || '',
+            proveedor_giro_comercial: proveedorData?.proveedor_giro_comercial || '',
+            observaciones: proveedorData?.proveedor_observacion || '',
             categoria: 'General',
             activo: true,
           })
@@ -219,14 +185,13 @@ export async function POST(request: Request) {
           .single();
         
         if (createError) {
-          console.error(`❌ Error creando proveedor ${proveedorIdObuma}: ${createError.message}`);
+          console.error(`   ❌ Error creando proveedor: ${createError.message}`);
           continue;
         }
         
         if (nuevo) {
           proveedorId = nuevo.id;
-          totalProveedoresCreados++;
-          console.log(`✅ Nuevo proveedor (mínimo): Proveedor ${proveedorIdObuma}`);
+          console.log(`   ✅ Nuevo proveedor creado: ${nombreProveedor}`);
         }
       }
       
@@ -249,7 +214,7 @@ export async function POST(request: Request) {
         if (!insertError) {
           totalProductosGuardados++;
           if (totalProductosGuardados <= 30) {
-            console.log(`   📦 "${prod.nombre.substring(0, 45)}" - $${prod.precio}`);
+            console.log(`      📦 "${prod.nombre.substring(0, 45)}" - $${prod.precio}`);
           }
         }
       }
@@ -258,16 +223,14 @@ export async function POST(request: Request) {
     console.log('\n' + '='.repeat(60));
     console.log('📊 RESULTADOS FINALES');
     console.log('='.repeat(60));
-    console.log(`   Proveedores actualizados: ${totalProveedoresActualizados}`);
-    console.log(`   Proveedores nuevos creados: ${totalProveedoresCreados}`);
-    console.log(`   Productos sincronizados: ${totalProductosGuardados}`);
+    console.log(`   ✅ Proveedores actualizados: ${totalProveedoresActualizados}`);
+    console.log(`   ✅ Productos sincronizados: ${totalProductosGuardados}`);
     console.log('='.repeat(60));
 
     return NextResponse.json({
       success: true,
       estadisticas: {
         proveedores_actualizados: totalProveedoresActualizados,
-        proveedores_nuevos: totalProveedoresCreados,
         productos_sincronizados: totalProductosGuardados,
       },
     });

@@ -243,7 +243,7 @@ export async function GET(request: Request) {
   console.log('='.repeat(60));
   console.log('🏁 FIN DE BÚSQUEDA\n');
 
-  return NextResponse.json({
+  return NextResponse.json({ 
     success: true,
     producto_buscado: producto,
     total_proveedores: resultadosUnicos.length,
