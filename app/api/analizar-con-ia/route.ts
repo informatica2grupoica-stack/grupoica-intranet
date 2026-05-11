@@ -1,59 +1,63 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 10; 
+// Aumentamos el tiempo de ejecución para permitir que la IA analice listas largas de ferretería
+export const maxDuration = 45; 
 
-// Cache simple en memoria
+/**
+ * CACHÉ ESTRATÉGICO
+ * Almacena resultados por 15 minutos para evitar gastos innecesarios de API 
+ * y acelerar barridos masivos repetitivos.
+ */
 const cacheIA = new Map<string, { resultados: any, timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 15 * 60 * 1000; 
 
 export async function POST(req: Request) {
   let resultadosOriginales: any[] = [];
+  let productoBuscado = "";
 
   try {
     const body = await req.json();
-    resultadosOriginales = body.resultados || [];
-    const producto = body.producto || "productos";
-    const query = body.query || "";
+    resultadosOriginales = Array.isArray(body.resultados) ? body.resultados : [];
+    productoBuscado = (body.producto || "productos").trim();
 
-    if (!resultadosOriginales || resultadosOriginales.length === 0) {
-      return NextResponse.json({ filtrados: [], ranking: [] });
+    // 1. VALIDACIÓN INICIAL Y LIMPIEZA
+    if (resultadosOriginales.length === 0) {
+      return NextResponse.json({ filtrados: [], ranking: [], status: 'no_data' });
     }
 
-    // Si hay pocos productos, no vale la pena usar IA
-    if (resultadosOriginales.length <= 5) {
-      return NextResponse.json({ 
-        filtrados: resultadosOriginales,
-        ranking: resultadosOriginales.map((_, i) => i)
-      });
-    }
-
-    // Verificar caché
-    const cacheKey = `${producto}-${query}-${resultadosOriginales.length}`;
+    // 2. CONSULTA DE CACHÉ
+    const cacheKey = `v4_${productoBuscado.toLowerCase()}_${resultadosOriginales.length}`;
     const cached = cacheIA.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return NextResponse.json(cached.resultados);
+      return NextResponse.json({ ...cached.resultados, from_cache: true });
     }
 
+    // 3. VERIFICACIÓN DE API KEY (SI NO HAY, VA AL FALLBACK ROBUSTO DIRECTO)
     if (!process.env.DEEPSEEK_API_KEY) {
-      console.error("Falta DEEPSEEK_API_KEY");
+      console.error("ALERTA: Falta DEEPSEEK_API_KEY. Usando algoritmo local.");
       return NextResponse.json({ 
-        filtrados: resultadosOriginales.slice(0, 15),
-        ranking: Array.from({ length: Math.min(15, resultadosOriginales.length) }, (_, i) => i)
+        filtrados: smartLocalSort(resultadosOriginales, productoBuscado),
+        status: 'fallback_no_key' 
       });
     }
 
-    // COMPRESIÓN: Solo información necesaria
-    const datosReducidos = resultadosOriginales.slice(0, 20).map((r: any, idx: number) => ({
+    /**
+     * 4. COMPRESIÓN DE DATOS PARA LA IA (TOKEN OPTIMIZATION)
+     * Enviamos solo los campos críticos. Si la lista es gigante (ej. +50 items),
+     * pre-filtramos los 30 mejores localmente para que la IA no se confunda.
+     */
+    const preSeleccionados = smartLocalSort(resultadosOriginales, productoBuscado).slice(0, 35);
+    const datosParaIA = preSeleccionados.map((r, idx) => ({
       id: idx,
-      tienda: r.tienda?.substring(0, 20) || '',
-      nombre: r.nombre?.substring(0, 60) || '',
-      precio: r.precio_valor || 0,
+      tienda: r.tienda?.substring(0, 15),
+      nombre: r.nombre?.substring(0, 85), // Nombre largo para ver medidas (ej: 2 pulgadas)
+      precio: r.precio_valor || 0
     }));
 
-    const IA_TIMEOUT = 4000;
+    // 5. LLAMADA ULTRA-ROBUSTA A DEEPSEEK
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), IA_TIMEOUT);
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos máximo
 
     try {
       const aiResponse = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -68,83 +72,93 @@ export async function POST(req: Request) {
           messages: [
             {
               role: "system",
-              content: `Eres un filtro de productos. Producto buscado: "${producto}". 
+              content: `Eres un experto técnico en ferretería industrial y retail. Tu objetivo es filtrar resultados para el producto: "${productoBuscado}".
               
-Reglas:
-1. Prioriza productos que coincidan EXACTAMENTE con el nombre
-2. Rechaza accesorios no relacionados
-3. Ordena por precio ascendente
+Reglas de Oro:
+1. SI ES UNA MÁQUINA (ej. Taladro, Generador): Elimina accesorios, repuestos, carbones o estuches. Queremos la máquina.
+2. SI ES UN CONSUMIBLE (ej. Clavos, Tornillos, Brocas): Verifica la MEDIDA/DIMENSIÓN en el nombre. Si el usuario pide "2 pulgadas", descarta las de "1 pulgada".
+3. RELEVANCIA: El ranking debe ir de "Coincidencia Exacta" a "Coincidencia Parcial".
+4. PRECIO: Entre productos iguales, el más barato DEBE ir primero.
+5. EXCLUSIÓN: Elimina cualquier item que no sea lo que el usuario busca (ej. si busca 'Pala', descarta 'Cabo para pala').
 
-Responde SOLO JSON: {"ranking": [ids ordenados]}`
+Responde estrictamente en JSON: {"ranking_ids": [números de ID ordenados]}`
             },
-            { 
-              role: "user", 
-              content: JSON.stringify(datosReducidos) 
-            }
+            { role: "user", content: `Lista de productos: ${JSON.stringify(datosParaIA)}` }
           ],
-          temperature: 0.1,
-          max_tokens: 300,
+          temperature: 0.1, // Precisión máxima, cero creatividad.
           response_format: { type: 'json_object' }
         })
       });
-      
+
       clearTimeout(timeoutId);
 
-      if (!aiResponse.ok) {
-        throw new Error(`IA error: ${aiResponse.status}`);
-      }
-
-      const data = await aiResponse.json();
-      const contenido = data.choices[0].message.content;
-      
-      // Parsear respuesta
-      let ranking: number[] = [];
-      try {
-        const parsed = JSON.parse(contenido);
-        ranking = parsed.ranking || [];
+      if (aiResponse.ok) {
+        const data = await aiResponse.json();
+        const { ranking_ids } = JSON.parse(data.choices[0].message.content);
         
-        if (ranking.length > 0) {
-          const productosOrdenados = ranking
-            .filter((id: number) => id >= 0 && id < resultadosOriginales.length)
-            .map((id: number) => resultadosOriginales[id]);
-          
-          const resultado = { 
-            filtrados: productosOrdenados.slice(0, 15),
-            ranking: ranking 
+        if (Array.isArray(ranking_ids) && ranking_ids.length > 0) {
+          const filtrados = ranking_ids
+            .map(id => preSeleccionados[id])
+            .filter(p => p !== undefined);
+
+          const resultadoFinal = { 
+            filtrados: filtrados.slice(0, 20), 
+            ranking: ranking_ids,
+            status: 'ai_success'
           };
           
-          cacheIA.set(cacheKey, { resultados: resultado, timestamp: Date.now() });
-          return NextResponse.json(resultado);
+          cacheIA.set(cacheKey, { resultados: resultadoFinal, timestamp: Date.now() });
+          return NextResponse.json(resultadoFinal);
         }
-      } catch (e) {
-        console.warn("Error parseando IA:", e);
       }
     } catch (iaError) {
-      console.warn("IA timeout o error:", iaError);
+      console.warn("Error o Timeout en IA, ejecutando Smart Local Sort...");
     }
 
-    // FALLBACK: Ordenamiento local
-    const productosOrdenados = [...resultadosOriginales]
-      .sort((a, b) => {
-        const aMatch = a.nombre?.toLowerCase().includes(producto.toLowerCase()) ? 1 : 0;
-        const bMatch = b.nombre?.toLowerCase().includes(producto.toLowerCase()) ? 1 : 0;
-        if (aMatch !== bMatch) return bMatch - aMatch;
-        return (a.precio_valor || Infinity) - (b.precio_valor || Infinity);
-      })
-      .slice(0, 15);
-    
+    // 6. FALLBACK LOCAL INTELIGENTE (Si la IA falla o no hay datos útiles)
     return NextResponse.json({
-      filtrados: productosOrdenados,
-      ranking: productosOrdenados.map(p => resultadosOriginales.indexOf(p))
+      filtrados: smartLocalSort(resultadosOriginales, productoBuscado).slice(0, 15),
+      status: 'fallback_active'
     });
 
   } catch (error: any) {
-    console.error("Error:", error?.message || "Error desconocido");
-    // Fallback seguro
-    const fallbackProductos = resultadosOriginales.slice(0, 15);
+    console.error("Error Crítico:", error);
     return NextResponse.json({ 
-      filtrados: fallbackProductos,
-      ranking: fallbackProductos.map((_, i) => i)
-    });
+      filtrados: resultadosOriginales.slice(0, 10), 
+      status: 'critical_error' 
+    }, { status: 500 });
   }
 }
+
+/**
+ * ALGORITMO LOCAL DE RESPALDO (SmartLocalSort)
+ * Analiza por palabras clave para cuando la IA no está disponible.
+ */
+function smartLocalSort(data: any[], query: string) {
+  const q = query.toLowerCase().trim();
+  const palabras = q.split(/\s+/).filter(p => p.length > 2);
+
+  return [...data].sort((a, b) => {
+    const nombreA = (a.nombre || "").toLowerCase();
+    const nombreB = (b.nombre || "").toLowerCase();
+
+    // Score de coincidencia: cuantas más palabras del usuario estén en el nombre, mejor.
+    const scoreA = palabras.reduce((acc, p) => acc + (nombreA.includes(p) ? 1 : 0), 0);
+    const scoreB = palabras.reduce((acc, p) => acc + (nombreB.includes(p) ? 1 : 0), 0);
+
+    // Prioridad por coincidencia de palabras
+    if (scoreA !== scoreB) return scoreB - scoreA;
+
+    // Si empatan en palabras, el más barato primero
+    return (a.precio_valor || Infinity) - (b.precio_valor || Infinity);
+  });
+}
+
+// --- ¿QUÉ HACE ESTE CÓDIGO? ---
+// 1. Actúa como el "Cerebro" que recibe miles de datos sucios de ferreterías.
+// 2. Normaliza y comprime la información para no gastar dinero excesivo en la API de DeepSeek.
+// 3. Aplica un Prompt de Ingeniería que sabe distinguir entre máquinas (objetos principales) 
+//    y accesorios (basura/repuestos), además de validar medidas para consumibles (clavos/tornillos).
+// 4. Implementa un sistema de Caché para que las búsquedas repetidas en el dashboard sean instantáneas.
+// 5. Incluye un Failsafe (SmartLocalSort) que asegura que el usuario NUNCA vea una pantalla vacía,
+//    incluso si DeepSeek se cae o hay un error de red.
