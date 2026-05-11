@@ -36,7 +36,7 @@ interface OrdenesResponse {
 
 export async function POST(request: Request) {
   console.log('\n' + '='.repeat(60));
-  console.log('🔄 SINCRONIZACIÓN DE PRODUCTOS DESDE OBUMA - VERSIÓN FINAL');
+  console.log('🔄 SINCRONIZACIÓN DE PRODUCTOS DESDE OBUMA');
   console.log('='.repeat(60));
   
   const OBUMA_API_URL = process.env.OBUMA_API_URL;
@@ -47,101 +47,49 @@ export async function POST(request: Request) {
   }
 
   try {
-    // =============================================
-    // 1. Obtener órdenes de compra (YA TIENEN rel_proveedor_id)
-    // =============================================
+    // 1. Obtener órdenes de compra
     console.log('📡 Obteniendo órdenes de compra...');
-    
     const ocResponse = await fetch(`${OBUMA_API_URL}/comprasOc.list.json`, {
       method: 'GET',
       headers: { 'access-token': OBUMA_API_TOKEN },
     });
     const ocData: OrdenesResponse = await ocResponse.json();
-    
     console.log(`✅ ${ocData.data?.length || 0} órdenes encontradas`);
-    
-    if (!ocData.data || ocData.data.length === 0) {
-      return NextResponse.json({ success: false, error: 'No se encontraron órdenes' });
-    }
 
-    // =============================================
-    // 2. Obtener items de TODAS las órdenes
-    // =============================================
-    console.log('📡 Obteniendo items de órdenes de compra...');
-    
+    // 2. Obtener items
+    console.log('📡 Obteniendo items...');
     const itemsResponse = await fetch(`${OBUMA_API_URL}/comprasOc.listItems.json`, {
       method: 'GET',
       headers: { 'access-token': OBUMA_API_TOKEN },
     });
     const itemsData: ItemsResponse = await itemsResponse.json();
-    
     console.log(`✅ ${itemsData.data?.length || 0} items encontrados`);
 
-    // =============================================
-    // DEBUG: Mostrar el primer item para ver sus campos
-    // =============================================
-    if (itemsData.data && itemsData.data.length > 0) {
-      const primerItem = itemsData.data[0];
-      console.log('\n📋 ===== DEBUG DEL PRIMER ITEM =====');
-      console.log('📋 CAMPOS DISPONIBLES:');
-      console.log(Object.keys(primerItem).join(', '));
-      console.log('\n📋 VALORES IMPORTANTES:');
-      console.log(`   producto_nombre: "${primerItem.producto_nombre || 'NO EXISTE'}"`);
-      console.log(`   producto_descripcion: "${primerItem.producto_descripcion || 'NO EXISTE'}"`);
-      console.log(`   nombre: "${(primerItem as any).nombre || 'NO EXISTE'}"`);
-      console.log(`   descripcion: "${(primerItem as any).descripcion || 'NO EXISTE'}"`);
-      console.log(`   item_nombre: "${(primerItem as any).item_nombre || 'NO EXISTE'}"`);
-      console.log(`   precio: "${primerItem.precio || 'NO EXISTE'}"`);
-      console.log(`   subtotal: "${primerItem.subtotal || 'NO EXISTE'}"`);
-      console.log('====================================\n');
-    }
-
-    // Crear un mapa de OC ID a proveedor_id
+    // 3. Mapear OC a proveedor
     const ocToProveedor = new Map<string, string>();
     for (const oc of ocData.data) {
       if (oc.rel_proveedor_id) {
         ocToProveedor.set(oc.compra_oc_id, oc.rel_proveedor_id);
       }
     }
-    
-    console.log(`📦 Mapeo completado: ${ocToProveedor.size} órdenes con proveedor`);
+    console.log(`📦 Mapeo: ${ocToProveedor.size} órdenes con proveedor`);
 
-    // =============================================
-    // 3. Procesar items y agrupar por proveedor
-    // =============================================
-    console.log('\n🔄 Procesando items...');
-    
+    // 4. Agrupar productos por proveedor
     const productosPorProveedor = new Map<string, Array<{nombre: string, precio: number, sku: string, fecha: string}>>();
-    let itemsSinNombre = 0;
-    let itemsProcesados = 0;
     
-    for (const item of itemsData.data.slice(0, 1000)) {
+    for (const item of itemsData.data.slice(0, 500)) {
       const ocId = item.compra_oc_id;
       const proveedorIdObuma = ocToProveedor.get(ocId);
-      
       if (!proveedorIdObuma) continue;
       
-      // Intentar obtener el nombre del producto de diferentes campos posibles
-      const nombreProducto = item.producto_nombre || 
-                            item.producto_descripcion || 
-                            (item as any).nombre || 
-                            (item as any).item_nombre ||
-                            (item as any).descripcion;
-      
-      if (!nombreProducto) {
-        itemsSinNombre++;
-        continue;
-      }
-      
-      itemsProcesados++;
-      
-      const precio = parseFloat(item.precio || '0') || parseFloat(item.subtotal || '0') || 0;
+      const nombreProducto = item.producto_nombre;
+      if (!nombreProducto) continue;
       
       if (!productosPorProveedor.has(proveedorIdObuma)) {
         productosPorProveedor.set(proveedorIdObuma, []);
       }
       
-      // Buscar la fecha de la OC
+      const precio = parseFloat(item.precio || '0');
       const ocEncontrada = ocData.data.find((oc: OrdenCompra) => oc.compra_oc_id === ocId);
       const fecha = ocEncontrada?.compra_oc_fecha_ingreso?.split('T')[0] || new Date().toISOString().split('T')[0];
       
@@ -153,20 +101,14 @@ export async function POST(request: Request) {
       });
     }
     
-    console.log(`📊 Estadísticas de items:`);
-    console.log(`   Items procesados: ${itemsProcesados}`);
-    console.log(`   Items sin nombre de producto: ${itemsSinNombre}`);
-    console.log(`   Proveedores con productos: ${productosPorProveedor.size}`);
+    console.log(`📦 ${productosPorProveedor.size} proveedores con productos`);
 
-    // =============================================
-    // 4. Guardar en Supabase
-    // =============================================
+    // 5. Guardar en Supabase
     let totalProveedoresCreados = 0;
     let totalProductosGuardados = 0;
     let proveedoresExistentes = 0;
     
     for (const [proveedorIdObuma, productos] of productosPorProveedor) {
-      // Buscar o crear proveedor
       let proveedorId: string | null = null;
       
       const { data: existente } = await supabase
@@ -179,7 +121,6 @@ export async function POST(request: Request) {
         proveedorId = existente.id;
         proveedoresExistentes++;
       } else {
-        // Buscar nombre del proveedor en la OC
         const ocConProveedor = ocData.data.find((oc: OrdenCompra) => oc.rel_proveedor_id === proveedorIdObuma);
         const nombreProveedor = ocConProveedor?.proveedor_razon_social || `Proveedor ${proveedorIdObuma}`;
         const rutProveedor = ocConProveedor?.proveedor_rut || `ID_${proveedorIdObuma}`;
@@ -204,13 +145,15 @@ export async function POST(request: Request) {
         if (nuevo) {
           proveedorId = nuevo.id;
           totalProveedoresCreados++;
-          console.log(`✅ Nuevo proveedor: ${nombreProveedor} (ID Obuma: ${proveedorIdObuma})`);
+          console.log(`✅ Nuevo proveedor: ${nombreProveedor}`);
         }
       }
       
       if (!proveedorId) continue;
       
-      // Guardar productos (usando upsert para evitar duplicados)
+      // Guardar productos
+      console.log(`   💾 Proveedor ${proveedorIdObuma}: ${productos.length} productos`);
+      
       for (const prod of productos) {
         const { error: insertError } = await supabase
           .from('proveedor_productos')
@@ -224,10 +167,12 @@ export async function POST(request: Request) {
             onConflict: 'proveedor_id, producto_nombre',
           });
         
-        if (!insertError) {
+        if (insertError) {
+          console.error(`      ❌ Error: ${insertError.message}`);
+        } else {
           totalProductosGuardados++;
-          if (totalProductosGuardados <= 20) {
-            console.log(`   📦 "${prod.nombre.substring(0, 40)}" - $${prod.precio}`);
+          if (totalProductosGuardados <= 30) {
+            console.log(`      ✅ "${prod.nombre.substring(0, 45)}" - $${prod.precio}`);
           }
         }
       }
@@ -239,7 +184,6 @@ export async function POST(request: Request) {
     console.log(`   Proveedores existentes: ${proveedoresExistentes}`);
     console.log(`   Proveedores nuevos creados: ${totalProveedoresCreados}`);
     console.log(`   Productos sincronizados: ${totalProductosGuardados}`);
-    console.log(`   Items sin nombre de producto: ${itemsSinNombre}`);
     console.log('='.repeat(60));
 
     return NextResponse.json({
@@ -248,7 +192,6 @@ export async function POST(request: Request) {
         proveedores_existentes: proveedoresExistentes,
         proveedores_nuevos: totalProveedoresCreados,
         productos_sincronizados: totalProductosGuardados,
-        items_sin_nombre: itemsSinNombre,
       },
     });
 
