@@ -1,4 +1,3 @@
-// app/api/buscar-proveedores-por-producto/route.ts
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
@@ -32,7 +31,7 @@ export async function GET(request: Request) {
       .ilike('producto_nombre', `%${productoLower}%`);
 
     if (productosError) {
-      console.error(`❌ Error:`, productosError);
+      console.error(`❌ Error en productos:`, productosError);
     } else if (productosData && productosData.length > 0) {
       console.log(`✅ ${productosData.length} productos encontrados`);
       
@@ -48,16 +47,27 @@ export async function GET(request: Request) {
         
         const proveedoresMap = new Map();
         for (const proveedor of proveedoresData) {
-          // Usar el nombre real si existe, si no, mostrar el ID
-          const nombreMostrar = proveedor.nombre_empresa && !proveedor.nombre_empresa.startsWith('Proveedor ')
-            ? proveedor.nombre_empresa 
-            : `Proveedor ${proveedor.obuma_id || proveedor.id}`;
+          // 🔥 LÓGICA CORREGIDA para mostrar el nombre
+          let nombreMostrar = '';
+          
+          if (proveedor.nombre_empresa && proveedor.nombre_empresa.trim() !== '') {
+            // Tiene nombre real en la base de datos
+            nombreMostrar = proveedor.nombre_empresa;
+          } else if (proveedor.obuma_id) {
+            // No tiene nombre, pero tiene obuma_id
+            nombreMostrar = `Proveedor ${proveedor.obuma_id}`;
+          } else {
+            // No tiene nada, usar ID parcial
+            nombreMostrar = `Proveedor ${proveedor.id.substring(0, 8)}`;
+          }
+          
+          console.log(`📌 Proveedor: ${proveedor.id.substring(0, 8)} - Nombre: "${nombreMostrar}"`);
           
           proveedoresMap.set(proveedor.id, {
             fuente: '📋 Nuestra Base de Datos',
             id: proveedor.id,
             nombre: nombreMostrar,
-            rut: proveedor.rut_empresa || '',
+            rut: proveedor.rut_empresa || proveedor.obuma_id || 'Sin RUT',
             telefono: proveedor.telefono || '',
             email: proveedor.email_contacto || '',
             sitio_web: proveedor.sitio_web || '',
@@ -83,13 +93,13 @@ export async function GET(request: Request) {
         }
         
         resultados.push(...Array.from(proveedoresMap.values()));
-        console.log(`✅ ${resultados.length} proveedores agregados`);
+        console.log(`✅ ${resultados.length} proveedores agregados con ${resultados.reduce((acc, p) => acc + p.productos.length, 0)} productos`);
       }
     } else {
       console.log(`⚠️ No se encontraron productos con "${producto}"`);
     }
   } catch (error) {
-    console.error('❌ Excepción:', error);
+    console.error('❌ Excepción en Supabase:', error);
   }
 
   // =============================================
