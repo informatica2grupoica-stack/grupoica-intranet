@@ -124,9 +124,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       title: "LOGÍSTICA",
       icon: Truck,
       items: [
-        { name: "📋 Mis Proveedores", icon: Building2, path: "/proveedores" },
-        { name: "🔍 Buscar Proveedor", icon: Search, path: "/buscador-proveedores" },
-        { name: "🏢 Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
+        { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
+        //{ name: "Buscar Proveedor", icon: Search, path: "/buscador-proveedores" },
+        { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
       ]
     },
     {

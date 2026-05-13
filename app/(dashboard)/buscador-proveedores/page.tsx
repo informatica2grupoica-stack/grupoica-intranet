@@ -1,5 +1,5 @@
 // app/(dashboard)/buscador-proveedores/page.tsx
-'use client';
+{/*'use client';
 import { useState } from 'react';
 import { 
   Search, Building2, Package, ExternalLink, Loader2, 
@@ -86,7 +86,7 @@ export default function BuscadorProveedores() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4 lg:p-8">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header */}
+        //Header 
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-2xl mb-4">
             <Search size={32} className="text-blue-600" />
@@ -99,7 +99,7 @@ export default function BuscadorProveedores() {
           </p>
         </div>
 
-        {/* Buscador */}
+        //Buscador 
         <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 mb-8">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
@@ -123,7 +123,7 @@ export default function BuscadorProveedores() {
             </button>
           </div>
           
-          {/* Opciones de búsqueda */}
+          //Opciones de búsqueda 
           <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-100">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
@@ -137,7 +137,7 @@ export default function BuscadorProveedores() {
           </div>
         </div>
 
-        {/* Resultados */}
+        //Resultados 
         {buscado && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -169,7 +169,7 @@ export default function BuscadorProveedores() {
 
             {resultados.map((prov, idx) => (
               <div key={`${prov.rut}-${idx}`} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                {/* Cabecera del proveedor */}
+                //Cabecera del proveedor 
                 <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
@@ -192,7 +192,7 @@ export default function BuscadorProveedores() {
                       </div>
                     </div>
                     
-                    {/* Calificación */}
+                    // Calificación 
                     {prov.calificacion && (
                       <div className="flex items-center gap-1">
                         {[...Array(5)].map((_, i) => (
@@ -202,7 +202,7 @@ export default function BuscadorProveedores() {
                     )}
                   </div>
                   
-                  {/* Contacto rápido */}
+                  // Contacto rápido
                   <div className="flex flex-wrap gap-4 mt-4 pt-2">
                     {prov.telefono && (
                       <a href={`tel:${prov.telefono}`} className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition-colors">
@@ -222,7 +222,7 @@ export default function BuscadorProveedores() {
                   </div>
                 </div>
                 
-                {/* Productos */}
+                //Productos 
                 <div className="p-6">
                   <button
                     onClick={() => setExpandedCard(expandedCard === prov.rut ? null : prov.rut)}
@@ -295,3 +295,4 @@ export default function BuscadorProveedores() {
     </div>
   );
 }
+*/}

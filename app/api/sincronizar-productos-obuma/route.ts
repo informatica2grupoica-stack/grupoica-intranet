@@ -21,42 +21,60 @@ interface ItemCompra {
 }
 
 export async function POST(request: Request) {
-  console.log('\n' + '='.repeat(60));
-  console.log('🔄 SINCRONIZACIÓN DE PRODUCTOS DESDE OBUMA');
-  console.log('='.repeat(60));
+  const startTime = Date.now();
+  
+  console.log('\n' + '='.repeat(80));
+  console.log('🔄 SINCRONIZACIÓN DE PRODUCTOS DESDE OBUMA - INICIO');
+  console.log('='.repeat(80));
+  console.log(`📅 Fecha/Hora: ${new Date().toISOString()}`);
   
   const OBUMA_API_URL = process.env.OBUMA_API_URL;
   const OBUMA_API_TOKEN = process.env.OBUMA_API_TOKEN;
 
   if (!OBUMA_API_TOKEN) {
+    console.error('❌ Error: OBUMA_API_TOKEN no configurado');
     return NextResponse.json({ error: 'API token no configurado' }, { status: 500 });
   }
+
+  console.log(`🔐 Configuración:`);
+  console.log(`   - OBUMA_API_URL: ${OBUMA_API_URL}`);
+  console.log(`   - OBUMA_API_TOKEN: ${OBUMA_API_TOKEN ? '✅ Configurado' : '❌ No configurado'}`);
 
   try {
     // =============================================
     // 1. Obtener TODOS los proveedores de Obuma
     // =============================================
-    console.log('📡 Obteniendo lista completa de proveedores desde Obuma...');
+    console.log('\n📡 PASO 1: Obteniendo lista de proveedores desde Obuma...');
+    const proveedoresStart = Date.now();
+    
     const proveedoresResponse = await fetch(`${OBUMA_API_URL}/proveedores.list.json`, {
       method: 'GET',
       headers: { 'access-token': OBUMA_API_TOKEN, 'Content-Type': 'application/json' },
     });
     const proveedoresData = await proveedoresResponse.json();
-    console.log(`✅ ${proveedoresData.data?.length || 0} proveedores encontrados en Obuma`);
+    
+    const totalProveedoresObuma = proveedoresData.data?.length || 0;
+    console.log(`✅ ${totalProveedoresObuma} proveedores encontrados en Obuma`);
+    console.log(`⏱️ Tiempo: ${Date.now() - proveedoresStart}ms`);
 
     // Crear mapa de proveedores por ID con datos completos
     const proveedoresMap = new Map();
+    let proveedoresConRazonSocial = 0;
+    let proveedoresConNombreFantasia = 0;
     let proveedoresSinNombre = 0;
     
+    console.log(`\n📊 Procesando proveedores de Obuma:`);
+    
     for (const prov of proveedoresData.data || []) {
-      const tieneRazonSocial = !!prov.proveedor_razon_social;
-      const tieneNombreFantasia = !!prov.proveedor_nombre_fantasia;
-      const nombreFinal = prov.proveedor_razon_social || prov.proveedor_nombre_fantasia || `Proveedor ${prov.proveedor_id}`;
+      const tieneRazonSocial = !!(prov.proveedor_razon_social && prov.proveedor_razon_social.trim());
+      const tieneNombreFantasia = !!(prov.proveedor_nombre_fantasia && prov.proveedor_nombre_fantasia.trim());
       
-      if (!tieneRazonSocial && !tieneNombreFantasia) {
-        proveedoresSinNombre++;
-        console.log(`⚠️ Proveedor ${prov.proveedor_id} sin nombre real, usando: "${nombreFinal}"`);
-      }
+      if (tieneRazonSocial) proveedoresConRazonSocial++;
+      if (tieneNombreFantasia) proveedoresConNombreFantasia++;
+      if (!tieneRazonSocial && !tieneNombreFantasia) proveedoresSinNombre++;
+      
+      const nombreFinal = prov.proveedor_razon_social || prov.proveedor_nombre_fantasia || `Proveedor ${prov.proveedor_id}`;
+      const tieneNombre = prov.proveedor_razon_social || prov.proveedor_nombre_fantasia;
       
       proveedoresMap.set(prov.proveedor_id, {
         nombre_empresa: nombreFinal,
@@ -73,30 +91,40 @@ export async function POST(request: Request) {
         proveedor_giro_comercial: prov.proveedor_giro_comercial || '',
         observaciones: prov.proveedor_observacion || '',
         categoria: prov.proveedor_categoria || 'General',
+        tiene_nombre_original: !!tieneNombre
       });
     }
     
-    console.log(`📊 Proveedores sin nombre real en OBUMA: ${proveedoresSinNombre}`);
+    console.log(`\n   📊 Estadísticas de proveedores:`);
+    console.log(`      - Con razón social: ${proveedoresConRazonSocial}`);
+    console.log(`      - Con nombre fantasía: ${proveedoresConNombreFantasia}`);
+    console.log(`      - Sin nombre real: ${proveedoresSinNombre}`);
 
     // =============================================
     // 2. Actualizar/Crear proveedores en Supabase
     // =============================================
+    console.log('\n📡 PASO 2: Sincronizando proveedores en Supabase...');
+    const proveedoresSyncStart = Date.now();
+    
     let proveedoresActualizados = 0;
     let proveedoresCreados = 0;
-    let proveedoresConNombreVacio = 0;
-
+    let proveedoresConNombreVacioLocal = 0;
+    
     for (const [obumaId, datos] of proveedoresMap) {
       const { data: existente } = await supabase
         .from('proveedores')
-        .select('id, nombre_empresa')
+        .select('id, nombre_empresa, rut_empresa')
         .eq('obuma_id', obumaId)
         .maybeSingle();
 
       if (existente) {
+        // Verificar si necesita actualización
         const nombreActual = existente.nombre_empresa || '';
+        const rutActual = existente.rut_empresa || '';
         const necesitaActualizacion = !nombreActual || 
                                       nombreActual === '' || 
-                                      nombreActual.startsWith('Proveedor ');
+                                      nombreActual.startsWith('Proveedor ') ||
+                                      rutActual.startsWith('ID_');
         
         if (necesitaActualizacion) {
           const { error: updateError } = await supabase
@@ -121,10 +149,10 @@ export async function POST(request: Request) {
           
           if (!updateError) {
             proveedoresActualizados++;
-            console.log(`✅ Proveedor actualizado: ${obumaId} -> "${datos.nombre_empresa}"`);
+            console.log(`   ✅ Actualizado: ${obumaId} -> "${datos.nombre_empresa}" (${datos.tiene_nombre_original ? 'nombre original' : 'nombre genérico'})`);
           }
         } else {
-          console.log(`⏭️ Proveedor ya tiene nombre válido: ${nombreActual}`);
+          console.log(`   ⏭️ Sin cambios: ${obumaId} -> "${nombreActual}"`);
         }
       } else {
         const { error: createError } = await supabase
@@ -150,97 +178,125 @@ export async function POST(request: Request) {
         
         if (!createError) {
           proveedoresCreados++;
-          console.log(`✨ Nuevo proveedor creado: ${obumaId} -> "${datos.nombre_empresa}"`);
+          console.log(`   ✨ Creado: ${obumaId} -> "${datos.nombre_empresa}"`);
         }
       }
     }
-
-    // =============================================
-    // 2.5 Verificar proveedores con nombre vacío (CORREGIDO)
-    // =============================================
-    // Buscar proveedores con nombre NULL
+    
+    // Verificar proveedores locales con nombre vacío
+    const { data: proveedoresLocalesVacios } = await supabase
+      .from('proveedores')
+      .select('id, nombre_empresa, obuma_id')
+      .or('nombre_empresa.is.null,nombre_empresa.eq.') // BUG: CORREGIDO
+      .not('obuma_id', 'is', null);
+    
+    // Corrección: consultar por separado
     const { data: proveedoresNull } = await supabase
       .from('proveedores')
       .select('id, nombre_empresa, obuma_id')
       .is('nombre_empresa', null);
-    
-    // Buscar proveedores con nombre vacío
+      
     const { data: proveedoresVacio } = await supabase
       .from('proveedores')
       .select('id, nombre_empresa, obuma_id')
       .eq('nombre_empresa', '');
     
-    // Combinar resultados
-    const proveedoresLocales = [...(proveedoresNull || []), ...(proveedoresVacio || [])];
+    const proveedoresLocalesSinNombre = [...(proveedoresNull || []), ...(proveedoresVacio || [])];
     
-    if (proveedoresLocales && proveedoresLocales.length > 0) {
-      proveedoresConNombreVacio = proveedoresLocales.length;
-      console.log(`⚠️ Aún hay ${proveedoresConNombreVacio} proveedores con nombre vacío en la BD local`);
-      
-      for (const prov of proveedoresLocales) {
+    proveedoresConNombreVacioLocal = proveedoresLocalesSinNombre.length;
+    
+    if (proveedoresConNombreVacioLocal > 0) {
+      console.log(`\n   ⚠️ Aún hay ${proveedoresConNombreVacioLocal} proveedores con nombre vacío en la BD local:`);
+      for (const prov of proveedoresLocalesSinNombre) {
         if (prov.obuma_id) {
-          const { error: updateError } = await supabase
-            .from('proveedores')
-            .update({ nombre_empresa: `Proveedor ${prov.obuma_id}` })
-            .eq('id', prov.id);
-          
-          if (!updateError) {
-            console.log(`🔧 Fix local: Proveedor ${prov.obuma_id} actualizado con nombre genérico`);
+          const datosOriginales = proveedoresMap.get(prov.obuma_id);
+          if (datosOriginales && datosOriginales.tiene_nombre_original) {
+            const { error: updateError } = await supabase
+              .from('proveedores')
+              .update({ nombre_empresa: datosOriginales.nombre_empresa })
+              .eq('id', prov.id);
+            
+            if (!updateError) {
+              console.log(`      🔧 Fijo: ${prov.obuma_id} -> "${datosOriginales.nombre_empresa}"`);
+              proveedoresActualizados++;
+            }
           }
         }
       }
     }
-
-    console.log(`\n📊 Proveedores procesados:`);
-    console.log(`   - Actualizados: ${proveedoresActualizados}`);
-    console.log(`   - Creados: ${proveedoresCreados}`);
-    console.log(`   - Quedan sin nombre: ${proveedoresConNombreVacio}`);
+    
+    console.log(`\n   📊 Resumen proveedores:`);
+    console.log(`      - Actualizados: ${proveedoresActualizados}`);
+    console.log(`      - Creados: ${proveedoresCreados}`);
+    console.log(`      - Quedan sin nombre: ${proveedoresConNombreVacioLocal}`);
+    console.log(`   ⏱️ Tiempo: ${Date.now() - proveedoresSyncStart}ms`);
 
     // =============================================
     // 3. Obtener órdenes de compra
     // =============================================
-    console.log('\n📡 Obteniendo órdenes de compra...');
+    console.log('\n📡 PASO 3: Obteniendo órdenes de compra...');
+    const ocStart = Date.now();
+    
     const ocResponse = await fetch(`${OBUMA_API_URL}/comprasOc.list.json`, {
       method: 'GET',
       headers: { 'access-token': OBUMA_API_TOKEN, 'Content-Type': 'application/json' },
     });
     const ocData = await ocResponse.json();
-    console.log(`✅ ${ocData.data?.length || 0} órdenes encontradas`);
+    const totalOC = ocData.data?.length || 0;
+    console.log(`✅ ${totalOC} órdenes encontradas`);
+    console.log(`⏱️ Tiempo: ${Date.now() - ocStart}ms`);
 
     // =============================================
     // 4. Obtener items
     // =============================================
-    console.log('📡 Obteniendo items...');
+    console.log('\n📡 PASO 4: Obteniendo items de órdenes...');
+    const itemsStart = Date.now();
+    
     const itemsResponse = await fetch(`${OBUMA_API_URL}/comprasOc.listItems.json`, {
       method: 'GET',
       headers: { 'access-token': OBUMA_API_TOKEN, 'Content-Type': 'application/json' },
     });
     const itemsData = await itemsResponse.json();
-    console.log(`✅ ${itemsData.data?.length || 0} items encontrados`);
+    const totalItems = itemsData.data?.length || 0;
+    console.log(`✅ ${totalItems} items encontrados`);
+    console.log(`⏱️ Tiempo: ${Date.now() - itemsStart}ms`);
 
     // =============================================
     // 5. Mapear OC a proveedor
     // =============================================
+    console.log('\n📡 PASO 5: Mapeando órdenes a proveedores...');
+    
     const ocToProveedor = new Map<string, string>();
     for (const oc of ocData.data || []) {
       if (oc.rel_proveedor_id) {
         ocToProveedor.set(oc.compra_oc_id, oc.rel_proveedor_id);
       }
     }
-    console.log(`📦 Mapeo: ${ocToProveedor.size} órdenes con proveedor`);
+    console.log(`📦 ${ocToProveedor.size} órdenes con proveedor asociado`);
 
     // =============================================
     // 6. Guardar productos
     // =============================================
+    console.log('\n📡 PASO 6: Guardando productos en Supabase...');
+    const productosStart = Date.now();
+    
     let totalProductosGuardados = 0;
     let productosDuplicados = 0;
-
+    let itemsSinProveedor = 0;
+    let itemsSinProducto = 0;
+    
     for (const item of itemsData.data || []) {
       const proveedorIdObuma = ocToProveedor.get(item.compra_oc_id);
-      if (!proveedorIdObuma) continue;
+      if (!proveedorIdObuma) {
+        itemsSinProveedor++;
+        continue;
+      }
       
       const nombreProducto = item.producto_nombre;
-      if (!nombreProducto) continue;
+      if (!nombreProducto) {
+        itemsSinProducto++;
+        continue;
+      }
       
       const { data: proveedor } = await supabase
         .from('proveedores')
@@ -272,36 +328,56 @@ export async function POST(request: Request) {
         productosDuplicados++;
       }
     }
-
-    console.log(`\n📊 Productos sincronizados:`);
-    console.log(`   - Guardados/Actualizados: ${totalProductosGuardados}`);
-    console.log(`   - Duplicados omitidos: ${productosDuplicados}`);
+    
+    console.log(`   📊 Resumen productos:`);
+    console.log(`      - Guardados/Actualizados: ${totalProductosGuardados}`);
+    console.log(`      - Duplicados omitidos: ${productosDuplicados}`);
+    console.log(`      - Items sin proveedor: ${itemsSinProveedor}`);
+    console.log(`      - Items sin nombre: ${itemsSinProducto}`);
+    console.log(`   ⏱️ Tiempo: ${Date.now() - productosStart}ms`);
 
     // =============================================
     // 7. Resumen final
     // =============================================
-    console.log('\n' + '='.repeat(60));
-    console.log('📊 RESULTADOS FINALES');
-    console.log('='.repeat(60));
+    const totalTime = Date.now() - startTime;
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 RESULTADOS FINALES DE SINCRONIZACIÓN');
+    console.log('='.repeat(80));
     console.log(`   ✅ Proveedores actualizados: ${proveedoresActualizados}`);
     console.log(`   ✅ Proveedores creados: ${proveedoresCreados}`);
-    console.log(`   ⚠️  Proveedores sin nombre real en OBUMA: ${proveedoresSinNombre}`);
+    console.log(`   ⚠️ Proveedores sin nombre real en OBUMA: ${proveedoresSinNombre}`);
+    console.log(`   ⚠️ Proveedores con nombre vacío en BD local: ${proveedoresConNombreVacioLocal}`);
     console.log(`   ✅ Productos sincronizados: ${totalProductosGuardados}`);
-    console.log('='.repeat(60));
+    console.log(`   ⏱️ Tiempo total de sincronización: ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
+    console.log('='.repeat(80));
 
     return NextResponse.json({
       success: true,
+      timestamp: new Date().toISOString(),
+      tiempo_total_ms: totalTime,
       estadisticas: {
         proveedores_actualizados: proveedoresActualizados,
         proveedores_creados: proveedoresCreados,
         proveedores_sin_nombre_real: proveedoresSinNombre,
+        proveedores_nombre_vacio_local: proveedoresConNombreVacioLocal,
         productos_sincronizados: totalProductosGuardados,
+        productos_duplicados: productosDuplicados,
+        items_sin_proveedor: itemsSinProveedor,
+        items_sin_producto: itemsSinProducto,
+        ordenes_procesadas: totalOC,
+        items_procesados: totalItems
       },
     });
 
   } catch (error: any) {
-    console.error('❌ Error:', error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('❌ Error fatal:', error.message);
+    console.error(error.stack);
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }, { status: 500 });
   }
 }
 
@@ -311,10 +387,12 @@ export async function GET() {
     usage: 'POST /api/sincronizar-productos-obuma',
     description: 'Sincroniza proveedores y productos desde Obuma a Supabase',
     features: [
-      'Trae nombres reales de proveedores desde OBUMA',
-      'Actualiza solo los proveedores con nombre vacío o genérico',
+      'Obtiene lista completa de proveedores desde OBUMA',
+      'Sincroniza proveedores existentes (solo actualiza si hay cambios)',
       'Crea nuevos proveedores automáticamente',
-      'Sincroniza productos históricos de compras'
+      'Sincroniza productos históricos de compras',
+      'Evita duplicados usando upsert con conflicto (proveedor_id, producto_nombre)',
+      'Registra estadísticas detalladas de la sincronización'
     ]
   });
 }

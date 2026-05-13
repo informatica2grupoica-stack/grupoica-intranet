@@ -105,11 +105,26 @@ export default function ProveedoresPage() {
     setLoading(false);
   };
 
+  // ✅ FUNCIÓN CORREGIDA - Estadísticas REALES desde Supabase
   const calcularEstadisticas = (data: Proveedor[]) => {
-    const categoriasUnicas = new Set(data.map(p => p.categoria).filter(Boolean));
+    // Contar categorías únicas (excluyendo null, undefined y vacío)
+    const categoriasUnicas = new Set(
+      data.map(p => p.categoria).filter(cat => cat && cat.trim() !== '')
+    );
+    
+    // Activos (considerando que activo puede ser null/undefined como true por defecto)
     const activos = data.filter(p => p.activo !== false).length;
-    const avgCalificacion = data.reduce((acc, p) => acc + (p.calificacion || 0), 0) / (data.length || 1);
+    
+    // Rating promedio (solo sobre proveedores que tienen calificación)
+    const proveedoresConRating = data.filter(p => p.calificacion && p.calificacion > 0);
+    const avgCalificacion = proveedoresConRating.length > 0
+      ? proveedoresConRating.reduce((acc, p) => acc + (p.calificacion || 0), 0) / proveedoresConRating.length
+      : 0;
+    
+    // Manuales (sin obuma_id)
     const manuales = data.filter(p => !p.obuma_id).length;
+    
+    // Obuma (con obuma_id)
     const obuma = data.filter(p => p.obuma_id).length;
     
     setEstadisticas({
@@ -118,6 +133,16 @@ export default function ProveedoresPage() {
       obuma,
       categorias: categoriasUnicas.size,
       activos: activos,
+      avgCalificacion: Math.round(avgCalificacion * 10) / 10
+    });
+    
+    // Log para depuración en consola
+    console.log('📊 Estadísticas calculadas:', {
+      total: data.length,
+      manuales,
+      obuma,
+      categorias: categoriasUnicas.size,
+      activos,
       avgCalificacion: Math.round(avgCalificacion * 10) / 10
     });
   };
@@ -331,7 +356,7 @@ export default function ProveedoresPage() {
     return regiones[regionCodigo] || regionCodigo || 'No especificada';
   };
 
-  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(Boolean))];
+  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(cat => cat && cat.trim() !== ''))];
 
   const DetallesExpandidos = ({ prov }: { prov: Proveedor }) => (
     <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
@@ -449,7 +474,7 @@ export default function ProveedoresPage() {
             </div>
           </div>
           
-          {/* Tarjetas de métricas */}
+          {/* Tarjetas de métricas - AHORA CON DATOS REALES */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between">
