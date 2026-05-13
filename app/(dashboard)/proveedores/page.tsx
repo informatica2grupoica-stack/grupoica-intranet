@@ -1,13 +1,13 @@
-'use client'
+// app/(dashboard)/proveedores/page.tsx
+'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Building2, Search, Loader2, MapPin, X, Phone, Star, 
-  Trash2, Edit3, Save, Plus, CheckCircle2, AlertCircle,
-  Landmark, CreditCard, Mail, Globe, Info, ChevronDown, ChevronUp,
-  Briefcase, DollarSign, Map, Filter, ArrowUpDown, TrendingUp,
-  Clock, Award, ThumbsUp, MessageCircle, Calendar, Users,
-  Eye, EyeOff
+  Trash2, Edit3, Plus, CheckCircle2, AlertCircle,
+  Landmark, Mail, Globe, ChevronDown, ChevronUp,
+  Briefcase, DollarSign, Calendar, Users,
+  Database, Package, ExternalLink, Smartphone
 } from 'lucide-react';
 
 interface Proveedor {
@@ -31,12 +31,14 @@ interface Proveedor {
   calificacion: number;
   activo: boolean;
   created_at: string;
+  obuma_id?: string;
 }
 
 type OrdenType = 'nombre' | 'calificacion' | 'reciente' | 'categoria';
 type VistaType = 'grid' | 'lista';
+type FuentType = 'todos' | 'manuales' | 'obuma';
 
-export default function SeccionProveedores() {
+export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [filteredProveedores, setFilteredProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,17 +46,25 @@ export default function SeccionProveedores() {
   const [categoriaFiltro, setCategoriaFiltro] = useState("Todas");
   const [orden, setOrden] = useState<OrdenType>('nombre');
   const [vista, setVista] = useState<VistaType>('lista');
+  const [fuente, setFuente] = useState<FuentType>('todos');
   const [seleccionado, setSeleccionado] = useState<Proveedor | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [estadisticas, setEstadisticas] = useState({
     total: 0,
+    manuales: 0,
+    obuma: 0,
     categorias: 0,
     activos: 0,
     avgCalificacion: 0
   });
   const [errorRut, setErrorRut] = useState("");
+  const [sincronizando, setSincronizando] = useState(false);
+  const [showBuscadorProductos, setShowBuscadorProductos] = useState(false);
+  const [productoBuscado, setProductoBuscado] = useState("");
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<any[]>([]);
+  const [buscandoProducto, setBuscandoProducto] = useState(false);
 
   const initialFormState = {
     nombre_empresa: '', rut_empresa: '', categoria: '', tipo_servicio: '',
@@ -72,7 +82,7 @@ export default function SeccionProveedores() {
 
   useEffect(() => {
     filtrarYOrdenar();
-  }, [proveedores, busqueda, categoriaFiltro, orden]);
+  }, [proveedores, busqueda, categoriaFiltro, orden, fuente]);
 
   const showAlert = (msg: string, type: 'success' | 'error') => {
     setAlert({ msg, type });
@@ -99,9 +109,13 @@ export default function SeccionProveedores() {
     const categoriasUnicas = new Set(data.map(p => p.categoria).filter(Boolean));
     const activos = data.filter(p => p.activo !== false).length;
     const avgCalificacion = data.reduce((acc, p) => acc + (p.calificacion || 0), 0) / (data.length || 1);
+    const manuales = data.filter(p => !p.obuma_id).length;
+    const obuma = data.filter(p => p.obuma_id).length;
     
     setEstadisticas({
       total: data.length,
+      manuales,
+      obuma,
       categorias: categoriasUnicas.size,
       activos: activos,
       avgCalificacion: Math.round(avgCalificacion * 10) / 10
@@ -111,6 +125,14 @@ export default function SeccionProveedores() {
   const filtrarYOrdenar = () => {
     let filtrados = [...proveedores];
     
+    // Filtrar por fuente
+    if (fuente === 'manuales') {
+      filtrados = filtrados.filter(p => !p.obuma_id);
+    } else if (fuente === 'obuma') {
+      filtrados = filtrados.filter(p => p.obuma_id);
+    }
+    
+    // Filtrar por búsqueda
     if (busqueda) {
       filtrados = filtrados.filter(p => 
         p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -120,10 +142,12 @@ export default function SeccionProveedores() {
       );
     }
     
+    // Filtrar por categoría
     if (categoriaFiltro !== "Todas") {
       filtrados = filtrados.filter(p => p.categoria === categoriaFiltro);
     }
     
+    // Ordenar
     switch (orden) {
       case 'nombre':
         filtrados.sort((a, b) => a.nombre_empresa?.localeCompare(b.nombre_empresa || ''));
@@ -143,7 +167,7 @@ export default function SeccionProveedores() {
   };
 
   const validarRut = (rut: string): boolean => {
-    if (!rut) return true; // Permitir vacío inicialmente
+    if (!rut) return true;
     const rutLimpio = rut.replace(/\./g, '').replace(/-/g, '');
     if (rutLimpio.length < 2) return false;
     
@@ -167,7 +191,6 @@ export default function SeccionProveedores() {
   const guardarProveedor = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validaciones
     if (!nuevo.nombre_empresa.trim()) {
       showAlert("El nombre de la empresa es obligatorio", "error");
       return;
@@ -266,13 +289,50 @@ export default function SeccionProveedores() {
     }
   };
 
-  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(Boolean))];
-
-  const getInitials = (nombre: string) => {
-    return nombre?.charAt(0).toUpperCase() || 'P';
+  const sincronizarProductos = async () => {
+    setSincronizando(true);
+    try {
+      const res = await fetch('/api/sincronizar-productos-obuma', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showAlert(`✅ Sincronización completada! ${data.estadisticas.productos_sincronizados || 0} productos sincronizados`, "success");
+        cargarProveedores();
+      } else {
+        showAlert(`❌ Error: ${data.error || data.message}`, "error");
+      }
+    } catch (error) {
+      showAlert("Error al sincronizar con Obuma", "error");
+    }
+    setSincronizando(false);
   };
 
-  // Componente de detalles expandidos reutilizable
+  const buscarProductosProveedor = async () => {
+    if (!productoBuscado.trim()) return;
+    setBuscandoProducto(true);
+    try {
+      const res = await fetch(`/api/buscar-proveedores-por-producto?producto=${encodeURIComponent(productoBuscado)}&incluirObuma=true`);
+      const data = await res.json();
+      setResultadosBusqueda(data.proveedores || []);
+    } catch (error) {
+      console.error(error);
+      setResultadosBusqueda([]);
+    }
+    setBuscandoProducto(false);
+  };
+
+  const getInitials = (nombre: string) => nombre?.charAt(0).toUpperCase() || 'P';
+  const getRegionNombre = (regionCodigo: string = '') => {
+    const regiones: Record<string, string> = {
+      '01': 'Tarapacá', '02': 'Antofagasta', '03': 'Atacama', '04': 'Coquimbo',
+      '05': 'Valparaíso', '06': "O'Higgins", '07': 'Maule', '08': 'Biobío',
+      '09': 'Araucanía', '10': 'Los Lagos', '11': 'Aysén', '12': 'Magallanes',
+      '13': 'Metropolitana', '14': 'Los Ríos', '15': 'Arica y Parinacota', '16': 'Ñuble'
+    };
+    return regiones[regionCodigo] || regionCodigo || 'No especificada';
+  };
+
+  const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(Boolean))];
+
   const DetallesExpandidos = ({ prov }: { prov: Proveedor }) => (
     <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
       {prov.direccion && (
@@ -312,6 +372,11 @@ export default function SeccionProveedores() {
           <strong>Observaciones:</strong> {prov.observaciones}
         </p>
       )}
+      {prov.obuma_id && (
+        <p className="text-[9px] text-blue-500 bg-blue-50 p-1.5 rounded-lg inline-block">
+          🏢 ID Obuma: {prov.obuma_id}
+        </p>
+      )}
       <div className="flex items-center justify-between pt-2 text-[9px] text-slate-400">
         <span>Registrado: {new Date(prov.created_at).toLocaleDateString('es-CL')}</span>
         <span className={`px-2 py-0.5 rounded-full ${prov.activo ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
@@ -336,7 +401,7 @@ export default function SeccionProveedores() {
 
       <div className="max-w-[1600px] mx-auto">
         
-        {/* Header con métricas */}
+        {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
             <div className="flex items-center gap-4">
@@ -366,15 +431,30 @@ export default function SeccionProveedores() {
               >
                 🔲 Grid
               </button>
+              <button
+                onClick={() => setShowBuscadorProductos(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-md flex items-center gap-2"
+              >
+                <Package size={14} />
+                Buscar Producto
+              </button>
+              <button
+                onClick={sincronizarProductos}
+                disabled={sincronizando}
+                className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {sincronizando ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+                Sincronizar Obuma
+              </button>
             </div>
           </div>
           
           {/* Tarjetas de métricas */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[9px] font-black uppercase text-slate-400">Total Proveedores</p>
+                  <p className="text-[9px] font-black uppercase text-slate-400">Total</p>
                   <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total}</p>
                 </div>
                 <div className="bg-blue-100 p-2 rounded-xl">
@@ -385,11 +465,33 @@ export default function SeccionProveedores() {
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
+                  <p className="text-[9px] font-black uppercase text-slate-400">📋 Manuales</p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">{estadisticas.manuales}</p>
+                </div>
+                <div className="bg-emerald-100 p-2 rounded-xl">
+                  <Users size={18} className="text-emerald-600" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black uppercase text-slate-400">🏢 Obuma</p>
+                  <p className="text-2xl font-black text-indigo-600 mt-1">{estadisticas.obuma}</p>
+                </div>
+                <div className="bg-indigo-100 p-2 rounded-xl">
+                  <Database size={18} className="text-indigo-600" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">Categorías</p>
                   <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.categorias}</p>
                 </div>
-                <div className="bg-emerald-100 p-2 rounded-xl">
-                  <Briefcase size={18} className="text-emerald-600" />
+                <div className="bg-purple-100 p-2 rounded-xl">
+                  <Briefcase size={18} className="text-purple-600" />
                 </div>
               </div>
             </div>
@@ -407,8 +509,8 @@ export default function SeccionProveedores() {
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[9px] font-black uppercase text-slate-400">Rating Promedio</p>
-                  <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.avgCalificacion}</p>
+                  <p className="text-[9px] font-black uppercase text-slate-400">Rating</p>
+                  <p className="text-2xl font-black text-amber-600 mt-1">{estadisticas.avgCalificacion}</p>
                 </div>
                 <div className="bg-amber-100 p-2 rounded-xl">
                   <Star size={18} className="text-amber-500" />
@@ -419,20 +521,42 @@ export default function SeccionProveedores() {
           
           {/* Filtros y búsqueda */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Selector de fuente */}
+            <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+              <button
+                onClick={() => setFuente('todos')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setFuente('manuales')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'manuales' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                📋 Manuales
+              </button>
+              <button
+                onClick={() => setFuente('obuma')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'obuma' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                🏢 Obuma
+              </button>
+            </div>
+
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por nombre, RUT o servicio..." 
-                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             
             <select 
               value={categoriaFiltro}
               onChange={(e) => setCategoriaFiltro(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm font-medium text-slate-600 cursor-pointer"
             >
               {categoriasUnicas.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -442,7 +566,7 @@ export default function SeccionProveedores() {
             <select 
               value={orden}
               onChange={(e) => setOrden(e.target.value as OrdenType)}
-              className="bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm font-medium text-slate-600 cursor-pointer"
             >
               <option value="nombre">Ordenar por Nombre</option>
               <option value="calificacion">Ordenar por Calificación</option>
@@ -460,7 +584,7 @@ export default function SeccionProveedores() {
           </div>
         </div>
 
-        {/* Formulario de creación - COMPLETO con todos los campos */}
+        {/* Formulario de creación */}
         {showForm && (
           <form onSubmit={guardarProveedor} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
@@ -469,195 +593,86 @@ export default function SeccionProveedores() {
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {/* Datos básicos */}
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Nombre Empresa *</label>
-                <input 
-                  required 
-                  value={nuevo.nombre_empresa} 
-                  onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                  placeholder="Razón Social"
-                />
+                <input required value={nuevo.nombre_empresa} onChange={e => setNuevo({...nuevo, nombre_empresa: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">RUT *</label>
-                <input 
-                  required 
-                  value={nuevo.rut_empresa} 
-                  onChange={e => setNuevo({...nuevo, rut_empresa: e.target.value})} 
-                  className={`w-full bg-slate-50 rounded-xl p-3 text-sm border ${errorRut ? 'border-red-500' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  placeholder="12.345.678-9"
-                />
+                <input required value={nuevo.rut_empresa} onChange={e => setNuevo({...nuevo, rut_empresa: e.target.value})} className={`w-full bg-slate-50 rounded-xl p-3 text-sm border ${errorRut ? 'border-red-500' : 'border-slate-200'}`} />
                 {errorRut && <p className="text-[9px] text-red-500">{errorRut}</p>}
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Categoría *</label>
-                <input 
-                  required 
-                  value={nuevo.categoria} 
-                  onChange={e => setNuevo({...nuevo, categoria: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: Materiales, Servicios, Transporte"
-                />
+                <input required value={nuevo.categoria} onChange={e => setNuevo({...nuevo, categoria: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Tipo Servicio</label>
-                <input 
-                  value={nuevo.tipo_servicio} 
-                  onChange={e => setNuevo({...nuevo, tipo_servicio: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: Asesoría, Suministro, Fletes"
-                />
+                <input value={nuevo.tipo_servicio} onChange={e => setNuevo({...nuevo, tipo_servicio: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              {/* Contacto */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Nombre Contacto</label>
-                <input 
-                  value={nuevo.nombre_contacto} 
-                  onChange={e => setNuevo({...nuevo, nombre_contacto: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                  placeholder="Persona de contacto"
-                />
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-500">Contacto</label>
+                <input value={nuevo.nombre_contacto} onChange={e => setNuevo({...nuevo, nombre_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Teléfono</label>
-                <input 
-                  value={nuevo.telefono} 
-                  onChange={e => setNuevo({...nuevo, telefono: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="+56 9 1234 5678"
-                />
+                <input value={nuevo.telefono} onChange={e => setNuevo({...nuevo, telefono: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Email</label>
-                <input 
-                  type="email" 
-                  value={nuevo.email_contacto} 
-                  onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="contacto@empresa.cl"
-                />
+                <input type="email" value={nuevo.email_contacto} onChange={e => setNuevo({...nuevo, email_contacto: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Sitio Web</label>
-                <input 
-                  value={nuevo.sitio_web} 
-                  onChange={e => setNuevo({...nuevo, sitio_web: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="https://www.empresa.cl"
-                />
+                <input value={nuevo.sitio_web} onChange={e => setNuevo({...nuevo, sitio_web: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              {/* Ubicación */}
-              <div className="space-y-2 md:col-span-2">
+              <div className="md:col-span-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500">Dirección</label>
-                <input 
-                  value={nuevo.direccion} 
-                  onChange={e => setNuevo({...nuevo, direccion: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Calle, número, edificio"
-                />
+                <input value={nuevo.direccion} onChange={e => setNuevo({...nuevo, direccion: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Comuna</label>
-                <input 
-                  value={nuevo.comuna} 
-                  onChange={e => setNuevo({...nuevo, comuna: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Comuna"
-                />
+                <input value={nuevo.comuna} onChange={e => setNuevo({...nuevo, comuna: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Ciudad</label>
-                <input 
-                  value={nuevo.ciudad} 
-                  onChange={e => setNuevo({...nuevo, ciudad: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Ciudad"
-                />
+                <input value={nuevo.ciudad} onChange={e => setNuevo({...nuevo, ciudad: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              {/* Datos financieros */}
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Condiciones Pago</label>
-                <select 
-                  value={nuevo.condiciones_pago} 
-                  onChange={e => setNuevo({...nuevo, condiciones_pago: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                >
+                <select value={nuevo.condiciones_pago} onChange={e => setNuevo({...nuevo, condiciones_pago: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm">
                   <option value="Contado">Contado</option>
                   <option value="30 días">30 días</option>
                   <option value="60 días">60 días</option>
                   <option value="90 días">90 días</option>
                 </select>
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Banco</label>
-                <input 
-                  value={nuevo.banco_nombre} 
-                  onChange={e => setNuevo({...nuevo, banco_nombre: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Nombre del banco"
-                />
+                <input value={nuevo.banco_nombre} onChange={e => setNuevo({...nuevo, banco_nombre: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Tipo Cuenta</label>
-                <select 
-                  value={nuevo.cuenta_tipo} 
-                  onChange={e => setNuevo({...nuevo, cuenta_tipo: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                >
+                <select value={nuevo.cuenta_tipo} onChange={e => setNuevo({...nuevo, cuenta_tipo: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm">
                   <option value="Corriente">Corriente</option>
                   <option value="Vista">Vista / RUT</option>
                 </select>
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Número Cuenta</label>
-                <input 
-                  value={nuevo.cuenta_numero} 
-                  onChange={e => setNuevo({...nuevo, cuenta_numero: e.target.value})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm"
-                  placeholder="Número de cuenta"
-                />
+                <input value={nuevo.cuenta_numero} onChange={e => setNuevo({...nuevo, cuenta_numero: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm" />
               </div>
-              
-              <div className="space-y-2">
+              <div>
                 <label className="text-[10px] font-bold uppercase text-slate-500">Calificación</label>
-                <select 
-                  value={nuevo.calificacion} 
-                  onChange={e => setNuevo({...nuevo, calificacion: Number(e.target.value)})} 
-                  className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200"
-                >
-                  {[5,4,3,2,1].map(num => (
-                    <option key={num} value={num}>{'★'.repeat(num)}{'☆'.repeat(5-num)}</option>
-                  ))}
+                <select value={nuevo.calificacion} onChange={e => setNuevo({...nuevo, calificacion: Number(e.target.value)})} className="w-full bg-slate-50 rounded-xl p-3 text-sm">
+                  {[5,4,3,2,1].map(num => <option key={num} value={num}>{'★'.repeat(num)}{'☆'.repeat(5-num)}</option>)}
                 </select>
               </div>
             </div>
             
-            {/* Observaciones */}
-            <div className="mt-5 space-y-2">
+            <div className="mt-5">
               <label className="text-[10px] font-bold uppercase text-slate-500">Observaciones</label>
-              <textarea 
-                value={nuevo.observaciones} 
-                onChange={e => setNuevo({...nuevo, observaciones: e.target.value})} 
-                className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200 resize-none"
-                rows={3}
-                placeholder="Información adicional sobre el proveedor..."
-              />
+              <textarea value={nuevo.observaciones} onChange={e => setNuevo({...nuevo, observaciones: e.target.value})} className="w-full bg-slate-50 rounded-xl p-3 text-sm resize-none" rows={3} />
             </div>
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
@@ -670,7 +685,7 @@ export default function SeccionProveedores() {
           </form>
         )}
 
-        {/* Resultados */}
+        {/* Tabla de resultados */}
         {filteredProveedores.length === 0 && !loading && (
           <div className="text-center py-20">
             <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -681,7 +696,6 @@ export default function SeccionProveedores() {
           </div>
         )}
 
-        {/* Vista de lista */}
         {vista === 'lista' && !loading && filteredProveedores.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
@@ -691,6 +705,7 @@ export default function SeccionProveedores() {
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Proveedor</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contacto</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fuente</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Calificación</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estado</th>
                     <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
@@ -709,67 +724,52 @@ export default function SeccionProveedores() {
                             <p className="text-[10px] text-slate-400 font-mono">{prov.rut_empresa}</p>
                           </div>
                         </div>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{prov.categoria}</span>
-                        {prov.tipo_servicio && (
-                          <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>
-                        )}
-                      </td>
+                        {prov.tipo_servicio && <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>}
+                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
                         <p className="text-[10px] text-slate-400">{prov.telefono}</p>
-                        {prov.email_contacto && (
-                          <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>
+                        {prov.email_contacto && <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>}
+                       </td>
+                      <td className="px-6 py-4">
+                        {prov.obuma_id ? (
+                          <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">🏢 Obuma</span>
+                        ) : (
+                          <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
                         )}
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
                           {[...Array(5)].map((_, i) => (
                             <Star key={i} size={14} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
                           ))}
                         </div>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
-                        <button 
-                          onClick={() => toggleActivo(prov)}
-                          className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${
-                            prov.activo !== false 
-                              ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' 
-                              : 'bg-red-100 text-red-600 hover:bg-red-200'
-                          }`}
-                        >
+                        <button onClick={() => toggleActivo(prov)} className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
                           {prov.activo !== false ? 'Activo' : 'Inactivo'}
                         </button>
-                      </td>
+                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} 
-                            className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                            title="Ver detalles"
-                          >
+                          <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                             {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
-                          <button 
-                            onClick={() => setSeleccionado(prov)} 
-                            className="p-2 text-slate-400 hover:text-amber-600 transition-colors"
-                            title="Editar"
-                          >
+                          <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
                             <Edit3 size={16} />
                           </button>
-                          <button 
-                            onClick={() => eliminarProveedor(prov.id)} 
-                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!prov.obuma_id && (
+                            <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
-                        {/* Detalles expandidos en línea */}
                         {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))}
                 </tbody>
               </table>
@@ -797,9 +797,11 @@ export default function SeccionProveedores() {
                       <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600">
                         <Edit3 size={14} />
                       </button>
-                      <button onClick={() => eliminarProveedor(prov.id)} className="p-1.5 text-slate-400 hover:text-red-600">
-                        <Trash2 size={14} />
-                      </button>
+                      {!prov.obuma_id && (
+                        <button onClick={() => eliminarProveedor(prov.id)} className="p-1.5 text-slate-400 hover:text-red-600">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   
@@ -809,16 +811,16 @@ export default function SeccionProveedores() {
                       <span className="text-xs font-bold text-slate-700">{prov.categoria}</span>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400 uppercase">Contacto</span>
                       <span className="text-xs text-slate-600">{prov.nombre_contacto || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</span>
                       <span className="text-xs text-slate-600">{prov.telefono || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Ubicación</span>
-                      <span className="text-xs text-slate-600">{prov.ciudad || '—'}</span>
                     </div>
                   </div>
                   
@@ -828,10 +830,7 @@ export default function SeccionProveedores() {
                         <Star key={i} size={12} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
                       ))}
                     </div>
-                    <button 
-                      onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                    >
+                    <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
                       {expandedCard === prov.id ? 'Ver menos' : 'Ver detalles'}
                       {expandedCard === prov.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
@@ -851,7 +850,7 @@ export default function SeccionProveedores() {
         )}
       </div>
 
-      {/* Modal de edición - COMPLETO */}
+      {/* Modal de edición */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
@@ -869,22 +868,22 @@ export default function SeccionProveedores() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Nombre Empresa *</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.nombre_empresa} onChange={e => setSeleccionado({...seleccionado, nombre_empresa: e.target.value})} />
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.nombre_empresa} onChange={e => setSeleccionado({...seleccionado, nombre_empresa: e.target.value})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">RUT *</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.rut_empresa} onChange={e => setSeleccionado({...seleccionado, rut_empresa: e.target.value})} />
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.rut_empresa} onChange={e => setSeleccionado({...seleccionado, rut_empresa: e.target.value})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Categoría *</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.categoria} onChange={e => setSeleccionado({...seleccionado, categoria: e.target.value})} />
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.categoria} onChange={e => setSeleccionado({...seleccionado, categoria: e.target.value})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Tipo Servicio</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.tipo_servicio} onChange={e => setSeleccionado({...seleccionado, tipo_servicio: e.target.value})} />
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.tipo_servicio} onChange={e => setSeleccionado({...seleccionado, tipo_servicio: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Nombre Contacto</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Contacto</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.nombre_contacto} onChange={e => setSeleccionado({...seleccionado, nombre_contacto: e.target.value})} />
                 </div>
                 <div>
@@ -913,7 +912,7 @@ export default function SeccionProveedores() {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Condiciones Pago</label>
-                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.condiciones_pago} onChange={e => setSeleccionado({...seleccionado, condiciones_pago: e.target.value})}>
+                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.condiciones_pago} onChange={e => setSeleccionado({...seleccionado, condiciones_pago: e.target.value})}>
                     <option value="Contado">Contado</option>
                     <option value="30 días">30 días</option>
                     <option value="60 días">60 días</option>
@@ -926,7 +925,7 @@ export default function SeccionProveedores() {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Tipo Cuenta</label>
-                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm border border-slate-200" value={seleccionado.cuenta_tipo} onChange={e => setSeleccionado({...seleccionado, cuenta_tipo: e.target.value})}>
+                  <select className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.cuenta_tipo} onChange={e => setSeleccionado({...seleccionado, cuenta_tipo: e.target.value})}>
                     <option value="Corriente">Corriente</option>
                     <option value="Vista">Vista / RUT</option>
                   </select>
@@ -953,6 +952,102 @@ export default function SeccionProveedores() {
               <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {loading && <Loader2 size={16} className="animate-spin" />}
                 Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de búsqueda de productos */}
+      {showBuscadorProductos && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-white flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">🔍 Buscar Proveedores por Producto</h2>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Encuentra qué proveedores venden un producto específico</p>
+              </div>
+              <button onClick={() => setShowBuscadorProductos(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex gap-3 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    value={productoBuscado}
+                    onChange={(e) => setProductoBuscado(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && buscarProductosProveedor()}
+                    placeholder="Ej: Martillo, Clavos, Anticorrosivo, Smartphone..."
+                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <button
+                  onClick={buscarProductosProveedor}
+                  disabled={buscandoProducto}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-xl font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {buscandoProducto ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                  Buscar
+                </button>
+              </div>
+
+              {resultadosBusqueda.length > 0 && (
+                <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+                  <p className="text-sm text-slate-500">📦 {resultadosBusqueda.length} proveedores encontrados</p>
+                  {resultadosBusqueda.map((prov, idx) => (
+                    <div key={idx} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="font-bold text-slate-800">{prov.nombre}</h3>
+                          <p className="text-[10px] text-slate-400 font-mono">{prov.rut}</p>
+                        </div>
+                        {prov.telefono && (
+                          <a href={`tel:${prov.telefono}`} className="text-xs text-blue-600 hover:underline">
+                            <Phone size={14} className="inline mr-1" /> {prov.telefono}
+                          </a>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {prov.productos.map((prod: any, pidx: number) => (
+                          <div key={pidx} className="bg-white rounded-lg p-3 flex justify-between items-center">
+                            <div>
+                              <p className="font-medium text-sm">{prod.nombre}</p>
+                              {prod.sku && <p className="text-[9px] text-slate-400">SKU: {prod.sku}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-black text-emerald-600">
+                                {prod.ultimo_precio ? `$${prod.ultimo_precio.toLocaleString('es-CL')}` : 'Consultar'}
+                              </p>
+                              {prod.fecha_compra && <p className="text-[9px] text-slate-400">{prod.fecha_compra}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {prov.sitio_web && (
+                        <a href={prov.sitio_web} target="_blank" className="text-[10px] text-blue-500 hover:underline mt-3 inline-flex items-center gap-1">
+                          <ExternalLink size={10} /> Ver sitio web
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {resultadosBusqueda.length === 0 && productoBuscado && !buscandoProducto && (
+                <div className="text-center py-12">
+                  <Package size={48} className="mx-auto text-slate-300 mb-4" />
+                  <p className="text-slate-500">No se encontraron proveedores que vendan "{productoBuscado}"</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button onClick={() => setShowBuscadorProductos(false)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold">
+                Cerrar
               </button>
             </div>
           </div>
