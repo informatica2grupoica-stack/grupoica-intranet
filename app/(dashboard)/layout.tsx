@@ -79,18 +79,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = "/login";
   };
 
-  // Verificar si el usuario puede ver RRHH (admin, superuser, rrhh)
   const puedeVerRRHH = userRol === 'admin' || userRol === 'superuser' || userRol === 'rrhh';
 
   const sections = [
     {
-      title: "Menu",
+      title: "MENÚ",
       items: [
         { name: "Inicio", icon: LayoutDashboard, path: "/" }
       ]
     },
     {
-      title: "Recursos Humanos",
+      title: "RECURSOS HUMANOS",
       icon: Users,
       items: [
         { name: "Dashboard RRHH", icon: PieChart, path: "/rrhh" },
@@ -101,19 +100,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     },
     {
-      title: "Comunicación y Flujo",
+      title: "COMUNICACIÓN",
       items: [
         { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
         { name: "Tareas", icon: CheckSquare, path: "/tareas" },
       ]
     },
     {
-      title: "Análisis de productos",
+      title: "ANÁLISIS",
       items: [
         { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
         { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
-        { name: "🔍 Buscar Proveedores", icon: Search, path: "/buscador-proveedores" }
       ]
     },
     {
@@ -123,28 +121,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     },
     {
-      title: "Logística",
+      title: "LOGÍSTICA",
+      icon: Truck,
       items: [
-        { name: "Proveedores", icon: Truck, path: "/proveedores" },
+        { name: "📋 Mis Proveedores", icon: Building2, path: "/proveedores" },
+        { name: "🔍 Buscar Proveedor", icon: Search, path: "/buscador-proveedores" },
+        { name: "🏢 Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
       ]
     },
     {
       title: "OBUMA",
+      icon: Server,
       items: [
-        { name: "Proveedores Obuma", icon: Building2, path: "/obuma-proveedores" },
         { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
-        { name: "Productos", icon: Database, path: "/obuma-productos" },
-        { name: "Ordenes de Compras", icon: ShoppingBag, path: "/compras" },
-      ]
-    },
-    {
-      title: "Integración API",
-      items: [
+        { name: "Productos", icon: Box, path: "/obuma-productos" },
+        { name: "Órdenes de Compras", icon: ShoppingBag, path: "/compras" },
         { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
       ]
     },
     {
-      title: "Administración",
+      title: "ADMINISTRACIÓN",
       items: [
         { name: "Usuarios", icon: Users, path: "/usuarios" },
         { name: "Dispositivos", icon: Laptop, path: "/dispositivos" },
@@ -152,9 +148,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   ];
 
-  // Agregar sección de Recursos Humanos solo si tiene permisos
   const sectionsFiltradas = sections.filter(section => {
-    if (section.title === "Recursos Humanos" && !puedeVerRRHH) return false;
+    if (section.title === "RECURSOS HUMANOS" && !puedeVerRRHH) return false;
     return true;
   });
 
@@ -252,7 +247,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="max-w-7xl mx-auto">
           {/* HEADER CON BREADCRUMB Y CAMPANA */}
           <div className="flex items-center justify-between mb-8">
-            {/* BREADCRUMB */}
             <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-slate-400 px-4 bg-white/50 w-fit py-2 rounded-full border border-slate-100 shadow-sm">
               <LayoutDashboard className="w-3 h-3 text-blue-500" />
               <span>Sistema Central</span>
@@ -262,7 +256,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </span>
             </div>
 
-            {/* CAMPANA DE NOTIFICACIONES */}
             {perfilId && (
               <div className="flex items-center gap-3">
                 <CampanaNotificaciones usuarioId={perfilId} />
