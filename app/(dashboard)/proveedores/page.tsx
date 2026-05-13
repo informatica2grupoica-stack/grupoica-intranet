@@ -2,13 +2,14 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { 
   Building2, Search, Loader2, MapPin, X, Phone, Star, 
   Trash2, Edit3, Plus, CheckCircle2, AlertCircle,
   Landmark, Mail, Globe, ChevronDown, ChevronUp,
   Briefcase, DollarSign, Calendar, Users,
   Database, Package, ExternalLink, Smartphone,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Shield, ShieldAlert
 } from 'lucide-react';
 
 interface Proveedor {
@@ -41,7 +42,11 @@ type FuentType = 'todos' | 'manuales' | 'obuma';
 
 const ITEMS_PER_PAGE = 25;
 
+// Tipos de usuario para permisos
+type UserRole = 'superuser' | 'admin' | 'user' | 'rrhh' | 'jefe' | 'vendedor';
+
 export default function ProveedoresPage() {
+  const router = useRouter();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [filteredProveedores, setFilteredProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +59,11 @@ export default function ProveedoresPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  
+  // Estado del usuario actual y sus permisos
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -84,32 +94,112 @@ export default function ProveedoresPage() {
 
   const [nuevo, setNuevo] = useState(initialFormState);
 
+  // Cargar perfil del usuario actual
   useEffect(() => {
-    cargarProveedores();
+    cargarPerfilUsuario();
   }, []);
+
+  useEffect(() => {
+    if (userRole) {
+      cargarProveedores();
+    }
+  }, [userRole]);
 
   useEffect(() => {
     filtrarYOrdenar();
   }, [proveedores, busqueda, categoriaFiltro, orden, fuente]);
 
-  // Resetear página cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
   }, [busqueda, categoriaFiltro, orden, fuente]);
+
+  const cargarPerfilUsuario = async () => {
+    setLoadingUser(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.log("No hay sesión activa");
+        router.push('/login');
+        return;
+      }
+
+      const { data: perfil, error } = await supabase
+        .from('perfiles')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (error) {
+        console.error("Error cargando perfil:", error);
+      } else {
+        setUserProfile(perfil);
+        setUserRole(perfil?.rol as UserRole || 'user');
+        console.log("👤 Usuario autenticado:", perfil?.nombre, "Rol:", perfil?.rol);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setLoadingUser(false);
+    }
+  };
+
+  // Verificar si el usuario tiene permisos de administrador
+  const isAdmin = () => {
+    return userRole === 'admin' || userRole === 'superuser';
+  };
+
+  // Verificar si puede eliminar (solo superuser)
+  const canDelete = () => {
+    return userRole === 'superuser';
+  };
+
+  // Verificar si puede editar (admin o superuser)
+  const canEdit = () => {
+    return userRole === 'admin' || userRole === 'superuser';
+  };
 
   const showAlert = (msg: string, type: 'success' | 'error') => {
     setAlert({ msg, type });
     setTimeout(() => setAlert(null), 3000);
   };
 
+  // 🔥 FUNCIÓN PARA VERIFICAR RUT DUPLICADO ANTES DE GUARDAR
+  const verificarRutDuplicado = async (rut: string, idExcluir?: string): Promise<{duplicado: boolean, proveedorExistente?: Proveedor}> => {
+    if (!rut || rut.trim() === '') {
+      return { duplicado: false };
+    }
+
+    let query = supabase
+      .from('proveedores')
+      .select('id, nombre_empresa, rut_empresa')
+      .eq('rut_empresa', rut.trim());
+
+    // Si es edición, excluir el registro actual
+    if (idExcluir) {
+      query = query.neq('id', idExcluir);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error verificando RUT:", error);
+      return { duplicado: false };
+    }
+
+    if (data && data.length > 0) {
+      return { duplicado: true, proveedorExistente: data[0] as Proveedor };
+    }
+
+    return { duplicado: false };
+  };
+
   const cargarProveedores = async () => {
     setLoading(true);
     console.log("🔄 Cargando proveedores desde Supabase...");
     
-    // 🔥 IMPORTANTE: Sin límite para traer TODOS los proveedores
-    const { data, error, count } = await supabase
+    const { data, error } = await supabase
       .from('proveedores')
-      .select('*', { count: 'exact' })
+      .select('*')
       .order('nombre_empresa', { ascending: true });
     
     if (!error && data) {
@@ -160,15 +250,11 @@ export default function ProveedoresPage() {
   const filtrarYOrdenar = () => {
     let filtrados = [...proveedores];
     
-    console.log(`🔍 Filtrando ${proveedores.length} proveedores...`);
-    
     // Filtrar por fuente
     if (fuente === 'manuales') {
       filtrados = filtrados.filter(p => !p.obuma_id);
-      console.log(`   📋 Manuales: ${filtrados.length}`);
     } else if (fuente === 'obuma') {
       filtrados = filtrados.filter(p => p.obuma_id);
-      console.log(`   🏢 Obuma: ${filtrados.length}`);
     }
     
     // Filtrar por búsqueda
@@ -180,13 +266,11 @@ export default function ProveedoresPage() {
         p.categoria?.toLowerCase().includes(busquedaLower) ||
         p.tipo_servicio?.toLowerCase().includes(busquedaLower)
       );
-      console.log(`   🔎 Búsqueda "${busqueda}": ${filtrados.length}`);
     }
     
     // Filtrar por categoría
     if (categoriaFiltro !== "Todas") {
       filtrados = filtrados.filter(p => p.categoria === categoriaFiltro);
-      console.log(`   📁 Categoría "${categoriaFiltro}": ${filtrados.length}`);
     }
     
     // Ordenar
@@ -208,7 +292,6 @@ export default function ProveedoresPage() {
     setFilteredProveedores(filtrados);
   };
 
-  // Paginación
   const totalPages = Math.ceil(filteredProveedores.length / ITEMS_PER_PAGE);
   const paginatedProveedores = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -237,8 +320,15 @@ export default function ProveedoresPage() {
     return dvCaracter === dvEsperado;
   };
 
+  // 🔥 GUARDAR PROVEEDOR CON VALIDACIÓN DE DUPLICADOS
   const guardarProveedor = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Verificar permisos
+    if (!isAdmin()) {
+      showAlert("No tienes permisos para crear proveedores. Solo administradores.", "error");
+      return;
+    }
     
     if (!nuevo.nombre_empresa.trim()) {
       showAlert("El nombre de la empresa es obligatorio", "error");
@@ -263,12 +353,22 @@ export default function ProveedoresPage() {
     setLoading(true);
     setErrorRut("");
     
+    // 🔥 VERIFICAR DUPLICADO ANTES DE INSERTAR
+    const { duplicado, proveedorExistente } = await verificarRutDuplicado(nuevo.rut_empresa);
+    
+    if (duplicado) {
+      setErrorRut(`El RUT ${nuevo.rut_empresa} ya está registrado por el proveedor: ${proveedorExistente?.nombre_empresa}`);
+      showAlert(`❌ RUT duplicado: Ya existe el proveedor "${proveedorExistente?.nombre_empresa}" con este RUT`, "error");
+      setLoading(false);
+      return;
+    }
+    
     const { error } = await supabase.from('proveedores').insert([nuevo]);
     
     if (error) {
       if (error.code === '23505') {
-        showAlert("Ya existe un proveedor con este RUT", "error");
         setErrorRut("Este RUT ya está registrado");
+        showAlert("Ya existe un proveedor con este RUT", "error");
       } else {
         showAlert(error.message, "error");
       }
@@ -281,8 +381,15 @@ export default function ProveedoresPage() {
     setLoading(false);
   };
 
+  // 🔥 ACTUALIZAR PROVEEDOR CON VALIDACIÓN DE DUPLICADOS
   const actualizarProveedor = async () => {
     if (!seleccionado) return;
+    
+    // Verificar permisos
+    if (!canEdit()) {
+      showAlert("No tienes permisos para editar proveedores. Solo administradores.", "error");
+      return;
+    }
     
     if (seleccionado.rut_empresa && !validarRut(seleccionado.rut_empresa)) {
       showAlert("RUT inválido. Formato: 12345678-9", "error");
@@ -290,6 +397,16 @@ export default function ProveedoresPage() {
     }
     
     setLoading(true);
+    
+    // 🔥 VERIFICAR DUPLICADO EN EDICIÓN (excluyendo el propio ID)
+    const { duplicado, proveedorExistente } = await verificarRutDuplicado(seleccionado.rut_empresa, seleccionado.id);
+    
+    if (duplicado) {
+      showAlert(`❌ RUT duplicado: El RUT ${seleccionado.rut_empresa} ya pertenece al proveedor "${proveedorExistente?.nombre_empresa}"`, "error");
+      setLoading(false);
+      return;
+    }
+    
     const { error } = await supabase
       .from('proveedores')
       .update(seleccionado)
@@ -309,8 +426,15 @@ export default function ProveedoresPage() {
     setLoading(false);
   };
 
+  // 🔥 ELIMINAR PROVEEDOR (solo superuser)
   const eliminarProveedor = async (id: string) => {
-    if (!window.confirm("¿Eliminar este proveedor permanentemente?")) return;
+    if (!canDelete()) {
+      showAlert("No tienes permisos para eliminar proveedores. Solo Super Usuario.", "error");
+      return;
+    }
+    
+    if (!window.confirm("⚠️ ¿Eliminar este proveedor permanentemente? Esta acción no se puede deshacer.")) return;
+    
     setLoading(true);
     const { error } = await supabase.from('proveedores').delete().eq('id', id);
     if (error) {
@@ -324,6 +448,11 @@ export default function ProveedoresPage() {
   };
 
   const toggleActivo = async (prov: Proveedor) => {
+    if (!canEdit()) {
+      showAlert("No tienes permisos para cambiar el estado de proveedores", "error");
+      return;
+    }
+    
     const nuevoEstado = !prov.activo;
     const { error } = await supabase
       .from('proveedores')
@@ -339,6 +468,11 @@ export default function ProveedoresPage() {
   };
 
   const sincronizarProductos = async () => {
+    if (!isAdmin()) {
+      showAlert("No tienes permisos para sincronizar productos", "error");
+      return;
+    }
+    
     setSincronizando(true);
     try {
       const res = await fetch('/api/sincronizar-productos-obuma', { method: 'POST' });
@@ -370,15 +504,6 @@ export default function ProveedoresPage() {
   };
 
   const getInitials = (nombre: string) => nombre?.charAt(0).toUpperCase() || 'P';
-  const getRegionNombre = (regionCodigo: string = '') => {
-    const regiones: Record<string, string> = {
-      '01': 'Tarapacá', '02': 'Antofagasta', '03': 'Atacama', '04': 'Coquimbo',
-      '05': 'Valparaíso', '06': "O'Higgins", '07': 'Maule', '08': 'Biobío',
-      '09': 'Araucanía', '10': 'Los Lagos', '11': 'Aysén', '12': 'Magallanes',
-      '13': 'Metropolitana', '14': 'Los Ríos', '15': 'Arica y Parinacota', '16': 'Ñuble'
-    };
-    return regiones[regionCodigo] || regionCodigo || 'No especificada';
-  };
 
   const categoriasUnicas = ["Todas", ...new Set(proveedores.map(p => p.categoria).filter(cat => cat && cat.trim() !== ''))];
 
@@ -435,6 +560,30 @@ export default function ProveedoresPage() {
     </div>
   );
 
+  // Pantalla de carga de usuario
+  if (loadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600" size={48} />
+      </div>
+    );
+  }
+
+  // Verificar autenticación
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <ShieldAlert size={48} className="mx-auto text-red-500 mb-4" />
+          <p className="text-slate-600">No tienes acceso a esta página</p>
+          <button onClick={() => router.push('/login')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl">
+            Ir al Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4 lg:p-8 font-sans">
       
@@ -467,7 +616,17 @@ export default function ProveedoresPage() {
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              {/* Badge de rol del usuario */}
+              <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1 ${
+                userRole === 'superuser' ? 'bg-purple-100 text-purple-700' : 
+                userRole === 'admin' ? 'bg-blue-100 text-blue-700' : 
+                'bg-slate-100 text-slate-500'
+              }`}>
+                <Shield size={12} />
+                {userRole === 'superuser' ? 'SUPER USUARIO' : userRole === 'admin' ? 'ADMINISTRADOR' : userRole?.toUpperCase()}
+              </div>
+              
               <button
                 onClick={() => setVista('lista')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
@@ -487,14 +646,16 @@ export default function ProveedoresPage() {
                 <Package size={14} />
                 Buscar Producto
               </button>
-              <button
-                onClick={sincronizarProductos}
-                disabled={sincronizando}
-                className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {sincronizando ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
-                Sincronizar Obuma
-              </button>
+              {isAdmin() && (
+                <button
+                  onClick={sincronizarProductos}
+                  disabled={sincronizando}
+                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {sincronizando ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+                  Sincronizar Obuma
+                </button>
+              )}
             </div>
           </div>
           
@@ -622,13 +783,15 @@ export default function ProveedoresPage() {
               <option value="categoria">Ordenar por Categoría</option>
             </select>
 
-            <button 
-              onClick={() => setShowForm(!showForm)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
-            >
-              {showForm ? <X size={18} /> : <Plus size={18} />}
-              {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
-            </button>
+            {isAdmin() && (
+              <button 
+                onClick={() => setShowForm(!showForm)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
+              >
+                {showForm ? <X size={18} /> : <Plus size={18} />}
+                {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
+              </button>
+            )}
           </div>
           
           {/* Info de resultados */}
@@ -638,8 +801,8 @@ export default function ProveedoresPage() {
           </div>
         </div>
 
-        {/* Formulario de creación */}
-        {showForm && (
+        {/* Formulario de creación - SOLO visible para admin/superuser */}
+        {showForm && isAdmin() && (
           <form onSubmit={guardarProveedor} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
               <Plus size={20} className="text-blue-600" />
@@ -779,51 +942,57 @@ export default function ProveedoresPage() {
                               <p className="text-[10px] text-slate-400 font-mono">{prov.rut_empresa}</p>
                             </div>
                           </div>
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
                           <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{prov.categoria}</span>
                           {prov.tipo_servicio && <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>}
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
                           <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
                           <p className="text-[10px] text-slate-400">{prov.telefono}</p>
                           {prov.email_contacto && <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>}
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
                           {prov.obuma_id ? (
                             <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">🏢 Obuma</span>
                           ) : (
                             <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
                           )}
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1">
                             {[...Array(5)].map((_, i) => (
                               <Star key={i} size={14} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
                             ))}
                           </div>
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
-                          <button onClick={() => toggleActivo(prov)} className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
+                          <button 
+                            onClick={() => toggleActivo(prov)} 
+                            disabled={!canEdit()}
+                            className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'} ${!canEdit() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
                             {prov.activo !== false ? 'Activo' : 'Inactivo'}
                           </button>
-                          </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
                             <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                               {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
-                            <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
-                              <Edit3 size={16} />
-                            </button>
-                            {!prov.obuma_id && (
+                            {canEdit() && (
+                              <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
+                                <Edit3 size={16} />
+                              </button>
+                            )}
+                            {canDelete() && !prov.obuma_id && (
                               <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors">
                                 <Trash2 size={16} />
                               </button>
                             )}
                           </div>
                           {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
-                          </td>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -898,10 +1067,12 @@ export default function ProveedoresPage() {
                         </div>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600">
-                          <Edit3 size={14} />
-                        </button>
-                        {!prov.obuma_id && (
+                        {canEdit() && (
+                          <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600">
+                            <Edit3 size={14} />
+                          </button>
+                        )}
+                        {canDelete() && !prov.obuma_id && (
                           <button onClick={() => eliminarProveedor(prov.id)} className="p-1.5 text-slate-400 hover:text-red-600">
                             <Trash2 size={14} />
                           </button>
@@ -1002,8 +1173,8 @@ export default function ProveedoresPage() {
         )}
       </div>
 
-      {/* Modal de edición - se mantiene igual */}
-      {seleccionado && (
+      {/* Modal de edición - solo visible para admin/superuser */}
+      {seleccionado && canEdit() && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white flex justify-between items-center">
@@ -1110,7 +1281,7 @@ export default function ProveedoresPage() {
         </div>
       )}
 
-      {/* Modal de búsqueda de productos - se mantiene igual */}
+      {/* Modal de búsqueda de productos */}
       {showBuscadorProductos && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
