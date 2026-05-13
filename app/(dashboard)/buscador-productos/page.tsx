@@ -3,21 +3,22 @@
 
 import { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import {
-  Search, ExternalLink, Loader2, BarChart3,
+import { 
+  Search, ExternalLink, Loader2, BarChart3, 
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X, Sparkles,
   Download, FileSpreadsheet, AlertTriangle, ShoppingBag,
-  Upload
+  Upload, Eye, EyeOff
 } from 'lucide-react';
 
 // --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
 const Toast = ({ message, type, onClose }: any) => (
-  <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${type === 'success'
-      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+  <div className={`fixed top-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${
+    type === 'success' 
+      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800' 
       : type === 'warning'
-        ? 'bg-amber-50/90 border-amber-200 text-amber-800'
-        : 'bg-orange-50/90 border-orange-200 text-orange-800'
-    }`}>
+      ? 'bg-amber-50/90 border-amber-200 text-amber-800'
+      : 'bg-orange-50/90 border-orange-200 text-orange-800'
+  }`}>
     {type === 'success' ? <CheckCircle2 size={18} /> : type === 'warning' ? <AlertTriangle size={18} /> : <AlertCircle size={18} />}
     <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
     <button onClick={onClose} className="ml-2 hover:opacity-50 transition-opacity">
@@ -25,6 +26,101 @@ const Toast = ({ message, type, onClose }: any) => (
     </button>
   </div>
 );
+
+// --- MODAL DE PREVISUALIZACIÓN ---
+const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
+  const [mostrarJson, setMostrarJson] = useState(false);
+  
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="sticky top-0 bg-white border-b border-slate-100 p-5 flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-black text-slate-800 uppercase italic">
+              📊 Previsualización Excel
+            </h2>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+              {productos.length} productos cargados
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMostrarJson(!mostrarJson)}
+              className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"
+              title="Ver JSON"
+            >
+              {mostrarJson ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6 overflow-y-auto max-h-[70vh]">
+          {mostrarJson ? (
+            <pre className="bg-slate-900 text-slate-200 p-4 rounded-xl text-[10px] font-mono overflow-x-auto whitespace-pre-wrap">
+              {JSON.stringify(productos.slice(0, 20), null, 2)}
+            </pre>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr className="border-b border-slate-200">
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">Item</th>
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">Producto</th>
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">Cantidad</th>
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">Valor C/IVA</th>
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">Link Referencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {productos.slice(0, 50).map((prod: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-xs font-bold text-slate-600">{prod.numero}</td>
+                      <td className="px-4 py-3 text-xs text-slate-700 max-w-md truncate">{prod.nombre}</td>
+                      <td className="px-4 py-3 text-xs text-right text-slate-600">{prod.cantidad}</td>
+                      <td className="px-4 py-3 text-xs text-right font-bold text-emerald-600">
+                        ${prod.valor_civa.toLocaleString('es-CL')}
+                      </td>
+                      <td className="px-4 py-3 text-[9px] text-blue-500 truncate max-w-[150px]">
+                        {prod.link_referencia || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+               </table>
+              {productos.length > 50 && (
+                <p className="text-center text-[9px] text-slate-400 mt-4">
+                  + {productos.length - 50} productos adicionales
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+        
+        <div className="sticky bottom-0 bg-white border-t border-slate-100 p-5 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-100 transition-all"
+          >
+            Cerrar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-8 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
+          >
+            <Sparkles size={14} />
+            Iniciar Búsqueda
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 type NivelMatching = 'exacto' | 'parcial' | 'bajo';
 
@@ -72,13 +168,14 @@ export default function MonitorMasivoICA() {
   const [progreso, setProgreso] = useState({ actual: 0, total: 0 });
   const [toasts, setToasts] = useState<any[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
-
+  
   // Estados para Excel
   const [productosExcel, setProductosExcel] = useState<ProductoExcel[]>([]);
   const [mostrarPrevisualizacion, setMostrarPrevisualizacion] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [pestanaSeleccionada, setPestanaSeleccionada] = useState<string>('COSTEO');
   const [pestanasDisponibles, setPestanasDisponibles] = useState<string[]>([]);
-  const [archivoCargado, setArchivoCargado] = useState<File | null>(null);
+  const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
 
   const notify = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     const id = Date.now();
@@ -89,7 +186,7 @@ export default function MonitorMasivoICA() {
   const parsearLista = (texto: string): { numero: string; nombre: string }[] => {
     const lineas = texto.split('\n').filter(line => line.trim().length > 0);
     const items: { numero: string; nombre: string }[] = [];
-
+    
     for (const linea of lineas) {
       const match = linea.match(/^(\d+)[\s\t]+(.+)/);
       if (match) {
@@ -101,87 +198,147 @@ export default function MonitorMasivoICA() {
     return items;
   };
 
-  // Procesar archivo Excel - versión mejorada
-  const procesarExcel = (file: File) => {
-    setArchivoCargado(file);
+  // Cargar Excel desde archivo con logs detallados
+  const cargarExcel = (file: File) => {
+    console.log("=".repeat(60));
+    console.log("📁 CARGANDO EXCEL");
+    console.log("=".repeat(60));
+    console.log("📄 Nombre del archivo:", file.name);
+    console.log("📏 Tamaño:", file.size, "bytes");
+    
+    setArchivoExcel(file);
     const reader = new FileReader();
+    
     reader.onload = (e) => {
+      console.log("✅ Archivo leído correctamente");
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
       const workbook = XLSX.read(data, { type: 'array' });
-
+      
+      console.log("📑 Pestañas encontradas:", workbook.SheetNames);
       setPestanasDisponibles(workbook.SheetNames);
-
+      
       let sheetName = pestanaSeleccionada;
       if (!workbook.SheetNames.includes(sheetName)) {
+        console.warn(`⚠️ Pestaña "${sheetName}" no encontrada, usando primera disponible`);
         sheetName = workbook.SheetNames[0];
         setPestanaSeleccionada(sheetName);
       }
-
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-      const items: ProductoExcel[] = [];
-
-      for (let i = 0; i < jsonData.length; i++) {
-        const row: any = jsonData[i];
-        const detalle = row.Detalle || row.detalle || row.DESCRIPCION || row.descripcion;
-
-        if (!detalle || detalle === 'TOTAL' || String(detalle).includes('VERDADERO')) continue;
-
-        items.push({
-          numero: row.ITEM || row.Item || i + 1,
-          nombre: String(detalle).trim(),
-          cantidad: row.Cantidad || row.cantidad || 1,
-          valor_civa: row["VALOR C/IVA"] || row["Valor C/IVA"] || 0,
-          link_referencia: row["LINK 1"] || row["Link 1"] || ""
-        });
-      }
-
-      setProductosExcel(items);
-      setMostrarPrevisualizacion(true);
-      notify(`✅ Cargados ${items.length} productos desde pestaña "${sheetName}"`, 'success');
+      
+      console.log(`📌 Leyendo pestaña: "${sheetName}"`);
+      procesarPestanaExcel(workbook, sheetName);
     };
+    
+    reader.onerror = (error) => {
+      console.error("❌ Error leyendo archivo:", error);
+      notify("Error al leer el archivo Excel", "error");
+    };
+    
     reader.readAsArrayBuffer(file);
   };
 
-  // Cambiar pestaña y recargar
+  // Procesar pestaña específica del Excel con logs
+  const procesarPestanaExcel = (workbook: XLSX.WorkBook, sheetName: string) => {
+    console.log("\n📊 PROCESANDO PESTAÑA:", sheetName);
+    
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    
+    console.log(`📋 Filas encontradas: ${jsonData.length}`);
+    
+    if (jsonData.length === 0) {
+      console.warn("⚠️ No hay datos en esta pestaña");
+      notify(`La pestaña "${sheetName}" está vacía`, "warning");
+      return;
+    }
+    
+    // Mostrar las columnas detectadas
+    const firstRow = jsonData[0] as any;
+    console.log("🔑 Columnas detectadas:", Object.keys(firstRow));
+    
+    // Mostrar primeras filas para depuración
+    console.log("\n📝 PRIMERAS 3 FILAS DEL EXCEL:");
+    jsonData.slice(0, 3).forEach((row: any, idx: number) => {
+      console.log(`  Fila ${idx + 1}:`, row);
+    });
+    
+    const items: ProductoExcel[] = [];
+    
+    for (let i = 0; i < jsonData.length; i++) {
+      const row: any = jsonData[i];
+      
+      // Intentar diferentes nombres de columnas
+      const detalle = row.Detalle || row.detalle || row.DESCRIPCION || row.descripcion || row.Producto || row.producto;
+      const itemNum = row.ITEM || row.Item || row.item || (i + 1);
+      const cantidad = row.Cantidad || row.cantidad || 1;
+      const valorCIVA = row["VALOR C/IVA"] || row["Valor C/IVA"] || row.valor_civa || 0;
+      const linkRef = row["LINK 1"] || row["Link 1"] || row.link1 || "";
+      
+      if (!detalle) {
+        if (i < 5) console.log(`⏭️ Fila ${i + 1}: sin detalle, omitida`);
+        continue;
+      }
+      
+      const detalleStr = String(detalle).trim();
+      if (detalleStr === 'TOTAL' || detalleStr.includes('VERDADERO') || detalleStr.includes('Total')) {
+        console.log(`⏭️ Fila ${i + 1}: es total, omitida`);
+        continue;
+      }
+      
+      items.push({
+        numero: Number(itemNum),
+        nombre: detalleStr,
+        cantidad: Number(cantidad) || 1,
+        valor_civa: Number(valorCIVA) || 0,
+        link_referencia: linkRef || ""
+      });
+    }
+    
+    console.log(`\n✅ TOTAL PRODUCTOS CARGADOS: ${items.length}`);
+    
+    if (items.length === 0) {
+      console.error("❌ No se encontraron productos válidos en el Excel");
+      notify(`No se encontraron productos válidos en la pestaña "${sheetName}"`, "error");
+      return;
+    }
+    
+    // Mostrar resumen de productos cargados
+    console.log("\n📋 RESUMEN DE PRODUCTOS CARGADOS:");
+    items.slice(0, 10).forEach((item, idx) => {
+      console.log(`  ${idx + 1}. [${item.numero}] ${item.nombre.substring(0, 60)}... - Cant: ${item.cantidad} - $${item.valor_civa.toLocaleString('es-CL')}`);
+    });
+    if (items.length > 10) {
+      console.log(`  ... y ${items.length - 10} productos más`);
+    }
+    
+    setProductosExcel(items);
+    setMostrarPrevisualizacion(true);
+    setShowModal(true); // Abrir modal para previsualizar
+    notify(`✅ Cargados ${items.length} productos desde pestaña "${sheetName}"`, 'success');
+  };
+
+  // Cambiar de pestaña
   const cambiarPestana = (sheetName: string) => {
+    console.log(`🔄 Cambiando a pestaña: "${sheetName}"`);
     setPestanaSeleccionada(sheetName);
-    if (archivoCargado) {
+    if (archivoExcel) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-        const items: ProductoExcel[] = [];
-
-        for (let i = 0; i < jsonData.length; i++) {
-          const row: any = jsonData[i];
-          const detalle = row.Detalle || row.detalle || row.DESCRIPCION || row.descripcion;
-
-          if (!detalle || detalle === 'TOTAL' || String(detalle).includes('VERDADERO')) continue;
-
-          items.push({
-            numero: row.ITEM || row.Item || i + 1,
-            nombre: String(detalle).trim(),
-            cantidad: row.Cantidad || row.cantidad || 1,
-            valor_civa: row["VALOR C/IVA"] || row["Valor C/IVA"] || 0,
-            link_referencia: row["LINK 1"] || row["Link 1"] || ""
-          });
-        }
-
-        setProductosExcel(items);
-        setMostrarPrevisualizacion(true);
-        notify(`✅ Cargados ${items.length} productos desde pestaña "${sheetName}"`, 'success');
+        procesarPestanaExcel(workbook, sheetName);
       };
-      reader.readAsArrayBuffer(archivoCargado);
+      reader.readAsArrayBuffer(archivoExcel);
     }
   };
 
-  // Matching con IA
-  const aplicarMatchingIA = async (productoBuscado: string, resultados: ProductoResultado[]): Promise<{ mejor_match: ProductoResultado | null, resultados_con_match: ProductoResultado[] }> => {
+  // Confirmar búsqueda desde el modal
+  const confirmarBusquedaExcel = () => {
+    setShowModal(false);
+    iniciarBarridoExcel();
+  };
+
+  // Función para hacer matching con IA
+  const aplicarMatchingIA = async (productoBuscado: string, resultados: ProductoResultado[]): Promise<{mejor_match: ProductoResultado | null, resultados_con_match: ProductoResultado[]}> => {
     if (resultados.length === 0) {
       return { mejor_match: null, resultados_con_match: resultados };
     }
@@ -210,26 +367,27 @@ export default function MonitorMasivoICA() {
       let porcentaje = 50;
       if (idx === 0) { nivel = 'exacto'; porcentaje = 85; }
       else if (idx < 3) { nivel = 'parcial'; porcentaje = 70; }
-
+      
       return {
         ...r,
         matching: { porcentaje, nivel, razon: idx === 0 ? 'Mejor coincidencia' : 'Coincidencia parcial' }
       };
     });
-
+    
     return { mejor_match: resultadosConMatch[0], resultados_con_match: resultadosConMatch };
   };
 
-  // Buscar producto
+  // Buscar producto con el backend robusto
   const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 9): Promise<ItemLista> => {
     try {
       const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(producto)}&numero=${numero}&minimo=${minimo}`);
+      
       if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-
+      
       const data = await res.json();
       const resultadosRaw = data.resultados || [];
       const { mejor_match, resultados_con_match } = await aplicarMatchingIA(producto, resultadosRaw);
-
+      
       return {
         numero: data.numero_item || numero,
         nombre: data.producto || producto,
@@ -241,6 +399,7 @@ export default function MonitorMasivoICA() {
         mejor_match: mejor_match || undefined
       };
     } catch (error: any) {
+      console.error(error);
       return {
         numero, nombre: producto, resultados: [], total_encontrados: 0,
         suficientes: false, deficit: 9, procesando: false, error: error.message
@@ -253,17 +412,17 @@ export default function MonitorMasivoICA() {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
     notify(`Buscando: ${inputManual.trim()}`, 'success');
-
+    
     const match = inputManual.trim().match(/^(\d+)\s+(.+)/);
     const numero = match ? match[1] : String(itemsLista.length + 1);
     const nombre = match ? match[2] : inputManual.trim();
-
+    
     const resultado = await buscarProductoRobusto(nombre, numero, 9);
     const existe = itemsLista.some(item => item.numero === resultado.numero);
-
+    
     if (!existe) setItemsLista(prev => [...prev, resultado]);
     else setItemsLista(prev => prev.map(item => item.numero === resultado.numero ? resultado : item));
-
+    
     if (resultado.suficientes) {
       notify(`✅ ${nombre}: ${resultado.total_encontrados} resultados`, 'success');
       setInputManual("");
@@ -279,66 +438,75 @@ export default function MonitorMasivoICA() {
       notify("No hay productos cargados desde Excel", 'error');
       return;
     }
-
+    
+    console.log("\n🚀 INICIANDO BARRIDO DESDE EXCEL");
+    console.log(`📊 Total productos: ${productosExcel.length}`);
+    
     setProcesando(true);
     setItemsLista([]);
     setProgreso({ actual: 0, total: productosExcel.length });
-    notify(`Iniciando barrido de ${productosExcel.length} productos`, 'success');
-
+    notify(`Iniciando barrido de ${productosExcel.length} productos desde Excel`, 'success');
+    
     abortControllerRef.current = new AbortController();
-
+    
     for (let i = 0; i < productosExcel.length; i++) {
       if (abortControllerRef.current?.signal.aborted) break;
-
+      
       const prod = productosExcel[i];
       setProgreso({ actual: i + 1, total: productosExcel.length });
-
+      
+      console.log(`🔍 Buscando [${prod.numero}] ${prod.nombre.substring(0, 50)}...`);
+      
       setItemsLista(prev => [...prev, {
         numero: String(prod.numero), nombre: prod.nombre, resultados: [],
         total_encontrados: 0, suficientes: false, deficit: 9, procesando: true
       }]);
-
+      
       const resultado = await buscarProductoRobusto(prod.nombre, String(prod.numero), 9);
+      
+      console.log(`   ✅ ${resultado.resultados.length} resultados encontrados`);
+      
       setItemsLista(prev => prev.map(p => p.numero === String(prod.numero) ? resultado : p));
       await new Promise(resolve => setTimeout(resolve, 800));
     }
-
+    
     setProcesando(false);
     abortControllerRef.current = null;
     notify("Barrido desde Excel completado", 'success');
+    console.log("✅ BARRIDO COMPLETADO");
   };
 
   // Barrido masivo desde texto
   const iniciarBarrido = async () => {
     const items = parsearLista(inputMasivo);
     if (items.length === 0) {
-      notify("No se encontraron productos", 'error');
+      notify("No se encontraron productos en la lista", 'error');
       return;
     }
-
+    
     setProcesando(true);
     setItemsLista([]);
     setProgreso({ actual: 0, total: items.length });
     notify(`Iniciando barrido de ${items.length} productos`, 'success');
-
+    
     abortControllerRef.current = new AbortController();
-
+    
     for (let i = 0; i < items.length; i++) {
       if (abortControllerRef.current?.signal.aborted) break;
-
+      
       const item = items[i];
       setProgreso({ actual: i + 1, total: items.length });
-
+      
       setItemsLista(prev => [...prev, {
         numero: item.numero, nombre: item.nombre, resultados: [],
         total_encontrados: 0, suficientes: false, deficit: 9, procesando: true
       }]);
-
+      
       const resultado = await buscarProductoRobusto(item.nombre, item.numero, 9);
       setItemsLista(prev => prev.map(p => p.numero === item.numero ? resultado : p));
       await new Promise(resolve => setTimeout(resolve, 800));
     }
-
+    
     setProcesando(false);
     abortControllerRef.current = null;
     notify("Barrido completado", 'success');
@@ -351,7 +519,7 @@ export default function MonitorMasivoICA() {
     }
   };
 
-  // Exportar CSV (solo mejor match)
+  // Exportar a CSV (solo mejor match)
   const exportarACSV = () => {
     const csvRows = ['ITEM;Producto Buscado;Mejor Match;Tienda;Precio;Link;% Coincidencia'];
     itemsLista.forEach(item => {
@@ -359,14 +527,14 @@ export default function MonitorMasivoICA() {
       if (mejorMatch) {
         csvRows.push(`${item.numero};${item.nombre};${mejorMatch.nombre};${mejorMatch.tienda};${mejorMatch.precio_formateado};${mejorMatch.link};${mejorMatch.matching?.porcentaje || 100}%`);
       } else {
-        csvRows.push(`${item.numero};${item.nombre};SIN RESULTADOS;;;0%`);
+        csvRows.push(`${item.numero};${item.nombre};SIN RESULTADOS;;;;0%`);
       }
     });
-
+    
     const blob = new Blob(["\uFEFF" + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `matching_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `matching_precios_${new Date().toISOString().split('T')[0]}.csv`);
     link.click();
     URL.revokeObjectURL(link.href);
     notify("Exportación completada", 'success');
@@ -376,14 +544,14 @@ export default function MonitorMasivoICA() {
   const exportarExcelCompleto = () => {
     const exportData = itemsLista.map(item => ({
       ITEM: item.numero,
-      Producto: item.nombre,
+      Producto_Buscado: item.nombre,
       Mejor_Match: item.mejor_match?.nombre || item.resultados[0]?.nombre || 'SIN RESULTADOS',
       Tienda: item.mejor_match?.tienda || item.resultados[0]?.tienda || '',
       Precio: item.mejor_match?.precio_formateado || item.resultados[0]?.precio_formateado || '',
       Link: item.mejor_match?.link || item.resultados[0]?.link || '',
       Coincidencia: `${item.mejor_match?.matching?.porcentaje || item.resultados[0]?.matching?.porcentaje || 0}%`
     }));
-
+    
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Matching');
@@ -396,7 +564,9 @@ export default function MonitorMasivoICA() {
       setItemsLista([]);
       setProductosExcel([]);
       setMostrarPrevisualizacion(false);
-      setArchivoCargado(null);
+      setShowModal(false);
+      setArchivoExcel(null);
+      setPestanasDisponibles([]);
       notify("Lista limpiada", 'error');
     }
   };
@@ -420,15 +590,27 @@ export default function MonitorMasivoICA() {
     const totalResultados = itemsLista.reduce((sum, i) => sum + i.resultados.length, 0);
     const promedioMatching = itemsLista.filter(i => i.mejor_match?.matching?.porcentaje)
       .reduce((sum, i) => sum + (i.mejor_match?.matching?.porcentaje || 0), 0) / (itemsLista.filter(i => i.mejor_match?.matching?.porcentaje).length || 1);
-
+    
     return { totalItems, itemsCompletos, itemsIncompletos, totalResultados, promedioMatching: Math.round(promedioMatching) };
   }, [itemsLista]);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans">
-
+      
+      {/* Modal de previsualización */}
+      {showModal && productosExcel.length > 0 && (
+        <ModalPrevisualizacion
+          productos={productosExcel}
+          onClose={() => setShowModal(false)}
+          onConfirm={confirmarBusquedaExcel}
+        />
+      )}
+      
+      {/* Toasts */}
       <div className="fixed top-24 right-6 z-50 flex flex-col gap-3">
-        {toasts.map(t => <Toast key={t.id} {...t} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />)}
+        {toasts.map(t => (
+          <Toast key={t.id} {...t} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />
+        ))}
       </div>
 
       <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 sticky top-0 z-40 shadow-sm">
@@ -477,22 +659,22 @@ export default function MonitorMasivoICA() {
               <button onClick={() => document.getElementById('excel-input')?.click()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
                 <Upload size={14} /> Cargar Excel
               </button>
-              <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && procesarExcel(e.target.files[0])} />
+              <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
             </div>
 
             {/* Selector de pestañas */}
-            {pestanasDisponibles.length > 0 && (
+            {pestanasDisponibles.length > 1 && (
               <div className="mb-4 p-3 bg-slate-50 rounded-xl">
                 <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">📑 Pestaña del Excel:</label>
                 <select value={pestanaSeleccionada} onChange={(e) => cambiarPestana(e.target.value)} className="w-full p-2 bg-white rounded-xl text-[10px] font-medium border">
                   {pestanasDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <p className="text-[7px] text-slate-400 mt-1">Selecciona "COSTEO" para tu archivo</p>
+                <p className="text-[7px] text-slate-400 mt-1">Selecciona la pestaña con los datos</p>
               </div>
             )}
 
-            {/* Previsualización Excel */}
-            {mostrarPrevisualizacion && productosExcel.length > 0 && (
+            {/* Previsualización Excel resumida */}
+            {mostrarPrevisualizacion && productosExcel.length > 0 && !showModal && (
               <div className="mb-4 p-3 bg-slate-50 rounded-xl">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-[9px] font-black text-slate-500">📊 Excel cargado</span>
@@ -502,7 +684,10 @@ export default function MonitorMasivoICA() {
                   {productosExcel.slice(0, 5).map(p => <div key={p.numero} className="truncate">{p.numero}. {p.nombre.substring(0, 40)}</div>)}
                   {productosExcel.length > 5 && <div className="text-slate-400">+ {productosExcel.length - 5} más</div>}
                 </div>
-                <button onClick={iniciarBarridoExcel} disabled={procesando} className="w-full mt-3 bg-orange-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
+                <button onClick={() => setShowModal(true)} className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
+                  <Eye size={12} /> Ver detalles
+                </button>
+                <button onClick={iniciarBarridoExcel} disabled={procesando} className="w-full mt-2 bg-orange-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
                   <Sparkles size={12} /> Buscar desde Excel
                 </button>
               </div>
