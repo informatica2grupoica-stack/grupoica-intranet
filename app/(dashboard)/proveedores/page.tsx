@@ -1,13 +1,14 @@
 // app/(dashboard)/proveedores/page.tsx
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Building2, Search, Loader2, MapPin, X, Phone, Star, 
   Trash2, Edit3, Plus, CheckCircle2, AlertCircle,
   Landmark, Mail, Globe, ChevronDown, ChevronUp,
   Briefcase, DollarSign, Calendar, Users,
-  Database, Package, ExternalLink, Smartphone
+  Database, Package, ExternalLink, Smartphone,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 interface Proveedor {
@@ -38,10 +39,12 @@ type OrdenType = 'nombre' | 'calificacion' | 'reciente' | 'categoria';
 type VistaType = 'grid' | 'lista';
 type FuentType = 'todos' | 'manuales' | 'obuma';
 
+const ITEMS_PER_PAGE = 25;
+
 export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [filteredProveedores, setFilteredProveedores] = useState<Proveedor[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("Todas");
   const [orden, setOrden] = useState<OrdenType>('nombre');
@@ -51,6 +54,10 @@ export default function ProveedoresPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  
   const [estadisticas, setEstadisticas] = useState({
     total: 0,
     manuales: 0,
@@ -59,6 +66,7 @@ export default function ProveedoresPage() {
     activos: 0,
     avgCalificacion: 0
   });
+  
   const [errorRut, setErrorRut] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
   const [showBuscadorProductos, setShowBuscadorProductos] = useState(false);
@@ -84,6 +92,11 @@ export default function ProveedoresPage() {
     filtrarYOrdenar();
   }, [proveedores, busqueda, categoriaFiltro, orden, fuente]);
 
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [busqueda, categoriaFiltro, orden, fuente]);
+
   const showAlert = (msg: string, type: 'success' | 'error') => {
     setAlert({ msg, type });
     setTimeout(() => setAlert(null), 3000);
@@ -91,53 +104,50 @@ export default function ProveedoresPage() {
 
   const cargarProveedores = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    console.log("🔄 Cargando proveedores desde Supabase...");
+    
+    // 🔥 IMPORTANTE: Sin límite para traer TODOS los proveedores
+    const { data, error, count } = await supabase
       .from('proveedores')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('nombre_empresa', { ascending: true });
     
     if (!error && data) {
+      console.log(`✅ Proveedores cargados: ${data.length} registros`);
       setProveedores(data);
       calcularEstadisticas(data);
     } else if (error) {
-      console.error("Error cargando proveedores:", error);
+      console.error("❌ Error cargando proveedores:", error);
+      showAlert("Error al cargar proveedores: " + error.message, "error");
     }
     setLoading(false);
   };
 
-  // ✅ FUNCIÓN CORREGIDA - Estadísticas REALES desde Supabase
   const calcularEstadisticas = (data: Proveedor[]) => {
-    // Contar categorías únicas (excluyendo null, undefined y vacío)
     const categoriasUnicas = new Set(
       data.map(p => p.categoria).filter(cat => cat && cat.trim() !== '')
     );
     
-    // Activos (considerando que activo puede ser null/undefined como true por defecto)
     const activos = data.filter(p => p.activo !== false).length;
     
-    // Rating promedio (solo sobre proveedores que tienen calificación)
     const proveedoresConRating = data.filter(p => p.calificacion && p.calificacion > 0);
     const avgCalificacion = proveedoresConRating.length > 0
       ? proveedoresConRating.reduce((acc, p) => acc + (p.calificacion || 0), 0) / proveedoresConRating.length
       : 0;
     
-    // Manuales (sin obuma_id)
     const manuales = data.filter(p => !p.obuma_id).length;
-    
-    // Obuma (con obuma_id)
     const obuma = data.filter(p => p.obuma_id).length;
     
-    setEstadisticas({
+    console.log('📊 Estadísticas calculadas:', {
       total: data.length,
       manuales,
       obuma,
       categorias: categoriasUnicas.size,
-      activos: activos,
+      activos,
       avgCalificacion: Math.round(avgCalificacion * 10) / 10
     });
     
-    // Log para depuración en consola
-    console.log('📊 Estadísticas calculadas:', {
+    setEstadisticas({
       total: data.length,
       manuales,
       obuma,
@@ -150,32 +160,39 @@ export default function ProveedoresPage() {
   const filtrarYOrdenar = () => {
     let filtrados = [...proveedores];
     
+    console.log(`🔍 Filtrando ${proveedores.length} proveedores...`);
+    
     // Filtrar por fuente
     if (fuente === 'manuales') {
       filtrados = filtrados.filter(p => !p.obuma_id);
+      console.log(`   📋 Manuales: ${filtrados.length}`);
     } else if (fuente === 'obuma') {
       filtrados = filtrados.filter(p => p.obuma_id);
+      console.log(`   🏢 Obuma: ${filtrados.length}`);
     }
     
     // Filtrar por búsqueda
     if (busqueda) {
+      const busquedaLower = busqueda.toLowerCase();
       filtrados = filtrados.filter(p => 
-        p.nombre_empresa?.toLowerCase().includes(busqueda.toLowerCase()) ||
+        p.nombre_empresa?.toLowerCase().includes(busquedaLower) ||
         p.rut_empresa?.includes(busqueda) ||
-        p.categoria?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        p.tipo_servicio?.toLowerCase().includes(busqueda.toLowerCase())
+        p.categoria?.toLowerCase().includes(busquedaLower) ||
+        p.tipo_servicio?.toLowerCase().includes(busquedaLower)
       );
+      console.log(`   🔎 Búsqueda "${busqueda}": ${filtrados.length}`);
     }
     
     // Filtrar por categoría
     if (categoriaFiltro !== "Todas") {
       filtrados = filtrados.filter(p => p.categoria === categoriaFiltro);
+      console.log(`   📁 Categoría "${categoriaFiltro}": ${filtrados.length}`);
     }
     
     // Ordenar
     switch (orden) {
       case 'nombre':
-        filtrados.sort((a, b) => a.nombre_empresa?.localeCompare(b.nombre_empresa || ''));
+        filtrados.sort((a, b) => (a.nombre_empresa || '').localeCompare(b.nombre_empresa || ''));
         break;
       case 'calificacion':
         filtrados.sort((a, b) => (b.calificacion || 0) - (a.calificacion || 0));
@@ -190,6 +207,13 @@ export default function ProveedoresPage() {
     
     setFilteredProveedores(filtrados);
   };
+
+  // Paginación
+  const totalPages = Math.ceil(filteredProveedores.length / ITEMS_PER_PAGE);
+  const paginatedProveedores = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredProveedores.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredProveedores, currentPage]);
 
   const validarRut = (rut: string): boolean => {
     if (!rut) return true;
@@ -320,7 +344,7 @@ export default function ProveedoresPage() {
       const res = await fetch('/api/sincronizar-productos-obuma', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showAlert(`✅ Sincronización completada! ${data.estadisticas.productos_sincronizados || 0} productos sincronizados`, "success");
+        showAlert(`✅ Sincronización completada! ${data.estadisticas?.productos_sincronizados || 0} productos sincronizados`, "success");
         cargarProveedores();
       } else {
         showAlert(`❌ Error: ${data.error || data.message}`, "error");
@@ -404,8 +428,8 @@ export default function ProveedoresPage() {
       )}
       <div className="flex items-center justify-between pt-2 text-[9px] text-slate-400">
         <span>Registrado: {new Date(prov.created_at).toLocaleDateString('es-CL')}</span>
-        <span className={`px-2 py-0.5 rounded-full ${prov.activo ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-          {prov.activo ? 'Activo' : 'Inactivo'}
+        <span className={`px-2 py-0.5 rounded-full ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+          {prov.activo !== false ? 'Activo' : 'Inactivo'}
         </span>
       </div>
     </div>
@@ -474,13 +498,13 @@ export default function ProveedoresPage() {
             </div>
           </div>
           
-          {/* Tarjetas de métricas - AHORA CON DATOS REALES */}
+          {/* Tarjetas de métricas */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">Total</p>
-                  <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total}</p>
+                  <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total.toLocaleString()}</p>
                 </div>
                 <div className="bg-blue-100 p-2 rounded-xl">
                   <Building2 size={18} className="text-blue-600" />
@@ -491,7 +515,7 @@ export default function ProveedoresPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">📋 Manuales</p>
-                  <p className="text-2xl font-black text-emerald-600 mt-1">{estadisticas.manuales}</p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">{estadisticas.manuales.toLocaleString()}</p>
                 </div>
                 <div className="bg-emerald-100 p-2 rounded-xl">
                   <Users size={18} className="text-emerald-600" />
@@ -502,7 +526,7 @@ export default function ProveedoresPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">🏢 Obuma</p>
-                  <p className="text-2xl font-black text-indigo-600 mt-1">{estadisticas.obuma}</p>
+                  <p className="text-2xl font-black text-indigo-600 mt-1">{estadisticas.obuma.toLocaleString()}</p>
                 </div>
                 <div className="bg-indigo-100 p-2 rounded-xl">
                   <Database size={18} className="text-indigo-600" />
@@ -524,7 +548,7 @@ export default function ProveedoresPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">Activos</p>
-                  <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.activos}</p>
+                  <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.activos.toLocaleString()}</p>
                 </div>
                 <div className="bg-green-100 p-2 rounded-xl">
                   <CheckCircle2 size={18} className="text-green-600" />
@@ -546,25 +570,24 @@ export default function ProveedoresPage() {
           
           {/* Filtros y búsqueda */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Selector de fuente */}
             <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
               <button
                 onClick={() => setFuente('todos')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                Todos
+                Todos ({estadisticas.total})
               </button>
               <button
                 onClick={() => setFuente('manuales')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'manuales' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                📋 Manuales
+                📋 Manuales ({estadisticas.manuales})
               </button>
               <button
                 onClick={() => setFuente('obuma')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${fuente === 'obuma' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                🏢 Obuma
+                🏢 Obuma ({estadisticas.obuma})
               </button>
             </div>
 
@@ -606,6 +629,12 @@ export default function ProveedoresPage() {
               {showForm ? <X size={18} /> : <Plus size={18} />}
               {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
             </button>
+          </div>
+          
+          {/* Info de resultados */}
+          <div className="mt-4 text-[10px] text-slate-400">
+            Mostrando {paginatedProveedores.length} de {filteredProveedores.length} proveedores
+            {filteredProveedores.length !== proveedores.length && ` (filtrados de ${proveedores.length} totales)`}
           </div>
         </div>
 
@@ -721,151 +750,249 @@ export default function ProveedoresPage() {
           </div>
         )}
 
-        {vista === 'lista' && !loading && filteredProveedores.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Proveedor</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contacto</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fuente</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Calificación</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estado</th>
-                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProveedores.map((prov) => (
-                    <tr key={prov.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center text-white font-bold">
-                            {getInitials(prov.nombre_empresa)}
+        {vista === 'lista' && !loading && paginatedProveedores.length > 0 && (
+          <>
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Proveedor</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Categoría</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contacto</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fuente</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Calificación</th>
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estado</th>
+                      <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedProveedores.map((prov) => (
+                      <tr key={prov.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center text-white font-bold">
+                              {getInitials(prov.nombre_empresa)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800 text-sm">{prov.nombre_empresa}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">{prov.rut_empresa}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-800 text-sm">{prov.nombre_empresa}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">{prov.rut_empresa}</p>
-                          </div>
-                        </div>
-                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{prov.categoria}</span>
-                        {prov.tipo_servicio && <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>}
-                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
-                        <p className="text-[10px] text-slate-400">{prov.telefono}</p>
-                        {prov.email_contacto && <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>}
-                       </td>
-                      <td className="px-6 py-4">
-                        {prov.obuma_id ? (
-                          <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">🏢 Obuma</span>
-                        ) : (
-                          <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
-                        )}
-                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} size={14} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
-                          ))}
-                        </div>
-                       </td>
-                      <td className="px-6 py-4">
-                        <button onClick={() => toggleActivo(prov)} className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
-                          {prov.activo !== false ? 'Activo' : 'Inactivo'}
-                        </button>
-                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
-                            {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                          </button>
-                          <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
-                            <Edit3 size={16} />
-                          </button>
-                          {!prov.obuma_id && (
-                            <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors">
-                              <Trash2 size={16} />
-                            </button>
+                          </td>
+                        <td className="px-6 py-4">
+                          <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{prov.categoria}</span>
+                          {prov.tipo_servicio && <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>}
+                          </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
+                          <p className="text-[10px] text-slate-400">{prov.telefono}</p>
+                          {prov.email_contacto && <p className="text-[9px] text-slate-400 truncate max-w-[180px]">{prov.email_contacto}</p>}
+                          </td>
+                        <td className="px-6 py-4">
+                          {prov.obuma_id ? (
+                            <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">🏢 Obuma</span>
+                          ) : (
+                            <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
                           )}
-                        </div>
-                        {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
-                       </td>
-                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                          </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} size={14} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
+                            ))}
+                          </div>
+                          </td>
+                        <td className="px-6 py-4">
+                          <button onClick={() => toggleActivo(prov)} className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase transition-all ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
+                            {prov.activo !== false ? 'Activo' : 'Inactivo'}
+                          </button>
+                          </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                              {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                            <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors">
+                              <Edit3 size={16} />
+                            </button>
+                            {!prov.obuma_id && (
+                              <button onClick={() => eliminarProveedor(prov.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors">
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                          {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
+                          </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+            
+            {/* Paginación */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-6">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Vista de grid */}
-        {vista === 'grid' && !loading && filteredProveedores.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProveedores.map((prov) => (
-              <div key={prov.id} className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all overflow-hidden group">
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                        {getInitials(prov.nombre_empresa)}
+        {/* Vista de grid con paginación */}
+        {vista === 'grid' && !loading && paginatedProveedores.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedProveedores.map((prov) => (
+                <div key={prov.id} className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all overflow-hidden group">
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                          {getInitials(prov.nombre_empresa)}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-800 line-clamp-1">{prov.nombre_empresa}</h3>
+                          <p className="text-[10px] text-slate-400">{prov.rut_empresa}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800 line-clamp-1">{prov.nombre_empresa}</h3>
-                        <p className="text-[10px] text-slate-400">{prov.rut_empresa}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600">
-                        <Edit3 size={14} />
-                      </button>
-                      {!prov.obuma_id && (
-                        <button onClick={() => eliminarProveedor(prov.id)} className="p-1.5 text-slate-400 hover:text-red-600">
-                          <Trash2 size={14} />
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setSeleccionado(prov)} className="p-1.5 text-slate-400 hover:text-amber-600">
+                          <Edit3 size={14} />
                         </button>
-                      )}
+                        {!prov.obuma_id && (
+                          <button onClick={() => eliminarProveedor(prov.id)} className="p-1.5 text-slate-400 hover:text-red-600">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Categoría</span>
+                        <span className="text-xs font-bold text-slate-700">{prov.categoria}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Contacto</span>
+                        <span className="text-xs text-slate-600">{prov.nombre_contacto || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</span>
+                        <span className="text-xs text-slate-600">{prov.telefono || '—'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} size={12} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
+                        ))}
+                      </div>
+                      <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        {expandedCard === prov.id ? 'Ver menos' : 'Ver detalles'}
+                        {expandedCard === prov.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+                    </div>
+                    
+                    {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
                   </div>
-                  
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Categoría</span>
-                      <span className="text-xs font-bold text-slate-700">{prov.categoria}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Contacto</span>
-                      <span className="text-xs text-slate-600">{prov.nombre_contacto || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Teléfono</span>
-                      <span className="text-xs text-slate-600">{prov.telefono || '—'}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} size={12} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
-                      ))}
-                    </div>
-                    <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                      {expandedCard === prov.id ? 'Ver menos' : 'Ver detalles'}
-                      {expandedCard === prov.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    </button>
-                  </div>
-                  
-                  {expandedCard === prov.id && <DetallesExpandidos prov={prov} />}
                 </div>
+              ))}
+            </div>
+            
+            {/* Paginación para grid */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-6">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
 
         {loading && (
@@ -875,7 +1002,7 @@ export default function ProveedoresPage() {
         )}
       </div>
 
-      {/* Modal de edición */}
+      {/* Modal de edición - se mantiene igual */}
       {seleccionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
@@ -983,7 +1110,7 @@ export default function ProveedoresPage() {
         </div>
       )}
 
-      {/* Modal de búsqueda de productos */}
+      {/* Modal de búsqueda de productos - se mantiene igual */}
       {showBuscadorProductos && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
