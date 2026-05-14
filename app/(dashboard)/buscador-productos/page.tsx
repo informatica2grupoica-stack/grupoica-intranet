@@ -7,16 +7,16 @@ import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X, Sparkles,
   Download, FileSpreadsheet, AlertTriangle, ShoppingBag,
-  Upload, Eye, EyeOff, TrendingUp, Award
+  Upload, Eye, EyeOff
 } from 'lucide-react';
 
 // --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
 const Toast = ({ message, type, onClose }: any) => (
   <div className={`fixed top-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${type === 'success'
-      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
-      : type === 'warning'
-        ? 'bg-amber-50/90 border-amber-200 text-amber-800'
-        : 'bg-orange-50/90 border-orange-200 text-orange-800'
+    ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+    : type === 'warning'
+      ? 'bg-amber-50/90 border-amber-200 text-amber-800'
+      : 'bg-orange-50/90 border-orange-200 text-orange-800'
     }`}>
     {type === 'success' ? <CheckCircle2 size={18} /> : type === 'warning' ? <AlertTriangle size={18} /> : <AlertCircle size={18} />}
     <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
@@ -32,7 +32,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
         <div className="sticky top-0 bg-white border-b border-slate-100 p-5 flex justify-between items-center">
           <div>
             <h2 className="text-lg font-black text-slate-800 uppercase italic">
@@ -83,7 +83,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
                       <td className="px-4 py-3 text-xs text-slate-700 max-w-md truncate">{prod.nombre}</td>
                       <td className="px-4 py-3 text-xs text-right text-slate-600">{prod.cantidad}</td>
                       <td className="px-4 py-3 text-xs text-right font-bold text-emerald-600">
-                        ${prod.valor_civa.toLocaleString('es-CL')}
+                        ${prod.valor_civa?.toLocaleString('es-CL') || 0}
                       </td>
                       <td className="px-4 py-3 text-[9px] text-blue-500 truncate max-w-[150px]">
                         {prod.link_referencia ? (
@@ -340,28 +340,23 @@ export default function MonitorMasivoICA() {
       const linkRef = colLink >= 0 ? (row[colLink] || "").toString().trim() : "";
 
       // Extraer valor de manera más robusta
-let valorCIVA = 0;
-if (colValorCIVA >= 0) {
-  const rawValue = row[colValorCIVA];
-  if (rawValue !== undefined && rawValue !== null && rawValue !== "") {
-    // Si es número, usarlo directamente
-    if (typeof rawValue === 'number') {
-      valorCIVA = rawValue;
-    } 
-    // Si es string, limpiar y convertir
-    else if (typeof rawValue === 'string') {
-      // Eliminar puntos, comas, espacios y convertir a número
-      const cleaned = rawValue.replace(/[$.]/g, '').replace(',', '.').trim();
-      valorCIVA = parseFloat(cleaned) || 0;
-    }
-    // Si es otro tipo, intentar convertir
-    else {
-      valorCIVA = Number(rawValue) || 0;
-    }
-  }
-}
+      let valorCIVA = 0;
+      if (colValorCIVA >= 0) {
+        const rawValue = row[colValorCIVA];
+        if (rawValue !== undefined && rawValue !== null && rawValue !== "") {
+          if (typeof rawValue === 'number') {
+            valorCIVA = rawValue;
+          } else if (typeof rawValue === 'string') {
+            const cleaned = rawValue.replace(/[$.]/g, '').replace(',', '.').trim();
+            valorCIVA = parseFloat(cleaned) || 0;
+          } else {
+            valorCIVA = Number(rawValue) || 0;
+          }
+        }
+      }
 
-      if (!detalle || detalle === "" || detalle === "TOTAL" || detalle.includes("VERDADERO")) {
+      // Saltar filas de totales o sin detalle
+      if (!detalle || detalle === "" || detalle === "TOTAL" || detalle.includes("VERDADERO") || detalle.includes("COSTEADO")) {
         continue;
       }
 
@@ -369,7 +364,7 @@ if (colValorCIVA >= 0) {
         numero: Number(itemNum),
         nombre: detalle,
         cantidad: Number(cantidad) || 1,
-        valor_civa: Number(valorCIVA) || 0,
+        valor_civa: valorCIVA,
         link_referencia: linkRef
       });
     }
@@ -594,7 +589,7 @@ if (colValorCIVA >= 0) {
   // Exportar a CSV (SOLO mejor match)
   const exportarACSV = () => {
     const csvRows = ['ITEM;Producto Buscado;Mejor Match;Tienda;Precio;Link;% Coincidencia'];
-    
+
     itemsLista.forEach(item => {
       const mejorMatch = item.mejor_match || item.resultados[0];
       if (mejorMatch) {
@@ -610,17 +605,16 @@ if (colValorCIVA >= 0) {
     link.setAttribute('download', `mejor_match_${new Date().toISOString().split('T')[0]}.csv`);
     link.click();
     URL.revokeObjectURL(link.href);
-    
+
     notify("✅ Exportación CSV completada - Solo mejor match por producto", 'success');
   };
 
   // Exportar Excel con TODOS los resultados
   const exportarTodosResultados = () => {
     const exportData: any[] = [];
-    
+
     itemsLista.forEach(item => {
       if (item.resultados.length === 0) {
-        // Si no hay resultados, exportar una fila indicando que no hay
         exportData.push({
           ITEM_ORIGINAL: item.numero,
           PRODUCTO_BUSCADO: item.nombre,
@@ -648,12 +642,12 @@ if (colValorCIVA >= 0) {
         });
       }
     });
-    
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Todos_los_resultados');
     XLSX.writeFile(wb, `todos_resultados_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
+
     setShowExportModal(false);
     notify("✅ Exportación Excel completada - Todos los resultados", 'success');
   };
@@ -738,14 +732,14 @@ if (colValorCIVA >= 0) {
           <div className="flex items-center gap-3">
             <div className="flex-1 md:w-96 flex items-center bg-slate-100/50 border border-slate-200 rounded-2xl px-4 focus-within:ring-2 focus-within:ring-orange-500/20">
               <Search size={16} className="text-slate-400" />
-              <input 
+              <input
                 className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
                 placeholder="Ej: 25 Anticorrosivo o nombre directo..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
               />
-              <button 
+              <button
                 onClick={buscarUno}
                 disabled={buscandoUno || !inputManual.trim()}
                 className="bg-slate-900 text-white p-1.5 rounded-xl hover:bg-orange-600 transition-all disabled:bg-slate-200"
@@ -753,9 +747,9 @@ if (colValorCIVA >= 0) {
                 {buscandoUno ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
               </button>
             </div>
-            
+
             {/* Botón CSV - solo mejor match */}
-            <button 
+            <button
               onClick={exportarACSV}
               disabled={itemsLista.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
@@ -763,9 +757,9 @@ if (colValorCIVA >= 0) {
             >
               <Download size={18} />
             </button>
-            
+
             {/* Botón Excel - todos los resultados */}
-            <button 
+            <button
               onClick={() => setShowExportModal(true)}
               disabled={itemsLista.length === 0}
               className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
@@ -773,8 +767,8 @@ if (colValorCIVA >= 0) {
             >
               <FileSpreadsheet size={18} />
             </button>
-            
-            <button 
+
+            <button
               onClick={limpiarLista}
               disabled={itemsLista.length === 0}
               className="bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 hover:text-rose-500 transition-all shadow-sm"
@@ -836,7 +830,7 @@ if (colValorCIVA >= 0) {
               </div>
             )}
 
-            <textarea 
+            <textarea
               className="w-full h-[250px] bg-slate-50 border rounded-3xl p-5 text-[11px] font-mono text-slate-600 outline-none focus:ring-2 focus:ring-orange-500/20 resize-none"
               placeholder="Pega aquí tu lista con formato:&#10;1	Letrero de obra&#10;2	Madera Pino 2&quot;x3&quot;&#10;3	Anticorrosivo"
               value={inputMasivo}
@@ -844,7 +838,7 @@ if (colValorCIVA >= 0) {
               disabled={procesando}
             />
 
-            <button 
+            <button
               onClick={iniciarBarrido}
               disabled={procesando || !inputMasivo.trim()}
               className="w-full mt-4 bg-slate-900 hover:bg-orange-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-3 shadow-lg transition-all disabled:bg-slate-200"
@@ -907,18 +901,16 @@ if (colValorCIVA >= 0) {
 
                 return (
                   <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
-                    <div className={`px-6 py-4 border-b flex flex-wrap justify-between items-center gap-3 ${
-                      item.procesando ? 'bg-orange-50/30' : 
+                    <div className={`px-6 py-4 border-b flex flex-wrap justify-between items-center gap-3 ${item.procesando ? 'bg-orange-50/30' :
                       matchPorcentaje >= 85 ? 'bg-emerald-50/50' :
-                      matchPorcentaje >= 60 ? 'bg-amber-50/50' : 
-                      item.resultados.length > 0 ? 'bg-red-50/50' : 'bg-slate-50/50'
-                    }`}>
+                        matchPorcentaje >= 60 ? 'bg-amber-50/50' :
+                          item.resultados.length > 0 ? 'bg-red-50/50' : 'bg-slate-50/50'
+                      }`}>
                       <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${
-                          matchPorcentaje >= 85 ? 'bg-emerald-100 text-emerald-700' :
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${matchPorcentaje >= 85 ? 'bg-emerald-100 text-emerald-700' :
                           matchPorcentaje >= 60 ? 'bg-amber-100 text-amber-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
+                            'bg-red-100 text-red-700'
+                          }`}>
                           {item.numero}
                         </div>
                         <div>
@@ -944,10 +936,10 @@ if (colValorCIVA >= 0) {
                           </div>
                         </div>
                       </div>
-                      
+
                       {item.resultados.length > 0 && !item.procesando && (
                         <div className="text-[9px] text-slate-400 bg-white/50 px-2 py-1 rounded-full">
-                          💰 Mejor precio: {Math.min(...item.resultados.map(r => r.precio_valor || Infinity)) !== Infinity ? 
+                          💰 Mejor precio: {Math.min(...item.resultados.map(r => r.precio_valor || Infinity)) !== Infinity ?
                             `$${Math.min(...item.resultados.map(r => r.precio_valor || Infinity)).toLocaleString('es-CL')}` : 'N/A'}
                         </div>
                       )}
@@ -996,9 +988,9 @@ if (colValorCIVA >= 0) {
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 text-center">
-                                    <a 
-                                      href={result.link} 
-                                      target="_blank" 
+                                    <a
+                                      href={result.link}
+                                      target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all"
                                     >
@@ -1016,7 +1008,8 @@ if (colValorCIVA >= 0) {
                           </div>
                         )}
                       </div>
-                    )}
+                    )
+                    }
 
                     {!item.procesando && item.resultados.length === 0 && (
                       <div className="px-6 py-8 text-center">
@@ -1031,7 +1024,7 @@ if (colValorCIVA >= 0) {
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }
