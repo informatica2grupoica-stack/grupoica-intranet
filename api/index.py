@@ -154,9 +154,46 @@ def buscar_google_shopping(producto: str, limite: int = 10):
             })
 
         return resultados
+    except ImportError:
+        print("  [GS] BeautifulSoup no instalado")
+        return []
     except Exception as e:
         print(f"  [GS] Error: {e}")
         return []
+
+# ==========================================
+# FUNCIÓN PRINCIPAL DE BÚSQUEDA
+# ==========================================
+
+def realizar_busqueda(producto: str, limite: int = 15):
+    """Función reutilizable para buscar productos"""
+    resultados = []
+    
+    # 1. MercadoLibre
+    resultados.extend(buscar_mercadolibre(producto, limite))
+    
+    # 2. Google Shopping si hay pocos resultados
+    if len(resultados) < 5:
+        time.sleep(random.uniform(0.5, 1.2))
+        resultados.extend(buscar_google_shopping(producto))
+    
+    if not resultados:
+        return []
+    
+    # Calcular concordancia
+    for r in resultados:
+        score = calcular_concordancia(producto, r["nombre"])
+        nivel, etiqueta = clasificar_concordancia(score)
+        r["score"] = score
+        r["nivel_concordancia"] = nivel
+        r["etiqueta_concordancia"] = etiqueta
+        r["precio_neto"] = round(r["precio_con_iva"] / IVA)
+        r["precio_formateado"] = f"${r['precio_con_iva']:,.0f}".replace(",", ".")
+    
+    # Ordenar por score descendente, luego por precio
+    resultados.sort(key=lambda x: (-x["score"], x["precio_con_iva"]))
+    
+    return resultados[:limite]
 
 # ==========================================
 # ENDPOINT PRINCIPAL
@@ -173,15 +210,7 @@ def buscar():
 
     print(f"🔍 [{numero_item}] Buscando: {producto}")
 
-    resultados = []
-
-    # 1. MercadoLibre
-    resultados.extend(buscar_mercadolibre(producto))
-
-    # 2. Google Shopping si hay pocos resultados
-    if len(resultados) < 5:
-        time.sleep(random.uniform(0.5, 1.2))
-        resultados.extend(buscar_google_shopping(producto))
+    resultados = realizar_busqueda(producto)
 
     if not resultados:
         return jsonify({
@@ -192,26 +221,13 @@ def buscar():
             "total": 0,
         })
 
-    # Calcular concordancia
-    for r in resultados:
-        score = calcular_concordancia(producto, r["nombre"])
-        nivel, etiqueta = clasificar_concordancia(score)
-        r["score"] = score
-        r["nivel_concordancia"] = nivel
-        r["etiqueta_concordancia"] = etiqueta
-        r["precio_neto"] = round(r["precio_con_iva"] / IVA)
-        r["precio_formateado"] = f"${r['precio_con_iva']:,.0f}".replace(",", ".")
-
-    # Ordenar por score descendente, luego por precio
-    resultados.sort(key=lambda x: (-x["score"], x["precio_con_iva"]))
-
     mejor = resultados[0]
     print(f"  ✅ [{numero_item}] Mejor: {mejor['nombre'][:50]} | {mejor['precio_formateado']} | score={mejor['score']}%")
 
     return jsonify({
         "numero_item": numero_item,
         "producto": producto,
-        "resultados": resultados[:15],
+        "resultados": resultados,
         "mejor": mejor,
         "total": len(resultados),
     })
@@ -221,7 +237,7 @@ def health():
     return jsonify({"status": "ok", "mensaje": "Backend funcionando correctamente"})
 
 # ==========================================
-# ENDPOINTS LEGACY (compatibilidad)
+# ENDPOINTS LEGACY (compatibilidad con frontend existente)
 # ==========================================
 
 @app.route("/python/busqueda-robusta", methods=["GET"])
@@ -229,6 +245,9 @@ def busqueda_robusta_legacy():
     """Endpoint legacy para compatibilidad con frontend existente"""
     producto = request.args.get("producto", "").strip()
     numero_item = request.args.get("numero", "")
+    minimo_requerido = int(request.args.get("minimo", 9))
+    
+    print(f"🔍 [LEGACY] {producto}")
     
     if not producto:
         return jsonify({
@@ -237,44 +256,44 @@ def busqueda_robusta_legacy():
             "resultados": [],
             "total_encontrados": 0,
             "suficientes": False,
-            "deficit": 9
+            "deficit": minimo_requerido
         })
     
-    # Llamar al nuevo endpoint internamente
-    from flask import Response
-    import json
+    # Realizar búsqueda
+    resultados = realizar_busqueda(producto, minimo_requerido * 2)
     
-    with app.test_request_context(json={"producto": producto, "numero_item": numero_item}):
-        response = buscar()
-        data = json.loads(response[0].get_data(as_text=True))
-        
-        # Transformar al formato legacy
-        resultados_legacy = []
-        for r in data.get("resultados", []):
-            resultados_legacy.append({
-                "tienda": r.get("tienda", ""),
-                "nombre": r.get("nombre", ""),
-                "precio_valor": r.get("precio_con_iva", 0),
-                "precio_formateado": r.get("precio_formateado", "Consultar"),
-                "link": r.get("url", ""),
-                "canal": r.get("fuente", "web"),
-                "busqueda_original": producto
-            })
-        
-        return jsonify({
-            "numero_item": data.get("numero_item", numero_item),
-            "producto": data.get("producto", producto),
-            "resultados": resultados_legacy,
-            "total_encontrados": len(resultados_legacy),
-            "suficientes": len(resultados_legacy) >= 9,
-            "deficit": max(0, 9 - len(resultados_legacy)),
-            "tipo_producto": {
-                "maquinaria_pesada": False,
-                "herramienta_electrica": False,
-                "material_construccion": False,
-                "articulo_pequeno": False
-            }
+    # Transformar al formato legacy que espera el frontend
+    resultados_legacy = []
+    for r in resultados:
+        resultados_legacy.append({
+            "tienda": r.get("tienda", ""),
+            "nombre": r.get("nombre", ""),
+            "precio_valor": r.get("precio_con_iva", 0),
+            "precio_formateado": r.get("precio_formateado", "Consultar"),
+            "link": r.get("url", ""),
+            "canal": r.get("fuente", "web"),
+            "busqueda_original": producto,
+            "score": r.get("score", 0),
+            "nivel_concordancia": r.get("nivel_concordancia", ""),
+            "etiqueta_concordancia": r.get("etiqueta_concordancia", "")
         })
+    
+    tiene_suficientes = len(resultados_legacy) >= minimo_requerido
+    
+    return jsonify({
+        "numero_item": numero_item,
+        "producto": producto,
+        "resultados": resultados_legacy,
+        "total_encontrados": len(resultados_legacy),
+        "suficientes": tiene_suficientes,
+        "deficit": max(0, minimo_requerido - len(resultados_legacy)),
+        "tipo_producto": {
+            "maquinaria_pesada": False,
+            "herramienta_electrica": False,
+            "material_construccion": False,
+            "articulo_pequeno": False
+        }
+    })
 
 @app.route("/python/index", methods=["GET"])
 def scrape_prices():
@@ -284,11 +303,20 @@ def scrape_prices():
         return jsonify([])
     
     resultado = busqueda_robusta_legacy()
-    return jsonify(resultado.get_json().get("resultados", []))
+    # resultado es una Response, necesitamos obtener el JSON
+    if hasattr(resultado, 'get_json'):
+        data = resultado.get_json()
+        return jsonify(data.get("resultados", []))
+    
+    return jsonify([])
 
 @app.route("/api/index", methods=["GET"])
 def api_index():
     return scrape_prices()
+
+# ==========================================
+# INICIO DEL SERVIDOR
+# ==========================================
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -297,7 +325,12 @@ if __name__ == "__main__":
     print("✅ Características:")
     print("   - MercadoLibre API (gratis)")
     print("   - Google Shopping scraping")
-    print("   - Matching con score propio")
+    print("   - Matching con score propio (0-100%)")
     print("   - Endpoint legacy para compatibilidad")
+    print("=" * 60)
+    print("📍 Endpoints disponibles:")
+    print("   POST /buscar - Nuevo endpoint")
+    print("   GET  /python/busqueda-robusta - Legacy (compatible con frontend)")
+    print("   GET  /health - Health check")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=True)
