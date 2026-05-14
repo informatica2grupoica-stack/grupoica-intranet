@@ -1,4 +1,4 @@
-// app/(dashboard)/buscador-proveedores/page.tsx
+// app/(dashboard)/buscador-productos/page.tsx
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
@@ -337,8 +337,29 @@ export default function MonitorMasivoICA() {
       const detalle = colDetalle >= 0 ? (row[colDetalle] || "").toString().trim() : "";
       const itemNum = colItem >= 0 ? (row[colItem] || i) : i;
       const cantidad = colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1;
-      const valorCIVA = colValorCIVA >= 0 ? Number(row[colValorCIVA]) || 0 : 0;
       const linkRef = colLink >= 0 ? (row[colLink] || "").toString().trim() : "";
+
+      // Extraer valor de manera más robusta
+let valorCIVA = 0;
+if (colValorCIVA >= 0) {
+  const rawValue = row[colValorCIVA];
+  if (rawValue !== undefined && rawValue !== null && rawValue !== "") {
+    // Si es número, usarlo directamente
+    if (typeof rawValue === 'number') {
+      valorCIVA = rawValue;
+    } 
+    // Si es string, limpiar y convertir
+    else if (typeof rawValue === 'string') {
+      // Eliminar puntos, comas, espacios y convertir a número
+      const cleaned = rawValue.replace(/[$.]/g, '').replace(',', '.').trim();
+      valorCIVA = parseFloat(cleaned) || 0;
+    }
+    // Si es otro tipo, intentar convertir
+    else {
+      valorCIVA = Number(rawValue) || 0;
+    }
+  }
+}
 
       if (!detalle || detalle === "" || detalle === "TOTAL" || detalle.includes("VERDADERO")) {
         continue;
