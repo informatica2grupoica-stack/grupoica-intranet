@@ -794,5 +794,3 @@ export default function MonitorMasivoICA() {
     </div>
   );
 }
-
-//jhjhdjdhjdh
