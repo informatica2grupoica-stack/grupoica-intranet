@@ -2,23 +2,17 @@ import re
 import time
 import random
 import requests
+import json
 from difflib import SequenceMatcher
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 CORS(app)
 
 IVA = 1.19
-
-# ==========================================
-# CONFIGURACIÓN
-# ==========================================
-PROVEEDORES_CHILE = [
-    "sodimac.cl", "easy.cl", "imperial.cl", "construmart.cl", 
-    "trentini.cl", "hela.cl", "yolito.cl", "chilemat.com", 
-    "makita.cl", "bosch-professional.com", "dewalt.cl", "indura.cl"
-]
+SERPER_API_KEY = "36d2f41e5c97c757ba82bfced5ed64ee1c6e57c4"
 
 # ==========================================
 # NORMALIZACIÓN Y MATCHING
@@ -67,7 +61,7 @@ def clasificar_concordancia(score: int):
 # MERCADOLIBRE (API pública)
 # ==========================================
 
-def buscar_mercadolibre(producto: str, limite: int = 15):
+def buscar_mercadolibre(producto: str, limite: int = 10):
     try:
         url = "https://api.mercadolibre.com/sites/MLC/search"
         params = {"q": producto, "limit": limite, "condition": "new"}
@@ -93,70 +87,39 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         return []
 
 # ==========================================
-# GOOGLE SHOPPING (scraping)
+# SERPER API (Google Shopping)
 # ==========================================
 
-def buscar_google_shopping(producto: str, limite: int = 10):
+def fetch_serper_data(query, search_type="search"):
+    url = f"https://google.serper.dev/{search_type}"
+    payload = json.dumps({"q": query, "gl": "cl", "hl": "es", "num": 20})
+    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     try:
-        from bs4 import BeautifulSoup
+        response = requests.post(url, headers=headers, data=payload, timeout=10)
+        return response.json()
+    except:
+        return {}
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-            "Accept-Language": "es-CL,es;q=0.9",
-        }
-
-        query = f"{producto} Chile precio"
-        url = f"https://www.google.cl/search?q={requests.utils.quote(query)}&tbm=shop&hl=es-CL&gl=cl&num={limite}"
-
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code != 200:
-            return []
-
-        soup = BeautifulSoup(r.text, "html.parser")
+def buscar_google_serper(producto: str, limite: int = 10):
+    try:
+        data = fetch_serper_data(producto, "shopping")
+        items = data.get('shopping', [])
+        
         resultados = []
-
-        contenedores = soup.select(".sh-dgr__grid-result") or soup.select("[data-docid]")
-
-        for item in contenedores[:limite]:
-            nombre_el = item.select_one("h3") or item.select_one(".Xjkr3b")
-            precio_el = item.select_one(".a8Pemb") or item.select_one(".YYPO0c")
-            tienda_el = item.select_one(".aULzUe") or item.select_one(".E5ocAb")
-            link_el = item.select_one("a[href]")
-
-            if not nombre_el or not precio_el:
-                continue
-
-            nombre = nombre_el.get_text(strip=True)
-            precio_str = precio_el.get_text(strip=True)
-            tienda = tienda_el.get_text(strip=True) if tienda_el else "Tienda online"
-
-            precio_num = re.sub(r'[^\d]', '', precio_str)
+        for item in items[:limite]:
+            precio = item.get('price', '')
+            precio_num = re.sub(r'[^\d]', '', str(precio))
             if not precio_num:
                 continue
-            precio = int(precio_num)
-            if precio <= 100 or precio > 200_000_000:
-                continue
-
-            link = ""
-            if link_el:
-                href = link_el.get("href", "")
-                if "/url?q=" in href:
-                    link = href.split("/url?q=")[1].split("&")[0]
-                elif href.startswith("http"):
-                    link = href
-
+            
             resultados.append({
-                "tienda": tienda,
-                "nombre": nombre,
-                "precio_con_iva": precio,
-                "url": link,
+                "tienda": item.get('source', 'Google Shopping'),
+                "nombre": item.get('title', ''),
+                "precio_con_iva": int(precio_num),
+                "url": item.get('link', ''),
                 "fuente": "google_shopping",
             })
-
         return resultados
-    except ImportError:
-        print("  [GS] BeautifulSoup no instalado")
-        return []
     except Exception as e:
         print(f"  [GS] Error: {e}")
         return []
@@ -166,21 +129,19 @@ def buscar_google_shopping(producto: str, limite: int = 10):
 # ==========================================
 
 def realizar_busqueda(producto: str, limite: int = 15):
-    """Función reutilizable para buscar productos"""
     resultados = []
     
     # 1. MercadoLibre
     resultados.extend(buscar_mercadolibre(producto, limite))
     
-    # 2. Google Shopping si hay pocos resultados
+    # 2. Google Shopping vía Serper
     if len(resultados) < 5:
-        time.sleep(random.uniform(0.5, 1.2))
-        resultados.extend(buscar_google_shopping(producto))
+        time.sleep(random.uniform(0.5, 1))
+        resultados.extend(buscar_google_serper(producto, limite))
     
     if not resultados:
         return []
     
-    # Calcular concordancia
     for r in resultados:
         score = calcular_concordancia(producto, r["nombre"])
         nivel, etiqueta = clasificar_concordancia(score)
@@ -190,64 +151,19 @@ def realizar_busqueda(producto: str, limite: int = 15):
         r["precio_neto"] = round(r["precio_con_iva"] / IVA)
         r["precio_formateado"] = f"${r['precio_con_iva']:,.0f}".replace(",", ".")
     
-    # Ordenar por score descendente, luego por precio
     resultados.sort(key=lambda x: (-x["score"], x["precio_con_iva"]))
     
     return resultados[:limite]
 
 # ==========================================
-# ENDPOINT PRINCIPAL
-# ==========================================
-
-@app.route("/buscar", methods=["POST"])
-def buscar():
-    data = request.json or {}
-    producto = data.get("producto", "").strip()
-    numero_item = data.get("numero_item", "")
-
-    if not producto:
-        return jsonify({"error": "Producto requerido"}), 400
-
-    print(f"🔍 [{numero_item}] Buscando: {producto}")
-
-    resultados = realizar_busqueda(producto)
-
-    if not resultados:
-        return jsonify({
-            "numero_item": numero_item,
-            "producto": producto,
-            "resultados": [],
-            "mejor": None,
-            "total": 0,
-        })
-
-    mejor = resultados[0]
-    print(f"  ✅ [{numero_item}] Mejor: {mejor['nombre'][:50]} | {mejor['precio_formateado']} | score={mejor['score']}%")
-
-    return jsonify({
-        "numero_item": numero_item,
-        "producto": producto,
-        "resultados": resultados,
-        "mejor": mejor,
-        "total": len(resultados),
-    })
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "mensaje": "Backend funcionando correctamente"})
-
-# ==========================================
-# ENDPOINTS LEGACY (compatibilidad con frontend existente)
+# ENDPOINTS
 # ==========================================
 
 @app.route("/python/busqueda-robusta", methods=["GET"])
-def busqueda_robusta_legacy():
-    """Endpoint legacy para compatibilidad con frontend existente"""
+def busqueda_robusta():
     producto = request.args.get("producto", "").strip()
     numero_item = request.args.get("numero", "")
     minimo_requerido = int(request.args.get("minimo", 9))
-    
-    print(f"🔍 [LEGACY] {producto}")
     
     if not producto:
         return jsonify({
@@ -259,10 +175,8 @@ def busqueda_robusta_legacy():
             "deficit": minimo_requerido
         })
     
-    # Realizar búsqueda
     resultados = realizar_busqueda(producto, minimo_requerido * 2)
     
-    # Transformar al formato legacy que espera el frontend
     resultados_legacy = []
     for r in resultados:
         resultados_legacy.append({
@@ -272,20 +186,15 @@ def busqueda_robusta_legacy():
             "precio_formateado": r.get("precio_formateado", "Consultar"),
             "link": r.get("url", ""),
             "canal": r.get("fuente", "web"),
-            "busqueda_original": producto,
-            "score": r.get("score", 0),
-            "nivel_concordancia": r.get("nivel_concordancia", ""),
-            "etiqueta_concordancia": r.get("etiqueta_concordancia", "")
+            "busqueda_original": producto
         })
-    
-    tiene_suficientes = len(resultados_legacy) >= minimo_requerido
     
     return jsonify({
         "numero_item": numero_item,
         "producto": producto,
         "resultados": resultados_legacy,
         "total_encontrados": len(resultados_legacy),
-        "suficientes": tiene_suficientes,
+        "suficientes": len(resultados_legacy) >= minimo_requerido,
         "deficit": max(0, minimo_requerido - len(resultados_legacy)),
         "tipo_producto": {
             "maquinaria_pesada": False,
@@ -297,40 +206,19 @@ def busqueda_robusta_legacy():
 
 @app.route("/python/index", methods=["GET"])
 def scrape_prices():
-    """Endpoint legacy"""
     producto = request.args.get("producto", "").strip()
     if not producto:
         return jsonify([])
     
-    resultado = busqueda_robusta_legacy()
-    # resultado es una Response, necesitamos obtener el JSON
-    if hasattr(resultado, 'get_json'):
-        data = resultado.get_json()
-        return jsonify(data.get("resultados", []))
-    
-    return jsonify([])
+    resultado = busqueda_robusta()
+    return jsonify(resultado.get_json().get("resultados", []))
 
-@app.route("/api/index", methods=["GET"])
-def api_index():
-    return scrape_prices()
-
-# ==========================================
-# INICIO DEL SERVIDOR
-# ==========================================
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("🚀 NUEVO BUSCADOR - GRUPO ICA")
-    print("=" * 60)
-    print("✅ Características:")
-    print("   - MercadoLibre API (gratis)")
-    print("   - Google Shopping scraping")
-    print("   - Matching con score propio (0-100%)")
-    print("   - Endpoint legacy para compatibilidad")
-    print("=" * 60)
-    print("📍 Endpoints disponibles:")
-    print("   POST /buscar - Nuevo endpoint")
-    print("   GET  /python/busqueda-robusta - Legacy (compatible con frontend)")
-    print("   GET  /health - Health check")
-    print("=" * 60)
+    print("=" * 50)
+    print("🚀 BUSCADOR - GRUPO ICA")
+    print("=" * 50)
     app.run(host="0.0.0.0", port=5000, debug=True)
