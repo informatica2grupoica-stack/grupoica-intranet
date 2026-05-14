@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { 
   ClipboardCheck, MessageSquare, Calendar, Bell, Cake, 
   Clock, Loader2, ArrowRight, CheckCircle2, 
-  Briefcase, GraduationCap, Award,
-  Gift, Sparkles, Heart, Smile, Building, FileText, Truck
+  Briefcase, GraduationCap, Building, FileText, Truck,
+  Gift, Smile, Heart, Users, TrendingUp, Package
 } from "lucide-react";
 
 export default function HomePage() {
@@ -17,15 +17,11 @@ export default function HomePage() {
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState("");
   const [perfilId, setPerfilId] = useState("");
-  const [empleadoId, setEmpleadoId] = useState<string | null>(null);
 
   // 📊 DATOS GLOBALES
   const [cumpleañosProximos, setCumpleañosProximos] = useState<any[]>([]);
   const [capacitacionesProximas, setCapacitacionesProximas] = useState<any[]>([]);
-  const [aniversariosProximos, setAniversariosProximos] = useState<any[]>([]);
   const [totalEmpleados, setTotalEmpleados] = useState(0);
-  const [empleadosNuevos, setEmpleadosNuevos] = useState<any[]>([]);
-  const [contratosVencer, setContratosVencer] = useState<any[]>([]);
   const [proveedoresActivos, setProveedoresActivos] = useState(0);
   const [licitacionesActivas, setLicitacionesActivas] = useState(0);
 
@@ -35,8 +31,6 @@ export default function HomePage() {
   const [misNotificaciones, setMisNotificaciones] = useState(0);
   const [misProximasCapacitaciones, setMisProximasCapacitaciones] = useState<any[]>([]);
   const [miProximoCumpleaños, setMiProximoCumpleaños] = useState<any>(null);
-  const [miAniversario, setMiAniversario] = useState<any>(null);
-  const [misPermisosRecientes, setMisPermisosRecientes] = useState<any[]>([]);
   const [fechaActual, setFechaActual] = useState("");
 
   useEffect(() => {
@@ -63,7 +57,7 @@ export default function HomePage() {
         return;
       }
 
-      // Obtener perfil del usuario desde tabla perfiles
+      // Obtener perfil del usuario
       const { data: perfil, error: perfilError } = await supabase
         .from('perfiles')
         .select('*')
@@ -78,7 +72,6 @@ export default function HomePage() {
       setUserName(perfil.nombre);
       setUserRole(perfil.rol);
       setPerfilId(perfil.id);
-      setEmpleadoId(perfil.empleado_id || null);
 
       const hoy = new Date();
 
@@ -86,10 +79,10 @@ export default function HomePage() {
       // 📊 DATOS GLOBALES
       // ============================================
 
-      // 1. Próximos cumpleaños (desde perfiles, NO desde empleados)
+      // 1. Próximos cumpleaños (desde perfiles)
       const { data: todosPerfiles } = await supabase
         .from('perfiles')
-        .select('id, nombre, apellido, fecha_nacimiento, cargo')
+        .select('id, nombre, apellido, fecha_nacimiento, cargo, rol')
         .eq('activo', true);
 
       const cumpleañosConDias = (todosPerfiles || [])
@@ -125,81 +118,21 @@ export default function HomePage() {
       
       setCapacitacionesProximas(capacitaciones || []);
 
-      // 3. Aniversarios laborales (desde empleados)
-      const { data: empleados } = await supabase
-        .from('empleados')
-        .select('id, nombre_completo, cargo, fecha_ingreso')
-        .eq('activo', true);
-
-      const aniversarios = (empleados || [])
-        .filter(e => e.fecha_ingreso)
-        .map(e => {
-          const fechaIngreso = new Date(e.fecha_ingreso);
-          const proxAniv = new Date(hoy.getFullYear(), fechaIngreso.getMonth(), fechaIngreso.getDate());
-          if (proxAniv < hoy) {
-            proxAniv.setFullYear(proxAniv.getFullYear() + 1);
-          }
-          const años = hoy.getFullYear() - fechaIngreso.getFullYear();
-          const dias = Math.ceil((proxAniv.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-          return { ...e, años, diasFaltantes: dias };
-        })
-        .filter(e => e.diasFaltantes <= 30 && e.diasFaltantes >= 0)
-        .sort((a, b) => a.diasFaltantes - b.diasFaltantes)
-        .slice(0, 5);
-      
-      setAniversariosProximos(aniversarios);
-
-      // 4. Total empleados activos
+      // 3. Total perfiles activos (como "empleados")
       const { count: total } = await supabase
-        .from('empleados')
+        .from('perfiles')
         .select('id', { count: 'exact', head: true })
         .eq('activo', true);
       setTotalEmpleados(total || 0);
 
-      // 5. Empleados nuevos (últimos 30 días)
-      const hace30Dias = new Date();
-      hace30Dias.setDate(hace30Dias.getDate() - 30);
-      const { data: nuevos } = await supabase
-        .from('empleados')
-        .select('nombre_completo, cargo, fecha_ingreso')
-        .gte('fecha_ingreso', hace30Dias.toISOString().split('T')[0])
-        .order('fecha_ingreso', { ascending: false })
-        .limit(3);
-      setEmpleadosNuevos(nuevos || []);
-
-      // 6. Contratos por vencer (próximos 30 días)
-      const dentro30Dias = new Date();
-      dentro30Dias.setDate(dentro30Dias.getDate() + 30);
-      const { data: contratos } = await supabase
-        .from('contratos_empleados')
-        .select(`
-          id, numero_contrato, tipo_contrato, fecha_fin,
-          empleados (nombre_completo, cargo)
-        `)
-        .eq('vigente', true)
-        .not('fecha_fin', 'is', null)
-        .lte('fecha_fin', dentro30Dias.toISOString().split('T')[0])
-        .limit(5);
-      
-      // Transformar datos de contratos para evitar errores de tipo
-      const contratosFormateados = (contratos || []).map((c: any) => ({
-        id: c.id,
-        numero_contrato: c.numero_contrato,
-        tipo_contrato: c.tipo_contrato,
-        fecha_fin: c.fecha_fin,
-        empleado_nombre: c.empleados?.nombre_completo || 'No especificado',
-        empleado_cargo: c.empleados?.cargo || ''
-      }));
-      setContratosVencer(contratosFormateados);
-
-      // 7. Proveedores activos
+      // 4. Proveedores activos
       const { count: proveedores } = await supabase
         .from('proveedores')
         .select('id', { count: 'exact', head: true })
         .eq('activo', true);
       setProveedoresActivos(proveedores || 0);
 
-      // 8. Licitaciones activas
+      // 5. Licitaciones activas
       const { count: licitaciones } = await supabase
         .from('licitaciones')
         .select('id', { count: 'exact', head: true });
@@ -235,19 +168,8 @@ export default function HomePage() {
         .eq('leida', false);
       setMisNotificaciones(notificaciones || 0);
 
-      // 4. Mis permisos pendientes
-      if (perfil.empleado_id) {
-        const { data: permisos } = await supabase
-          .from('permisos_empleados')
-          .select('id, tipo, fecha_inicio, fecha_fin, dias_solicitados, estado')
-          .eq('empleado_id', perfil.empleado_id)
-          .eq('estado', 'pendiente')
-          .order('created_at', { ascending: false })
-          .limit(3);
-        setMisPermisosRecientes(permisos || []);
-      }
-
-      // 5. Mis próximas capacitaciones
+      // 4. Mis próximas capacitaciones (desde empleados_capacitaciones)
+      // Nota: Necesitas tener empleado_id en perfiles
       if (perfil.empleado_id) {
         const { data: misCaps } = await supabase
           .from('empleados_capacitaciones')
@@ -266,7 +188,7 @@ export default function HomePage() {
         setMisProximasCapacitaciones(capsFiltradas);
       }
 
-      // 6. Mi próximo cumpleaños (desde perfil)
+      // 5. Mi próximo cumpleaños (desde perfil)
       if (perfil.fecha_nacimiento) {
         const fechaNac = new Date(perfil.fecha_nacimiento);
         const proxCumple = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
@@ -275,26 +197,6 @@ export default function HomePage() {
         }
         const dias = Math.ceil((proxCumple.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
         setMiProximoCumpleaños({ dias, fecha: proxCumple });
-      }
-
-      // 7. Mi aniversario laboral (desde empleado asociado)
-      if (perfil.empleado_id) {
-        const { data: empleadoData } = await supabase
-          .from('empleados')
-          .select('fecha_ingreso')
-          .eq('id', perfil.empleado_id)
-          .single();
-        
-        if (empleadoData?.fecha_ingreso) {
-          const fechaIngreso = new Date(empleadoData.fecha_ingreso);
-          const proxAniv = new Date(hoy.getFullYear(), fechaIngreso.getMonth(), fechaIngreso.getDate());
-          if (proxAniv < hoy) {
-            proxAniv.setFullYear(proxAniv.getFullYear() + 1);
-          }
-          const años = hoy.getFullYear() - fechaIngreso.getFullYear();
-          const dias = Math.ceil((proxAniv.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-          setMiAniversario({ años, dias, fecha: proxAniv });
-        }
       }
 
     } catch (error) {
@@ -326,7 +228,7 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full text-xs font-bold">
-            {userRole === 'admin' ? 'Administrador' : userRole === 'superuser' ? 'Super Usuario' : userRole === 'rrhh' ? 'RRHH' : userRole === 'jefe' ? 'Jefatura' : 'Empleado'}
+            {userRole === 'admin' ? 'Administrador' : userRole === 'superuser' ? 'Super Usuario' : userRole === 'vendedor' ? 'Vendedor' : 'Usuario'}
           </div>
         </div>
       </div>
@@ -360,13 +262,13 @@ export default function HomePage() {
           <p className="text-xs text-slate-500">Notificaciones</p>
         </div>
         
-        <div onClick={() => router.push('/rrhh/permisos')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
+        <div onClick={() => router.push('/capacitaciones')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
           <div className="flex items-center justify-between">
-            <Clock className="text-rose-500 mb-2" size={28} />
-            <ArrowRight size={16} className="text-slate-300 group-hover:text-rose-500 transition-colors" />
+            <GraduationCap className="text-purple-500 mb-2" size={28} />
+            <ArrowRight size={16} className="text-slate-300 group-hover:text-purple-500 transition-colors" />
           </div>
-          <p className="text-3xl font-black text-slate-800 mt-2">{misPermisosRecientes.length}</p>
-          <p className="text-xs text-slate-500">Permisos pendientes</p>
+          <p className="text-3xl font-black text-slate-800 mt-2">{misProximasCapacitaciones.length}</p>
+          <p className="text-xs text-slate-500">Capacitaciones pendientes</p>
         </div>
       </div>
 
@@ -404,7 +306,7 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Próximas Capacitaciones */}
+        {/* Próximas Capacitaciones Globales */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <GraduationCap size={18} className="text-blue-500" />
@@ -434,53 +336,47 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Aniversarios Laborales */}
+        {/* Mi Cumpleaños Personal */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Award size={18} className="text-emerald-500" />
-            🏆 Aniversarios Laborales
+            <Heart size={18} className="text-rose-500" />
+            🎯 Mi Fecha Especial
           </h2>
-          {aniversariosProximos.length > 0 ? (
-            <div className="space-y-3">
-              {aniversariosProximos.map((emp, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 border-b border-slate-100">
-                  <div>
-                    <p className="font-medium text-slate-800">{emp.nombre_completo}</p>
-                    <p className="text-xs text-emerald-600">{emp.años} años</p>
-                  </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                    emp.diasFaltantes === 0 ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600'
-                  }`}>
-                    {emp.diasFaltantes === 0 ? '¡HOY!' : `${emp.diasFaltantes} días`}
-                  </span>
+          {miProximoCumpleaños ? (
+            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Gift size={20} className="text-amber-500" />
+                <div>
+                  <p className="font-medium text-slate-800">Mi Cumpleaños</p>
+                  <p className="text-xs text-slate-500">
+                    {miProximoCumpleaños.fecha.toLocaleDateString()}
+                  </p>
                 </div>
-              ))}
+              </div>
+              <span className="text-sm font-bold text-amber-600">
+                {miProximoCumpleaños.dias === 0 ? '¡HOY! 🎉' : `en ${miProximoCumpleaños.dias} días`}
+              </span>
             </div>
           ) : (
             <div className="text-center py-6 text-slate-400">
-              <Sparkles size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No hay aniversarios próximos</p>
+              <Calendar size={32} className="mx-auto mb-2 opacity-30" />
+              <p>No hay fecha de nacimiento registrada</p>
+              <p className="text-xs mt-1">Actualiza tu perfil</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Estadísticas globales */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white">
-          <Building size={24} className="mb-2 opacity-80" />
+          <Users size={24} className="mb-2 opacity-80" />
           <p className="text-2xl font-black">{totalEmpleados}</p>
           <p className="text-xs opacity-80">Colaboradores activos</p>
         </div>
         
         <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 text-white">
-          <FileText size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{contratosVencer.length}</p>
-          <p className="text-xs opacity-80">Contratos por vencer</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white">
-          <Truck size={24} className="mb-2 opacity-80" />
+          <Building size={24} className="mb-2 opacity-80" />
           <p className="text-2xl font-black">{proveedoresActivos}</p>
           <p className="text-xs opacity-80">Proveedores activos</p>
         </div>
@@ -490,80 +386,41 @@ export default function HomePage() {
           <p className="text-2xl font-black">{licitacionesActivas}</p>
           <p className="text-xs opacity-80">Licitaciones activas</p>
         </div>
+        
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white">
+          <Package size={24} className="mb-2 opacity-80" />
+          <p className="text-2xl font-black">0</p>
+          <p className="text-xs opacity-80">Órdenes pendientes</p>
+        </div>
       </div>
 
-      {/* Mis datos personales */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Mis Fechas Especiales */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Heart size={18} className="text-rose-500" />
-            🎯 Mis Fechas Especiales
-          </h2>
+      {/* Mis Capacitaciones Pendientes */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <GraduationCap size={18} className="text-blue-500" />
+          📖 Mis Capacitaciones Pendientes
+        </h2>
+        {misProximasCapacitaciones.length > 0 ? (
           <div className="space-y-3">
-            {miProximoCumpleaños && (
-              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <Gift size={20} className="text-amber-500" />
-                  <div>
-                    <p className="font-medium text-slate-800">Mi Cumpleaños</p>
-                    <p className="text-xs text-slate-500">
-                      {miProximoCumpleaños.fecha.toLocaleDateString()}
-                    </p>
-                  </div>
+            {misProximasCapacitaciones.map((cap, idx) => (
+              <div key={cap.id || idx} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-slate-800">{cap.nombre}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatearFecha(cap.fecha_inicio)} • {cap.horas_total || 0} horas
+                  </p>
                 </div>
-                <span className="text-sm font-bold text-amber-600">
-                  {miProximoCumpleaños.dias === 0 ? '¡HOY! 🎉' : `en ${miProximoCumpleaños.dias} días`}
-                </span>
+                <Clock size={16} className="text-blue-500" />
               </div>
-            )}
-            {miAniversario && (
-              <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <Award size={20} className="text-emerald-500" />
-                  <div>
-                    <p className="font-medium text-slate-800">Mi Aniversario Laboral</p>
-                    <p className="text-xs text-slate-500">
-                      {miAniversario.años} años
-                    </p>
-                  </div>
-                </div>
-                <span className="text-sm font-bold text-emerald-600">
-                  {miAniversario.dias === 0 ? '¡HOY! 🏆' : `en ${miAniversario.dias} días`}
-                </span>
-              </div>
-            )}
+            ))}
           </div>
-        </div>
-
-        {/* Mis Capacitaciones Pendientes */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <GraduationCap size={18} className="text-blue-500" />
-            📖 Mis Capacitaciones Pendientes
-          </h2>
-          {misProximasCapacitaciones.length > 0 ? (
-            <div className="space-y-3">
-              {misProximasCapacitaciones.map((cap, idx) => (
-                <div key={cap.id || idx} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
-                  <div>
-                    <p className="font-medium text-slate-800">{cap.nombre}</p>
-                    <p className="text-xs text-slate-500">
-                      {formatearFecha(cap.fecha_inicio)} • {cap.horas_total || 0} horas
-                    </p>
-                  </div>
-                  <Clock size={16} className="text-blue-500" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-slate-400">
-              <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No tienes capacitaciones pendientes</p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="text-center py-8 text-slate-400">
+            <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
+            <p>No tienes capacitaciones pendientes</p>
+            <p className="text-xs mt-1">¡Buen trabajo! 🎉</p>
+          </div>
+        )}
       </div>
     </div>
   );
