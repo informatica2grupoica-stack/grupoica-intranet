@@ -4,472 +4,193 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
-// ---------------------------------------------------------------------------
-// TIPOS
-// ---------------------------------------------------------------------------
+export async function POST(req: Request) {
+  const startTime = Date.now();
+  
+  try {
+    const body = await req.json();
+    const { producto_buscado, resultados_raw } = body;
 
-type NivelMatching = 'exacto' | 'parcial' | 'bajo';
+    if (!producto_buscado || !resultados_raw || resultados_raw.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Faltan datos para el matching",
+        mejor_match: null,
+        todos_resultados: []
+      });
+    }
 
-interface ResultadoRaw {
-  tienda: string;
-  nombre: string;
-  precio_valor: number;
-  precio_formateado: string;
-  link: string;
-  canal: string;
-  busqueda_original: string;
-  score: number;                        // Score 0-100 calculado por Python
-  nivel_concordancia: string;           // exacta | alta | parcial | baja | nula
-  medidas_encontradas: string;          // Ej: "150x50mm, 6m"
-  specs_encontradas: string[];          // Ej: ["acero", "estructural"]
-  palabras_comunes: string[];           // Palabras que SÍ coinciden
-  palabras_faltantes: string[];         // Palabras del buscado que NO están
-  conflicto_medidas: boolean;           // True si las medidas difieren
-}
+    // Si no hay API Key, usar algoritmo básico
+    if (!process.env.DEEPSEEK_API_KEY) {
+      return usarAlgoritmoBasico(producto_buscado, resultados_raw);
+    }
 
-interface AnalisisProducto {
-  nombre_original: string;
-  nombre_normalizado: string;
-  categoria: string;
-  palabras_clave: string[];
-  medidas: {
-    tiene_medidas: boolean;
-    detalle: Record<string, unknown>;
-    texto_legible: string;             // Ej: "150x50mm, 6m"
-  };
-  especificaciones_tecnicas: string[];
-  unidades_relevantes: string[];
-  es_accesorio: boolean;
-  marca_detectada: string | null;
-  tipo_producto: {
-    maquinaria_pesada: boolean;
-    herramienta_electrica: boolean;
-    material_construccion: boolean;
-    articulo_pequeno: boolean;
-    pintura_quimico: boolean;
-    senaletica_vial: boolean;
-  };
-}
+    // Preparar datos para la IA (máximo 30 resultados)
+    const datosParaIA = resultados_raw.slice(0, 30).map((r: any, idx: number) => ({
+      id: idx,
+      tienda: r.tienda || 'WEB',
+      nombre: (r.nombre || '').substring(0, 100),
+      precio: r.precio_valor || 0
+    }));
 
-interface MatchingResult {
-  porcentaje: number;
-  nivel: NivelMatching;
-  razon: string;
-  penalizaciones: string[];
-  bonificaciones: string[];
-}
+    const prompt = `Eres un experto en matching de productos de ferretería, construcción y materiales de construcción en Chile.
 
-// ---------------------------------------------------------------------------
-// PROMPT PRINCIPAL — Motor de matching semántico
-// ---------------------------------------------------------------------------
+PRODUCTO BUSCADO: "${producto_buscado}"
 
-function construirPromptSistema(
-  productoBuscado: string,
-  analisisProducto: AnalisisProducto
-): string {
-  const tp = analisisProducto.tipo_producto;
-  const medidas = analisisProducto.medidas;
+Tu tarea: Comparar el producto buscado con cada uno de los ${datosParaIA.length} productos encontrados y determinar qué tan bien coincide.
 
-  // ── Bloque 1: Identidad y misión ──────────────────────────────────────────
-  let prompt = `Eres MATCH-IA, un motor de matching semántico especializado en productos de ferretería, construcción, aceros, pinturas y señalética para el mercado chileno (CLP).
+REGLAS DE COINCIDENCIA:
 
-Tu única función es comparar productos encontrados contra el producto buscado y asignar un porcentaje de coincidencia (0-100) con una justificación clara.
+1. EXACTO (90-100%): El producto es IDÉNTICO o prácticamente igual
+   - Mismas características técnicas (medidas, material, capacidad)
+   - Mismo tipo de producto (ej: "Martillo 16 oz" con "Martillo 16 oz")
+   
+2. PARCIAL (70-89%): Producto similar pero varía en algún aspecto
+   - Misma categoría pero diferente marca
+   - Medida similar pero no exacta (ej: 2" vs 2.5")
+   - Presentación diferente (unidad vs caja)
+   
+3. BAJO (0-69%): Producto de la misma categoría general pero diferente
+   - Producto relacionado pero no es lo que se busca
+   - Accesorio o repuesto en lugar del producto principal
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRODUCTO BUSCADO: "${productoBuscado}"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Para CADA producto, calcula:
+- porcentaje: número del 0 al 100
+- nivel: "exacto", "parcial" o "bajo"
+- razon: explicación breve (máximo 50 caracteres)
 
-ANÁLISIS ESTRUCTURAL DEL BUSCADO:
-  • Categoría detectada   : ${analisisProducto.categoria}
-  • Palabras clave        : ${analisisProducto.palabras_clave.join(', ') || 'ninguna'}
-  • Especificaciones      : ${analisisProducto.especificaciones_tecnicas.join(', ') || 'ninguna'}
-  • Medidas               : ${medidas.texto_legible}
-  • Tiene medidas críticas: ${medidas.tiene_medidas ? 'SÍ — las medidas son OBLIGATORIAS' : 'NO'}
-  • Marca detectada       : ${analisisProducto.marca_detectada || 'no especificada'}
-  • Unidades esperadas    : ${analisisProducto.unidades_relevantes.join(', ') || 'cualquiera'}
-  • Es accesorio          : ${analisisProducto.es_accesorio ? 'SÍ' : 'NO'}
-`;
+Responde SOLAMENTE con este JSON, sin texto adicional:
 
-  // ── Bloque 2: Reglas específicas por tipo de producto ────────────────────
-  prompt += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGLAS ESPECIALES PARA ESTE PRODUCTO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
-
-  if (tp.maquinaria_pesada) {
-    prompt += `
-⚠️  TIPO: MAQUINARIA PESADA / AGRÍCOLA
-  → RECHAZA accesorios, repuestos, filtros, neumáticos, piezas sueltas.
-  → PRIORIZA la máquina completa. Penaliza -30 si es repuesto/pieza.
-  → Si el nombre incluye "para [máquina]" o "repuesto [máquina]" → score máximo 40.
-`;
-  }
-
-  if (tp.herramienta_electrica) {
-    prompt += `
-⚠️  TIPO: HERRAMIENTA ELÉCTRICA / MOTORIZADA
-  → RECHAZA: discos, carbones, estuches, extensiones, brocas sueltas.
-  → PRIORIZA la herramienta completa (con motor/mecanismo).
-  → Penaliza -25 si es accesorio de la herramienta, no la herramienta misma.
-`;
-  }
-
-  if (tp.material_construccion) {
-    prompt += `
-⚠️  TIPO: MATERIAL DE CONSTRUCCIÓN
-  → Las MEDIDAS son el criterio principal de coincidencia.
-  → Si hay conflicto de medidas (ej: buscado 150mm vs encontrado 100mm) → score máximo 50.
-  → Verifica que el TIPO de material coincida (ej: no confundas acero estriado con liso).
-  → Penaliza -20 si el material es diferente (ej: acero vs aluminio).
-`;
-  }
-
-  if (tp.articulo_pequeno) {
-    prompt += `
-⚠️  TIPO: ARTÍCULO DE FERRETERÍA (clavo, tornillo, perno, etc.)
-  → La MEDIDA/CALIBRE es obligatoria. Penaliza -30 si la medida difiere.
-  → Verifica que sea la misma forma (hexagonal, phillips, cabeza plana, etc.).
-  → Penaliza -15 si el material difiere (acero vs latón vs plástico).
-`;
-  }
-
-  if (tp.pintura_quimico) {
-    prompt += `
-⚠️  TIPO: PINTURA / RECUBRIMIENTO QUÍMICO
-  → Verifica: tipo (látex, esmalte, anticorrosivo, barniz), presentación (litros, galones).
-  → Penaliza -20 si el TIPO de pintura es diferente.
-  → Penaliza -15 si la presentación (volumen) difiere significativamente.
-  → Acepta diferencias de marca si el tipo y volumen coinciden.
-`;
-  }
-
-  if (tp.senaletica_vial) {
-    prompt += `
-⚠️  TIPO: SEÑALÉTICA / SEGURIDAD VIAL
-  → Verifica que sea el mismo tipo de señal o elemento vial.
-  → Penaliza -25 si el material o categoría de señal es diferente.
-  → Penaliza -15 si las dimensiones no coinciden.
-`;
-  }
-
-  if (medidas.tiene_medidas) {
-    prompt += `
-⚠️  MEDIDAS CRÍTICAS DETECTADAS: "${medidas.texto_legible}"
-  → Cualquier resultado con medidas DIFERENTES recibe automáticamente score ≤ 55.
-  → Si el resultado NO menciona medidas y el buscado sí las tiene → penaliza -20.
-  → La coincidencia exacta de medidas da un BONO de +15 sobre el score base.
-`;
-  }
-
-  // ── Bloque 3: Escala de puntuación ────────────────────────────────────────
-  prompt += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ESCALA DE PUNTUACIÓN
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-90-100 EXACTO      → Mismo producto: nombre, tipo, medidas y especificaciones coinciden.
-70-89  ALTO        → Mismo producto con pequeñas variaciones (marca diferente, presentación similar).
-50-69  PARCIAL     → Misma categoría pero varían medidas, tipo o especificaciones.
-25-49  BAJO        → Producto relacionado pero incorrecto (ej: perno vs tornillo, liso vs estriado).
-0-24   NULO        → Producto completamente diferente o accesorio no relacionado.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-BONIFICACIONES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-+15 → Medidas coinciden exactamente
-+10 → Misma marca detectada
-+10 → Mismas especificaciones técnicas (galvanizado, estriado, anticorrosivo, etc.)
-+5  → Tienda especializada en la categoría (ej: aceroscmpc para aceros)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PENALIZACIONES AUTOMÁTICAS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
--30 → Es repuesto/accesorio cuando se busca el producto completo
--25 → Medidas completamente diferentes (ej: 50mm vs 150mm)
--20 → Tipo de producto diferente (ej: esmalte vs látex, estriado vs liso)
--20 → Material diferente (acero vs aluminio, pino vs MDF)
--15 → Presentación muy diferente (1lt vs 20lt, 1kg vs 25kg)
--10 → El resultado no menciona medidas cuando el buscado sí las tiene
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMATO DE RESPUESTA — SOLO JSON, SIN TEXTO ADICIONAL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {
   "resultados": [
-    {
-      "id": 0,
-      "porcentaje": 92,
-      "nivel": "exacto",
-      "razon": "Misma pieza, medida y material. Solo difiere marca.",
-      "penalizaciones": [],
-      "bonificaciones": ["Medidas exactas +15", "Spec anticorrosivo +10"]
-    }
+    {"id": 0, "porcentaje": 95, "nivel": "exacto", "razon": "Coincide exactamente en nombre y medida"},
+    {"id": 1, "porcentaje": 75, "nivel": "parcial", "razon": "Misma categoría pero diferente marca"},
+    {"id": 2, "porcentaje": 45, "nivel": "bajo", "razon": "Producto relacionado pero diferente"}
   ],
-  "mejor_match_id": 0,
-  "resumen": "Texto breve explicando la calidad general de los resultados encontrados."
-}
+  "mejor_match_id": 0
+}`;
 
-nivel debe ser: "exacto" (≥90) | "alto" (70-89) | "parcial" (50-69) | "bajo" (25-49) | "nulo" (<25)
-razon: máximo 80 caracteres, en español, específica y útil para el usuario final.
-penalizaciones y bonificaciones: lista corta con la razón y el valor aplicado.
-`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  return prompt;
-}
+    try {
+      const iaResponse = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: prompt },
+            { role: "user", content: JSON.stringify(datosParaIA) }
+          ],
+          temperature: 0.1,
+          max_tokens: 2000,
+          response_format: { type: 'json_object' }
+        })
+      });
 
-// ---------------------------------------------------------------------------
-// CONSTRUCCIÓN DEL PAYLOAD PARA LA IA
-// Formatea cada resultado con su metadata enriquecida del Python
-// ---------------------------------------------------------------------------
+      clearTimeout(timeoutId);
 
-function construirPayloadResultados(resultados: ResultadoRaw[]): object[] {
-  return resultados.slice(0, 30).map((r, idx) => ({
-    id: idx,
-    tienda: (r.tienda || '').substring(0, 30),
-    nombre: (r.nombre || '').substring(0, 120),
-    precio: r.precio_valor || 0,
-    // Metadata pre-analizada por Python — reduce carga cognitiva de la IA
-    score_python: r.score || 0,
-    nivel_python: r.nivel_concordancia || '',
-    medidas: r.medidas_encontradas || 'no especificadas',
-    specs: r.specs_encontradas || [],
-    palabras_en_comun: r.palabras_comunes || [],
-    palabras_faltantes: r.palabras_faltantes || [],
-    conflicto_medidas: r.conflicto_medidas || false,
-  }));
-}
+      if (iaResponse.ok) {
+        const iaData = await iaResponse.json();
+        const contenido = iaData.choices[0].message.content;
+        const parsed = JSON.parse(contenido);
+        
+        // Enriquecer resultados con datos originales
+        const resultadosConMatch = parsed.resultados.map((match: any) => ({
+          ...resultados_raw[match.id],
+          matching: {
+            porcentaje: match.porcentaje,
+            nivel: match.nivel,
+            razon: match.razon
+          }
+        }));
 
-// ---------------------------------------------------------------------------
-// ALGORITMO DE FALLBACK (sin IA disponible)
-// Usa el análisis pre-calculado por Python directamente
-// ---------------------------------------------------------------------------
+        const mejorMatch = resultadosConMatch.find((_: any, idx: number) => idx === parsed.mejor_match_id) || resultadosConMatch[0];
 
-function usarAlgoritmoBasico(
-  productoBuscado: string,
-  resultadosRaw: ResultadoRaw[],
-  analisisProducto?: AnalisisProducto
-): NextResponse {
-  const resultadosConMatch = resultadosRaw.map((r, idx) => {
-    // Usar el score calculado por Python como base
-    let porcentaje = r.score || 0;
+        console.log(`✅ Matching IA completado en ${Date.now() - startTime}ms`);
 
-    // Penalización adicional si hay conflicto de medidas detectado
-    if (r.conflicto_medidas) {
-      porcentaje = Math.min(porcentaje, 50);
+        return NextResponse.json({
+          success: true,
+          mejor_match: mejorMatch,
+          todos_resultados: resultadosConMatch.sort((a: any, b: any) => b.matching.porcentaje - a.matching.porcentaje),
+          usado_ia: true,
+          tiempo_ms: Date.now() - startTime
+        });
+      }
+    } catch (iaError) {
+      console.warn("Error en IA, usando algoritmo básico:", iaError);
     }
 
-    // Bonus si hay muchas palabras en común
-    const palabrasComunes = r.palabras_comunes?.length || 0;
-    if (palabrasComunes >= 3) porcentaje = Math.min(100, porcentaje + 5);
+    return usarAlgoritmoBasico(producto_buscado, resultados_raw);
 
-    // Penalización si faltan muchas palabras clave
-    const palabrasFaltantes = r.palabras_faltantes?.length || 0;
-    if (palabrasFaltantes >= 3) porcentaje = Math.max(0, porcentaje - 10);
+  } catch (error: any) {
+    console.error("Error en matching:", error);
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      mejor_match: null,
+      todos_resultados: []
+    }, { status: 500 });
+  }
+}
 
-    porcentaje = Math.min(100, Math.max(0, Math.round(porcentaje)));
-
-    let nivel: NivelMatching = 'bajo';
-    if (porcentaje >= 90) nivel = 'exacto';
-    else if (porcentaje >= 70) nivel = 'parcial'; // Usa 'parcial' para 'alto' en fallback
-    else if (porcentaje >= 50) nivel = 'parcial';
-
-    const razon = r.conflicto_medidas
-      ? 'Medidas no coinciden con lo buscado'
-      : palabrasComunes >= 3
-        ? `${palabrasComunes} términos coincidentes: ${r.palabras_comunes.slice(0, 3).join(', ')}`
-        : palabrasFaltantes > 0
-          ? `Faltan términos: ${r.palabras_faltantes.slice(0, 2).join(', ')}`
-          : 'Coincidencia aproximada por nombre';
-
+function usarAlgoritmoBasico(productoBuscado: string, resultadosRaw: any[]) {
+  const buscarNormalizado = productoBuscado.toLowerCase().trim();
+  const palabrasClave = buscarNormalizado.split(/\s+/).filter(p => p.length > 2);
+  
+  const resultadosConMatch = resultadosRaw.map((r, idx) => {
+    const nombreNormalizado = (r.nombre || '').toLowerCase();
+    
+    // Calcular coincidencia de palabras
+    let coincidencias = 0;
+    for (const palabra of palabrasClave) {
+      if (nombreNormalizado.includes(palabra)) {
+        coincidencias++;
+      }
+    }
+    
+    let porcentaje = palabrasClave.length > 0 ? (coincidencias / palabrasClave.length) * 100 : 50;
+    
+    // Bonus por tener precio
+    if (r.precio_valor > 0) porcentaje += 10;
+    
+    // Penalizar si es demasiado corto
+    if (nombreNormalizado.length < 10) porcentaje -= 10;
+    
+    porcentaje = Math.min(100, Math.max(0, porcentaje));
+    
+    let nivel = "bajo";
+    if (porcentaje >= 85) nivel = "exacto";
+    else if (porcentaje >= 60) nivel = "parcial";
+    
+    let razon = "";
+    if (nivel === "exacto") razon = "Alta coincidencia en nombre y características";
+    else if (nivel === "parcial") razon = "Coincidencia parcial, puede variar en detalles";
+    else razon = "Producto diferente pero de la misma categoría";
+    
     return {
       ...r,
-      matching: { porcentaje, nivel, razon, penalizaciones: [], bonificaciones: [] }
+      matching: {
+        porcentaje: Math.round(porcentaje),
+        nivel,
+        razon
+      }
     };
   });
-
+  
+  // Ordenar por porcentaje descendente
   resultadosConMatch.sort((a, b) => b.matching.porcentaje - a.matching.porcentaje);
-
+  
   return NextResponse.json({
     success: true,
     mejor_match: resultadosConMatch[0] || null,
     todos_resultados: resultadosConMatch,
     usado_ia: false,
-    resumen: `Matching local para "${productoBuscado}": ${resultadosConMatch.filter(r => r.matching.porcentaje >= 70).length} resultados relevantes.`,
-    tiempo_ms: 0,
+    tiempo_ms: 0
   });
-}
-
-// ---------------------------------------------------------------------------
-// HANDLER PRINCIPAL
-// ---------------------------------------------------------------------------
-
-export async function POST(req: Request) {
-  const startTime = Date.now();
-
-  try {
-    const body = await req.json();
-    const {
-      producto_buscado,
-      resultados_raw,
-      analisis_producto,   // ← Viene del Python v3.0 (analisis_buscado)
-    }: {
-      producto_buscado: string;
-      resultados_raw: ResultadoRaw[];
-      analisis_producto?: AnalisisProducto;
-    } = body;
-
-    // ── Validación ──────────────────────────────────────────────────────────
-    if (!producto_buscado || !resultados_raw || resultados_raw.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Faltan datos para el matching',
-        mejor_match: null,
-        todos_resultados: [],
-      });
-    }
-
-    // ── Sin API Key → fallback inmediato ────────────────────────────────────
-    if (!process.env.DEEPSEEK_API_KEY) {
-      console.warn('⚠️ Sin DEEPSEEK_API_KEY — usando algoritmo local');
-      return usarAlgoritmoBasico(producto_buscado, resultados_raw, analisis_producto);
-    }
-
-    // ── Construir prompt y payload ───────────────────────────────────────────
-    const promptSistema = construirPromptSistema(
-      producto_buscado,
-      analisis_producto ?? {
-        nombre_original: producto_buscado,
-        nombre_normalizado: producto_buscado.toLowerCase(),
-        categoria: 'ferreteria_general',
-        palabras_clave: producto_buscado.split(' ').filter(p => p.length > 2),
-        medidas: { tiene_medidas: false, detalle: {}, texto_legible: 'sin medidas' },
-        especificaciones_tecnicas: [],
-        unidades_relevantes: [],
-        es_accesorio: false,
-        marca_detectada: null,
-        tipo_producto: {
-          maquinaria_pesada: false,
-          herramienta_electrica: false,
-          material_construccion: false,
-          articulo_pequeno: false,
-          pintura_quimico: false,
-          senaletica_vial: false,
-        },
-      }
-    );
-
-    const payloadResultados = construirPayloadResultados(resultados_raw);
-
-    console.log(`🤖 Matching IA para: "${producto_buscado}" (${resultados_raw.length} resultados)`);
-
-    // ── Llamada a DeepSeek ───────────────────────────────────────────────────
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    try {
-      const iaResponse = await fetch('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: promptSistema },
-            {
-              role: 'user',
-              content: `Evalúa estos ${payloadResultados.length} productos encontrados:\n\n${JSON.stringify(payloadResultados, null, 2)}`,
-            },
-          ],
-          temperature: 0.05,       // Mínima variabilidad — queremos consistencia
-          max_tokens: 3000,
-          response_format: { type: 'json_object' },
-        }),
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!iaResponse.ok) {
-        console.warn(`⚠️ DeepSeek respondió ${iaResponse.status} — usando fallback`);
-        return usarAlgoritmoBasico(producto_buscado, resultados_raw, analisis_producto);
-      }
-
-      const iaData = await iaResponse.json();
-      const contenido = iaData.choices?.[0]?.message?.content;
-
-      if (!contenido) {
-        throw new Error('Respuesta IA vacía');
-      }
-
-      const parsed = JSON.parse(contenido);
-      const rankingIA: Array<{
-        id: number;
-        porcentaje: number;
-        nivel: string;
-        razon: string;
-        penalizaciones: string[];
-        bonificaciones: string[];
-      }> = parsed.resultados || [];
-
-      if (rankingIA.length === 0) {
-        throw new Error('IA no retornó resultados');
-      }
-
-      // ── Enriquecer resultados originales con datos de la IA ─────────────
-      const resultadosConMatch = rankingIA
-        .filter(match => match.id >= 0 && match.id < resultados_raw.length)
-        .map(match => ({
-          ...resultados_raw[match.id],
-          matching: {
-            porcentaje: Math.min(100, Math.max(0, Math.round(match.porcentaje))),
-            nivel: (match.nivel as NivelMatching) || 'bajo',
-            razon: match.razon || '',
-            penalizaciones: match.penalizaciones || [],
-            bonificaciones: match.bonificaciones || [],
-          },
-        }));
-
-      // Ordenar por porcentaje IA descendente
-      resultadosConMatch.sort((a, b) => b.matching.porcentaje - a.matching.porcentaje);
-
-      const mejorMatchId = parsed.mejor_match_id ?? 0;
-      const mejorMatch =
-        resultadosConMatch.find((_, idx) => idx === mejorMatchId) ||
-        resultadosConMatch[0] ||
-        null;
-
-      console.log(
-        `✅ Matching IA completado en ${Date.now() - startTime}ms — mejor: ${mejorMatch?.nombre?.substring(0, 50)} (${mejorMatch?.matching?.porcentaje}%)`
-      );
-
-      return NextResponse.json({
-        success: true,
-        mejor_match: mejorMatch,
-        todos_resultados: resultadosConMatch,
-        usado_ia: true,
-        resumen: parsed.resumen || '',
-        tiempo_ms: Date.now() - startTime,
-      });
-
-    } catch (iaError: unknown) {
-      clearTimeout(timeoutId);
-      const msg = iaError instanceof Error ? iaError.message : 'timeout o error de red';
-      console.warn(`⚠️ Error IA (${msg}) — usando fallback local`);
-      return usarAlgoritmoBasico(producto_buscado, resultados_raw, analisis_producto);
-    }
-
-  } catch (error: unknown) {
-    console.error('❌ Error crítico en matching-ia:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Error interno',
-        mejor_match: null,
-        todos_resultados: [],
-      },
-      { status: 500 }
-    );
-  }
 }
