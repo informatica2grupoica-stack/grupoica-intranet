@@ -13,10 +13,10 @@ import {
 // --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
 const Toast = ({ message, type, onClose }: any) => (
   <div className={`fixed top-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${type === 'success'
-    ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
-    : type === 'warning'
-      ? 'bg-amber-50/90 border-amber-200 text-amber-800'
-      : 'bg-orange-50/90 border-orange-200 text-orange-800'
+      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+      : type === 'warning'
+        ? 'bg-amber-50/90 border-amber-200 text-amber-800'
+        : 'bg-orange-50/90 border-orange-200 text-orange-800'
     }`}>
     {type === 'success' ? <CheckCircle2 size={18} /> : type === 'warning' ? <AlertTriangle size={18} /> : <AlertCircle size={18} />}
     <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
@@ -285,7 +285,7 @@ export default function MonitorMasivoICA() {
     const headers: string[] = [];
     let headerRowIndex = -1;
 
-    for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+    for (let i = 0; i < Math.min(15, jsonData.length); i++) {
       const row = jsonData[i] as any[];
       if (row && row.length > 0) {
         const hasHeaders = row.some(cell =>
@@ -310,7 +310,7 @@ export default function MonitorMasivoICA() {
       return;
     }
 
-    // Mapear índices de columnas
+    // Mapear índices de columnas - CORREGIDO para "VALOR C/ IVA"
     let colItem = -1, colDetalle = -1, colCantidad = -1, colValorCIVA = -1, colLink = -1;
 
     for (let i = 0; i < headers.length; i++) {
@@ -318,7 +318,8 @@ export default function MonitorMasivoICA() {
       if (header === "ITEM" || header.includes("ITEM")) colItem = i;
       else if (header === "DETALLE" || header.includes("DETALLE")) colDetalle = i;
       else if (header === "CANTIDAD" || header.includes("CANTIDAD")) colCantidad = i;
-      else if (header === "VALOR C/IVA" || header.includes("VALOR C/IVA") || header === "VALOR C IVA") colValorCIVA = i;
+      // 🔥 CORREGIDO: Soporta "VALOR C/IVA", "VALOR C IVA", "VALOR C/ IVA" (con espacio)
+      else if (header === "VALOR C/IVA" || header.includes("VALOR C/IVA") || header === "VALOR C IVA" || header === "VALOR C/ IVA") colValorCIVA = i;
       else if (header === "LINK 1" || header.includes("LINK")) colLink = i;
     }
 
@@ -339,7 +340,7 @@ export default function MonitorMasivoICA() {
       const cantidad = colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1;
       const linkRef = colLink >= 0 ? (row[colLink] || "").toString().trim() : "";
 
-      // Extraer valor de manera más robusta
+      // 🔥 EXTRACCIÓN MEJORADA - Maneja formato chileno ($1.234.567)
       let valorCIVA = 0;
       if (colValorCIVA >= 0) {
         const rawValue = row[colValorCIVA];
@@ -347,7 +348,9 @@ export default function MonitorMasivoICA() {
           if (typeof rawValue === 'number') {
             valorCIVA = rawValue;
           } else if (typeof rawValue === 'string') {
-            const cleaned = rawValue.replace(/[$.]/g, '').replace(',', '.').trim();
+            // Eliminar $, puntos, espacios y reemplazar coma decimal
+            let cleaned = rawValue.replace(/[$.]/g, '').trim();
+            cleaned = cleaned.replace(',', '.');
             valorCIVA = parseFloat(cleaned) || 0;
           } else {
             valorCIVA = Number(rawValue) || 0;
@@ -1008,8 +1011,7 @@ export default function MonitorMasivoICA() {
                           </div>
                         )}
                       </div>
-                    )
-                    }
+                    )}
 
                     {!item.procesando && item.resultados.length === 0 && (
                       <div className="px-6 py-8 text-center">
@@ -1024,7 +1026,7 @@ export default function MonitorMasivoICA() {
             </div>
           )}
         </div>
-      </main >
-    </div >
+      </main>
+    </div>
   );
 }
