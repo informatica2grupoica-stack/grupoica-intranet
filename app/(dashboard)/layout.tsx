@@ -20,26 +20,24 @@ import {
   BarChart3,
   Building2,
   Server,
-  Calendar,
   FileCheck,
-  GraduationCap,
   Star,
   PieChart,
   Bell,
-  UserCheck,
   GitBranch,
   Clock,
   FileSignature,
-  Download
-  //Search
+  Download,
+  Home,
+  Package,
+  ShoppingCart
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-// --- IMPORTACIÓN DEL COMPONENTE IA Y NOTIFICACIONES ---
+// --- IMPORTACIÓN DEL COMPONENTE IA ---
 import ChatBot from "@/components/ChatBot";
-import CampanaNotificaciones from "@/app/components/rrhh/CampanaNotificaciones";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -79,24 +77,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = "/login";
   };
 
-  const puedeVerRRHH = userRol === 'admin' || userRol === 'superuser' || userRol === 'rrhh';
-
+  // Secciones del menú SIN RRHH
   const sections = [
     {
-      title: "MENÚ",
+      title: "PRINCIPAL",
       items: [
-        { name: "Inicio", icon: LayoutDashboard, path: "/" }
-      ]
-    },
-    {
-      title: "RECURSOS HUMANOS",
-      icon: Users,
-      items: [
-        { name: "Dashboard RRHH", icon: PieChart, path: "/rrhh" },
-        { name: "Empleados", icon: Users, path: "/rrhh/empleados" },
-        { name: "Contratos", icon: FileSignature, path: "/rrhh/contratos" },
-        { name: "Capacitaciones", icon: GraduationCap, path: "/rrhh/capacitaciones" },
-        { name: 'Evaluaciones', icon: Star, path: '/rrhh/evaluaciones' },
+        { name: "Inicio", icon: Home, path: "/" }
       ]
     },
     {
@@ -109,7 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       title: "ANÁLISIS",
       items: [
-        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
+        { name: "Dashboard Análisis", icon: BarChart3, path: "/dashboard" },
         { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
         { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
       ]
@@ -125,7 +111,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       icon: Truck,
       items: [
         { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
-        //{ name: "Buscar Proveedor", icon: Search, path: "/buscador-proveedores" },
         { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
       ]
     },
@@ -134,8 +119,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       icon: Server,
       items: [
         { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
-        { name: "Productos", icon: Box, path: "/obuma-productos" },
-        { name: "Órdenes de Compras", icon: ShoppingBag, path: "/compras" },
+        { name: "Productos", icon: Package, path: "/obuma-productos" },
+        { name: "Órdenes de Compras", icon: ShoppingCart, path: "/compras" },
         { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
       ]
     },
@@ -147,11 +132,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]
     }
   ];
-
-  const sectionsFiltradas = sections.filter(section => {
-    if (section.title === "RECURSOS HUMANOS" && !puedeVerRRHH) return false;
-    return true;
-  });
 
   return (
     <div className="flex min-h-screen bg-[#f8faff]">
@@ -171,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* NAVEGACIÓN */}
         <nav className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-          {sectionsFiltradas.map((section, idx) => (
+          {sections.map((section, idx) => (
             <div key={idx} className="mb-6">
               <h3 className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                 {section.title}
@@ -245,7 +225,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 ml-64 p-8">
         <div className="max-w-7xl mx-auto">
-          {/* HEADER CON BREADCRUMB Y CAMPANA */}
+          {/* HEADER CON BREADCRUMB */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-slate-400 px-4 bg-white/50 w-fit py-2 rounded-full border border-slate-100 shadow-sm">
               <LayoutDashboard className="w-3 h-3 text-blue-500" />
@@ -255,12 +235,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {pathname === "/" ? "Inicio" : pathname.split('/').filter(Boolean).pop()?.replace(/-/g, " ")}
               </span>
             </div>
-
-            {perfilId && (
-              <div className="flex items-center gap-3">
-                <CampanaNotificaciones usuarioId={perfilId} />
-              </div>
-            )}
           </div>
 
           <div className="px-4">
