@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 // --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
-const Toast = ({ message, type, onClose }: any) => (
+const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) => (
   <div className={`fixed top-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${type === 'success'
       ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
       : type === 'warning'
@@ -27,7 +27,7 @@ const Toast = ({ message, type, onClose }: any) => (
 );
 
 // --- MODAL DE PREVISUALIZACIÓN EXCEL ---
-const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
+const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: ProductoExcel[]; onClose: () => void; onConfirm: () => void }) => {
   const [mostrarJson, setMostrarJson] = useState(false);
 
   return (
@@ -77,7 +77,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {productos.slice(0, 50).map((prod: any, idx: number) => (
+                  {productos.slice(0, 50).map((prod: ProductoExcel, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-slate-600">{prod.numero}</td>
                       <td className="px-4 py-3 text-xs text-slate-700 max-w-md truncate">{prod.nombre}</td>
@@ -126,7 +126,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: any) => {
 };
 
 // --- MODAL DE EXPORTACIÓN ---
-const ModalExportacion = ({ onConfirm, onCancel, totalItems }: any) => (
+const ModalExportacion = ({ onConfirm, onCancel, totalItems }: { onConfirm: () => void; onCancel: () => void; totalItems: number }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
       <div className="p-6 text-center">
@@ -189,20 +189,20 @@ interface ProductoExcel {
 }
 
 export default function MonitorMasivoICA() {
-  const [inputManual, setInputManual] = useState("");
-  const [inputMasivo, setInputMasivo] = useState("");
+  const [inputManual, setInputManual] = useState<string>("");
+  const [inputMasivo, setInputMasivo] = useState<string>("");
   const [itemsLista, setItemsLista] = useState<ItemLista[]>([]);
-  const [procesando, setProcesando] = useState(false);
-  const [buscandoUno, setBuscandoUno] = useState(false);
-  const [progreso, setProgreso] = useState({ actual: 0, total: 0 });
-  const [toasts, setToasts] = useState<any[]>([]);
+  const [procesando, setProcesando] = useState<boolean>(false);
+  const [buscandoUno, setBuscandoUno] = useState<boolean>(false);
+  const [progreso, setProgreso] = useState<{ actual: number; total: number }>({ actual: 0, total: 0 });
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: 'success' | 'error' | 'warning' }>>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Estados para Excel
   const [productosExcel, setProductosExcel] = useState<ProductoExcel[]>([]);
-  const [mostrarPrevisualizacion, setMostrarPrevisualizacion] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
+  const [mostrarPrevisualizacion, setMostrarPrevisualizacion] = useState<boolean>(false);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
   const [pestanaSeleccionada, setPestanaSeleccionada] = useState<string>('COSTEO');
   const [pestanasDisponibles, setPestanasDisponibles] = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
@@ -310,7 +310,7 @@ export default function MonitorMasivoICA() {
       return;
     }
 
-    // Mapear índices de columnas - CORREGIDO para "VALOR C/ IVA"
+    // Mapear índices de columnas
     let colItem = -1, colDetalle = -1, colCantidad = -1, colValorCIVA = -1, colLink = -1;
 
     for (let i = 0; i < headers.length; i++) {
@@ -318,7 +318,6 @@ export default function MonitorMasivoICA() {
       if (header === "ITEM" || header.includes("ITEM")) colItem = i;
       else if (header === "DETALLE" || header.includes("DETALLE")) colDetalle = i;
       else if (header === "CANTIDAD" || header.includes("CANTIDAD")) colCantidad = i;
-      // 🔥 CORREGIDO: Soporta "VALOR C/IVA", "VALOR C IVA", "VALOR C/ IVA" (con espacio)
       else if (header === "VALOR C/IVA" || header.includes("VALOR C/IVA") || header === "VALOR C IVA" || header === "VALOR C/ IVA") colValorCIVA = i;
       else if (header === "LINK 1" || header.includes("LINK")) colLink = i;
     }
@@ -340,7 +339,6 @@ export default function MonitorMasivoICA() {
       const cantidad = colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1;
       const linkRef = colLink >= 0 ? (row[colLink] || "").toString().trim() : "";
 
-      // 🔥 EXTRACCIÓN MEJORADA - Maneja formato chileno ($1.234.567)
       let valorCIVA = 0;
       if (colValorCIVA >= 0) {
         const rawValue = row[colValorCIVA];
@@ -348,7 +346,6 @@ export default function MonitorMasivoICA() {
           if (typeof rawValue === 'number') {
             valorCIVA = rawValue;
           } else if (typeof rawValue === 'string') {
-            // Eliminar $, puntos, espacios y reemplazar coma decimal
             let cleaned = rawValue.replace(/[$.]/g, '').trim();
             cleaned = cleaned.replace(',', '.');
             valorCIVA = parseFloat(cleaned) || 0;
@@ -358,7 +355,6 @@ export default function MonitorMasivoICA() {
         }
       }
 
-      // Saltar filas de totales o sin detalle
       if (!detalle || detalle === "" || detalle === "TOTAL" || detalle.includes("VERDADERO") || detalle.includes("COSTEADO")) {
         continue;
       }
@@ -381,7 +377,7 @@ export default function MonitorMasivoICA() {
     }
 
     console.log("\n📋 RESUMEN DE PRODUCTOS CARGADOS:");
-    items.slice(0, 10).forEach((item, idx) => {
+    items.slice(0, 10).forEach((item: ProductoExcel, idx: number) => {
       console.log(`  ${idx + 1}. [${item.numero}] ${item.nombre.substring(0, 60)}... - Cant: ${item.cantidad} - $${item.valor_civa.toLocaleString('es-CL')}`);
     });
     if (items.length > 10) {
@@ -413,66 +409,118 @@ export default function MonitorMasivoICA() {
     iniciarBarridoExcel();
   };
 
-  const aplicarMatchingIA = async (productoBuscado: string, resultados: ProductoResultado[]): Promise<{ mejor_match: ProductoResultado | null, resultados_con_match: ProductoResultado[] }> => {
-    if (resultados.length === 0) {
-      return { mejor_match: null, resultados_con_match: resultados };
-    }
-
-    try {
-      const response = await fetch('/api/matching-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ producto_buscado: productoBuscado, resultados_raw: resultados })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          mejor_match: data.mejor_match,
-          resultados_con_match: data.todos_resultados || resultados
-        };
-      }
-    } catch (error) {
-      console.warn("Error en matching IA");
-    }
-
-    const resultadosConMatch: ProductoResultado[] = resultados.map((r, idx) => {
-      let nivel: NivelMatching = 'bajo';
-      let porcentaje = 50;
-      if (idx === 0) { nivel = 'exacto'; porcentaje = 85; }
-      else if (idx < 3) { nivel = 'parcial'; porcentaje = 70; }
-
-      return {
-        ...r,
-        matching: { porcentaje, nivel, razon: idx === 0 ? 'Mejor coincidencia' : 'Coincidencia parcial' }
-      };
-    });
-
-    return { mejor_match: resultadosConMatch[0], resultados_con_match: resultadosConMatch };
-  };
-
+  // 🔥 FUNCIÓN PRINCIPAL - Usa analizar-con-ia
   const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 9): Promise<ItemLista> => {
     try {
+      console.log(`🔍 [${numero}] Buscando: ${producto}`);
+      
+      // 1. Llamar a Python para obtener resultados
       const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(producto)}&numero=${numero}&minimo=${minimo}`);
-
+      
       if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-
+      
       const data = await res.json();
       const resultadosRaw = data.resultados || [];
-      const { mejor_match, resultados_con_match } = await aplicarMatchingIA(producto, resultadosRaw);
-
+      const analisisProducto = data.analisis_producto || null;
+      
+      console.log(`📊 Python devolvió: ${resultadosRaw.length} resultados`);
+      if (analisisProducto) {
+        console.log(`📋 Categoría detectada: ${analisisProducto.categoria}`);
+        console.log(`📏 Medidas: ${analisisProducto.medidas?.texto_legible || 'ninguna'}`);
+      }
+      
+      // 2. Si hay resultados y tenemos DeepSeek, llamar a analizar-con-ia
+      let resultadosFinales = resultadosRaw;
+      let mejorMatch = null;
+      let calidadResultados = 'media';
+      let observacionIA = '';
+      
+      if (resultadosRaw.length > 3 && process.env.NEXT_PUBLIC_USE_IA !== 'false') {
+        try {
+          console.log(`🤖 Llamando a analizar-con-ia para: ${producto}`);
+          
+          const iaRes = await fetch('/api/analizar-con-ia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              producto: producto,
+              numero_item: numero,
+              minimo_requerido: minimo,
+              resultados_raw: resultadosRaw,
+              analisis_producto: analisisProducto
+            })
+          });
+          
+          if (iaRes.ok) {
+            const iaData = await iaRes.json();
+            if (iaData.success && iaData.resultados) {
+              resultadosFinales = iaData.resultados;
+              mejorMatch = iaData.resultados[0];
+              calidadResultados = iaData.calidad_resultados || 'media';
+              observacionIA = iaData.observacion_ia || '';
+              console.log(`✅ IA aplicada: ${resultadosFinales.length} resultados ordenados`);
+              console.log(`📊 Calidad: ${calidadResultados}, Observación: ${observacionIA}`);
+            }
+          } else {
+            console.warn(`⚠️ analizar-con-ia respondió con error: ${iaRes.status}`);
+          }
+        } catch (iaError) {
+          console.warn(`⚠️ Error llamando a analizar-con-ia:`, iaError);
+        }
+      }
+      
+      // 3. Transformar al formato que espera el frontend
+      const resultadosConMatch: ProductoResultado[] = resultadosFinales.map((r: any) => {
+        let nivel: NivelMatching = 'bajo';
+        let porcentaje = r.score || r.porcentaje || 0;
+        
+        if (porcentaje >= 85) nivel = 'exacto';
+        else if (porcentaje >= 60) nivel = 'parcial';
+        
+        return {
+          tienda: r.tienda,
+          nombre: r.nombre,
+          precio_valor: r.precio_valor || r.precio_con_iva || 0,
+          precio_formateado: r.precio_formateado || `$${(r.precio_valor || r.precio_con_iva || 0).toLocaleString('es-CL')}`,
+          link: r.link || r.url,
+          canal: r.canal || r.fuente || 'web',
+          busqueda_original: producto,
+          matching: r.matching || {
+            porcentaje: porcentaje,
+            nivel: nivel,
+            razon: r.etiqueta_concordancia || r.razon || (porcentaje >= 85 ? 'Alta coincidencia' : porcentaje >= 60 ? 'Coincidencia parcial' : 'Baja coincidencia')
+          }
+        };
+      });
+      
+      resultadosConMatch.sort((a, b) => (b.matching?.porcentaje || 0) - (a.matching?.porcentaje || 0));
+      
       return {
         numero: data.numero_item || numero,
         nombre: data.producto || producto,
-        resultados: resultados_con_match,
-        total_encontrados: resultados_con_match.length,
-        suficientes: resultados_con_match.length >= minimo,
-        deficit: Math.max(0, minimo - resultados_con_match.length),
+        resultados: resultadosConMatch,
+        total_encontrados: resultadosConMatch.length,
+        suficientes: resultadosConMatch.length >= minimo,
+        deficit: Math.max(0, minimo - resultadosConMatch.length),
         procesando: false,
-        mejor_match: mejor_match || undefined
+        mejor_match: mejorMatch ? {
+          tienda: mejorMatch.tienda,
+          nombre: mejorMatch.nombre,
+          precio_valor: mejorMatch.precio_valor || mejorMatch.precio_con_iva || 0,
+          precio_formateado: mejorMatch.precio_formateado,
+          link: mejorMatch.link || mejorMatch.url,
+          canal: mejorMatch.canal || mejorMatch.fuente || 'web',
+          busqueda_original: producto,
+          matching: {
+            porcentaje: mejorMatch.score || mejorMatch.porcentaje || 0,
+            nivel: (mejorMatch.score || mejorMatch.porcentaje || 0) >= 85 ? 'exacto' : (mejorMatch.score || mejorMatch.porcentaje || 0) >= 60 ? 'parcial' : 'bajo',
+            razon: mejorMatch.etiqueta_concordancia || ''
+          }
+        } : (resultadosConMatch[0] || undefined)
       };
+      
     } catch (error: any) {
-      console.error(error);
+      console.error(`Error buscando ${producto}:`, error);
       return {
         numero, nombre: producto, resultados: [], total_encontrados: 0,
         suficientes: false, deficit: 9, procesando: false, error: error.message
@@ -480,6 +528,7 @@ export default function MonitorMasivoICA() {
     }
   };
 
+  // Búsqueda individual
   const buscarUno = async () => {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
@@ -504,6 +553,7 @@ export default function MonitorMasivoICA() {
     setBuscandoUno(false);
   };
 
+  // Barrido desde Excel
   const iniciarBarridoExcel = async () => {
     if (productosExcel.length === 0) {
       notify("No hay productos cargados desde Excel", 'error');
@@ -547,6 +597,7 @@ export default function MonitorMasivoICA() {
     console.log("✅ BARRIDO COMPLETADO");
   };
 
+  // Barrido masivo desde texto
   const iniciarBarrido = async () => {
     const items = parsearLista(inputMasivo);
     if (items.length === 0) {
@@ -667,13 +718,13 @@ export default function MonitorMasivoICA() {
     }
   };
 
-  const getMatchingColor = (porcentaje: number = 0) => {
+  const getMatchingColor = (porcentaje: number = 0): string => {
     if (porcentaje >= 85) return 'bg-emerald-100 text-emerald-700';
     if (porcentaje >= 60) return 'bg-amber-100 text-amber-700';
     return 'bg-red-100 text-red-700';
   };
 
-  const getMatchingIcon = (porcentaje: number = 0) => {
+  const getMatchingIcon = (porcentaje: number = 0): string => {
     if (porcentaje >= 85) return '🟢';
     if (porcentaje >= 60) return '🟡';
     return '🔴';
@@ -714,7 +765,7 @@ export default function MonitorMasivoICA() {
       {/* Toasts */}
       <div className="fixed top-24 right-6 z-50 flex flex-col gap-3">
         {toasts.map(t => (
-          <Toast key={t.id} {...t} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />
         ))}
       </div>
 
@@ -726,9 +777,9 @@ export default function MonitorMasivoICA() {
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tight text-slate-900">MONITOR <span className="text-orange-600">ICA</span>
-                <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">Matching IA</span>
+                <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">Analizador IA</span>
               </h1>
-              <p className="text-[9px] text-slate-400">Mínimo 9 resultados • Matching inteligente • Colores por coincidencia</p>
+              <p className="text-[9px] text-slate-400">Mínimo 9 resultados • IA para reranking • Colores por coincidencia</p>
             </div>
           </div>
 
@@ -821,7 +872,7 @@ export default function MonitorMasivoICA() {
                   <span className="text-[8px] text-emerald-600">{productosExcel.length} productos</span>
                 </div>
                 <div className="max-h-32 overflow-y-auto text-[9px] space-y-1">
-                  {productosExcel.slice(0, 5).map(p => <div key={p.numero} className="truncate">{p.numero}. {p.nombre.substring(0, 40)}</div>)}
+                  {productosExcel.slice(0, 5).map((p: ProductoExcel) => <div key={p.numero} className="truncate">{p.numero}. {p.nombre.substring(0, 40)}</div>)}
                   {productosExcel.length > 5 && <div className="text-slate-400">+ {productosExcel.length - 5} más</div>}
                 </div>
                 <button onClick={() => setShowModal(true)} className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
