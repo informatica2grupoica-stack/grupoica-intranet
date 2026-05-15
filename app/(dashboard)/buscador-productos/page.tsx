@@ -213,8 +213,11 @@ export default function MonitorMasivoICA() {
   const [usarIAContexto, setUsarIAContexto] = useState<boolean>(true);
   const [enriqueciendo, setEnriqueciendo] = useState<boolean>(false);
 
-  // 🔥 NUEVO ESTADO PARA SELECCIÓN MANUAL DE RESULTADOS
+  // Estado para selección manual de resultados
   const [seleccionManual, setSeleccionManual] = useState<Map<string, ProductoResultado>>(new Map());
+
+  // 🔥 CONSTANTE IVA
+  const IVA = 1.19;
 
   const notify = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     const id = Date.now();
@@ -266,13 +269,12 @@ export default function MonitorMasivoICA() {
     return producto;
   };
 
-  // 🔥 NUEVA FUNCIÓN: Alternar selección manual de resultado
+  // Alternar selección manual de resultado
   const toggleSeleccionManual = (itemNumero: string, resultado: ProductoResultado) => {
     setSeleccionManual(prev => {
       const newMap = new Map(prev);
       const actual = newMap.get(itemNumero);
       
-      // Si ya está seleccionado el mismo resultado, deseleccionar
       if (actual === resultado) {
         newMap.delete(itemNumero);
       } else {
@@ -463,7 +465,7 @@ export default function MonitorMasivoICA() {
     iniciarBarridoExcel();
   };
 
-  // 🔥 FUNCIÓN PRINCIPAL - Con enriquecimiento de contexto y mínimo 15 resultados
+  // FUNCIÓN PRINCIPAL - Con enriquecimiento de contexto y mínimo 15 resultados
   const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 15): Promise<ItemLista> => {
     try {
       let consultaFinal = producto;
@@ -774,31 +776,147 @@ export default function MonitorMasivoICA() {
     notify("✅ Exportación Excel completada - Todos los resultados", 'success');
   };
 
-  // 🔥 NUEVA FUNCIÓN: Exportar Excel con selección manual
+  // 🔥 FUNCIÓN MEJORADA: Exportar Excel con selección manual y cálculo de costos netos
   const exportarConSeleccionManual = () => {
+    if (productosExcel.length === 0) {
+      notify("No hay datos del Excel original para calcular costos", 'warning');
+      return;
+    }
+
     const exportData: any[] = [];
 
     itemsLista.forEach(item => {
-      const resultadoSeleccionado = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+      // Buscar el producto original en productosExcel para obtener cantidad y valor_civa
+      const productoOriginal = productosExcel.find(p => String(p.numero) === item.numero);
+      const cantidad = productoOriginal?.cantidad || 1;
+      const valorCIVAOriginal = productoOriginal?.valor_civa || 0;
       
+      // Obtener el resultado seleccionado (manual > mejor_match > primer resultado)
+      let resultadoSeleccionado = seleccionManual.get(item.numero);
+      if (!resultadoSeleccionado && item.mejor_match) {
+        resultadoSeleccionado = item.mejor_match;
+      }
+      if (!resultadoSeleccionado && item.resultados.length > 0) {
+        resultadoSeleccionado = item.resultados[0];
+      }
+
+      let precioWebConIVA = 0;
+      let costoUnitarioNeto = 0;
+      let costoTotalNeto = 0;
+      let linkEncontrado = '';
+      let tiendaEncontrada = '';
+      let coincidenciaPorcentaje = 0;
+
+      if (resultadoSeleccionado) {
+        precioWebConIVA = resultadoSeleccionado.precio_valor || 0;
+        costoUnitarioNeto = precioWebConIVA / IVA;
+        costoTotalNeto = costoUnitarioNeto * cantidad;
+        linkEncontrado = resultadoSeleccionado.link || '';
+        tiendaEncontrada = resultadoSeleccionado.tienda || '';
+        coincidenciaPorcentaje = resultadoSeleccionado.matching?.porcentaje || 0;
+      }
+
+      let origen = '';
+      if (seleccionManual.has(item.numero)) {
+        origen = '✓ Manual';
+      } else if (item.mejor_match) {
+        origen = '✓ Automático (mejor match)';
+      } else if (item.resultados.length > 0) {
+        origen = '✓ Automático (primer resultado)';
+      } else {
+        origen = '✗ Sin resultados';
+      }
+
       exportData.push({
-        ITEM: item.numero,
-        PRODUCTO_BUSCADO: item.nombre,
-        SELECCIONADO: seleccionManual.has(item.numero) ? '✓ Manual' : '✓ Automático',
-        TIENDA: resultadoSeleccionado?.tienda || '',
-        PRODUCTO_ENCONTRADO: resultadoSeleccionado?.nombre || 'SIN RESULTADOS',
-        PRECIO: resultadoSeleccionado?.precio_formateado || '-',
-        LINK: resultadoSeleccionado?.link || '-',
-        COINCIDENCIA: `${resultadoSeleccionado?.matching?.porcentaje || 0}%`
+        'ITEM': item.numero,
+        'DETALLE': item.nombre,
+        'CANTIDAD': cantidad,
+        'VALOR C/IVA': valorCIVAOriginal > 0 ? `$${valorCIVAOriginal.toLocaleString('es-CL')}` : '-',
+        'PRECIO WEB C/IVA': precioWebConIVA > 0 ? `$${precioWebConIVA.toLocaleString('es-CL')}` : '-',
+        'COSTO UNITARIO NETO': costoUnitarioNeto > 0 ? `$${costoUnitarioNeto.toLocaleString('es-CL')}` : '-',
+        'COSTO TOTAL NETO': costoTotalNeto > 0 ? `$${costoTotalNeto.toLocaleString('es-CL')}` : '-',
+        'LINK 1': linkEncontrado,
+        'ORIGEN': origen,
+        'TIENDA': tiendaEncontrada,
+        'COINCIDENCIA %': `${coincidenciaPorcentaje}%`,
+        'AHORRO': (valorCIVAOriginal > 0 && costoTotalNeto > 0) 
+          ? `$${Math.max(0, valorCIVAOriginal - costoTotalNeto).toLocaleString('es-CL')}`
+          : '-',
       });
     });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 45 }, { wch: 12 }, { wch: 18 },
+      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 55 },
+      { wch: 28 }, { wch: 25 }, { wch: 15 }, { wch: 18 }
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Seleccion_manual');
-    XLSX.writeFile(wb, `seleccion_manual_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Costeo_Actualizado');
+    XLSX.writeFile(wb, `costeo_actualizado_${new Date().toISOString().split('T')[0]}.xlsx`);
     
-    notify("✅ Exportación con selección manual completada", 'success');
+    notify("✅ Exportación completada con cálculo de costos netos", 'success');
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Exportar solo mejor resultado con cálculos de costos
+  const exportarMejorResultado = () => {
+    if (productosExcel.length === 0) {
+      notify("No hay datos del Excel original para calcular costos", 'warning');
+      return;
+    }
+
+    const exportData: any[] = [];
+
+    itemsLista.forEach(item => {
+      const productoOriginal = productosExcel.find(p => String(p.numero) === item.numero);
+      const cantidad = productoOriginal?.cantidad || 1;
+      const valorCIVAOriginal = productoOriginal?.valor_civa || 0;
+      
+      const mejorResultado = item.mejor_match || item.resultados[0];
+      
+      let precioWebConIVA = 0;
+      let costoUnitarioNeto = 0;
+      let costoTotalNeto = 0;
+      let linkEncontrado = '';
+      let tiendaEncontrada = '';
+      let coincidenciaPorcentaje = 0;
+
+      if (mejorResultado) {
+        precioWebConIVA = mejorResultado.precio_valor || 0;
+        costoUnitarioNeto = precioWebConIVA / IVA;
+        costoTotalNeto = costoUnitarioNeto * cantidad;
+        linkEncontrado = mejorResultado.link || '';
+        tiendaEncontrada = mejorResultado.tienda || '';
+        coincidenciaPorcentaje = mejorResultado.matching?.porcentaje || 0;
+      }
+
+      exportData.push({
+        'ITEM': item.numero,
+        'DETALLE': item.nombre,
+        'CANTIDAD': cantidad,
+        'VALOR C/IVA': valorCIVAOriginal > 0 ? `$${valorCIVAOriginal.toLocaleString('es-CL')}` : '-',
+        'PRECIO WEB C/IVA': precioWebConIVA > 0 ? `$${precioWebConIVA.toLocaleString('es-CL')}` : '-',
+        'COSTO UNITARIO NETO': costoUnitarioNeto > 0 ? `$${costoUnitarioNeto.toLocaleString('es-CL')}` : '-',
+        'COSTO TOTAL NETO': costoTotalNeto > 0 ? `$${costoTotalNeto.toLocaleString('es-CL')}` : '-',
+        'LINK 1': linkEncontrado,
+        'TIENDA': tiendaEncontrada,
+        'COINCIDENCIA %': `${coincidenciaPorcentaje}%`,
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 45 }, { wch: 12 }, { wch: 18 },
+      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 55 },
+      { wch: 25 }, { wch: 15 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mejor_Resultado');
+    XLSX.writeFile(wb, `mejor_resultado_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    notify("✅ Exportación del mejor resultado completada", 'success');
   };
 
   const limpiarLista = () => {
@@ -898,14 +1016,26 @@ export default function MonitorMasivoICA() {
               </button>
             </div>
 
-            {/* Botón CSV - solo mejor match */}
+            {/* 🔥 BOTÓN - Exportar mejor resultado (Excel) */}
             <button
-              onClick={exportarACSV}
+              onClick={exportarMejorResultado}
               disabled={itemsLista.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar CSV (solo mejor match por producto)"
+              title="Exportar Excel con el mejor resultado de cada producto"
             >
-              <Download size={18} />
+              <FileSpreadsheet size={18} />
+              <span className="hidden md:inline ml-1 text-[10px]">Mejor</span>
+            </button>
+
+            {/* 🔥 BOTÓN - Exportar con selección manual y costos */}
+            <button
+              onClick={exportarConSeleccionManual}
+              disabled={itemsLista.length === 0}
+              className="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
+              title="Exportar Excel con selección manual y cálculo de costos netos"
+            >
+              <CheckCircle2 size={18} />
+              <span className="hidden md:inline ml-1 text-[10px]">Costeo</span>
             </button>
 
             {/* Botón Excel - todos los resultados */}
@@ -918,14 +1048,14 @@ export default function MonitorMasivoICA() {
               <FileSpreadsheet size={18} />
             </button>
 
-            {/* 🔥 NUEVO BOTÓN - Exportar con selección manual */}
+            {/* Botón CSV - solo mejor match */}
             <button
-              onClick={exportarConSeleccionManual}
+              onClick={exportarACSV}
               disabled={itemsLista.length === 0}
-              className="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar Excel con selección manual"
+              className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
+              title="Exportar CSV (solo mejor match por producto)"
             >
-              <CheckCircle2 size={18} />
+              <Download size={18} />
             </button>
 
             <button
@@ -1153,7 +1283,6 @@ export default function MonitorMasivoICA() {
                                     Mejor: {mejorMatch.tienda} - {mejorMatch.precio_formateado}
                                   </span>
                                 )}
-                                {/* 🔥 Indicador de selección manual */}
                                 {seleccionManual.has(item.numero) && (
                                   <span className="text-[9px] font-black text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
                                     ✓ Seleccionado manualmente
