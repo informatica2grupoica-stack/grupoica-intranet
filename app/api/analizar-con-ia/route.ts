@@ -51,17 +51,6 @@ interface AnalisisProducto {
   };
 }
 
-interface RespuestaPython {
-  numero_item: string;
-  producto: string;
-  resultados: ProductoResultado[];
-  total_encontrados: number;
-  suficientes: boolean;
-  deficit: number;
-  categoria: string;
-  analisis_producto: AnalisisProducto;   // ← Nuevo en Python v3.0
-}
-
 // ── Prompt para el analizador / reranker ────────────────────────────────────
 
 function construirPromptReranker(
@@ -192,6 +181,8 @@ export async function POST(req: Request) {
       producto,
       numero_item = '',
       minimo_requerido = 9,
+      resultados_raw = [],
+      analisis_producto = null,
       force_refresh = false,
     } = body;
 
@@ -220,59 +211,60 @@ export async function POST(req: Request) {
       cacheIA.delete(cacheKey);
     }
 
-    console.log(`🔍 [${numero_item}] "${producto}" — mínimo: ${minimo_requerido}`);
+    console.log(`🔍 [${numero_item}] "${producto}" — mínimo: ${minimo_requerido}, resultados recibidos: ${resultados_raw?.length || 0}`);
 
-    // ── 1. Llamar al backend Python (v3.0 con analisis_producto) ────────────
-    const pythonURL = process.env.PYTHON_BACKEND_URL || 'http://localhost:5000';
-    const endpointURL = `${pythonURL}/python/busqueda-robusta?producto=${encodeURIComponent(producto)}&numero=${encodeURIComponent(numero_item)}&minimo=${minimo_requerido}`;
+    // Usar los resultados que vienen del frontend
+    let resultados: ProductoResultado[] = resultados_raw || [];
+    const analisis: AnalisisProducto | null = analisis_producto;
 
-    const pyController = new AbortController();
-    const pyTimeout = setTimeout(() => pyController.abort(), 15000);
+    console.log(`📦 Frontend envió ${resultados.length} resultados para "${producto}"`);
 
-    let datosPython: RespuestaPython;
-    try {
-      const pyRes = await fetch(endpointURL, {
-        headers: { Accept: 'application/json' },
-        signal: pyController.signal,
-      });
-      clearTimeout(pyTimeout);
-      if (!pyRes.ok) throw new Error(`Python HTTP ${pyRes.status}`);
-      datosPython = await pyRes.json();
-    } catch (pyErr) {
-      clearTimeout(pyTimeout);
-      throw new Error(`Backend Python inaccesible: ${pyErr}`);
-    }
-
-    let resultados: ProductoResultado[] = datosPython.resultados || [];
-    const analisisProducto: AnalisisProducto = datosPython.analisis_producto;
-
-    console.log(`📦 Python devolvió ${resultados.length} resultados para "${producto}"`);
-
-    // ── 2. Reranking con IA (si hay resultados y API Key) ───────────────────
+    // ── Reranking con IA (si hay resultados y API Key) ───────────────────
     let resultadosFinales = resultados;
     let observacionIA = '';
     let calidad = 'media';
 
     if (resultados.length > 3 && process.env.DEEPSEEK_API_KEY) {
       try {
+        // Crear un análisis por defecto si no vino del frontend
+        const analisisDefault: AnalisisProducto = analisis || {
+          nombre_original: producto,
+          nombre_normalizado: producto.toLowerCase(),
+          categoria: 'ferreteria_general',
+          palabras_clave: producto.toLowerCase().split(' ').filter((p: string) => p.length > 2),
+          medidas: { tiene_medidas: false, detalle: {}, texto_legible: 'sin medidas' },
+          especificaciones_tecnicas: [],
+          unidades_relevantes: [],
+          es_accesorio: false,
+          marca_detectada: null,
+          tipo_producto: {
+            maquinaria_pesada: false,
+            herramienta_electrica: false,
+            material_construccion: false,
+            articulo_pequeno: false,
+            pintura_quimico: false,
+            senaletica_vial: false,
+          },
+        };
+
         const promptReranker = construirPromptReranker(
           producto,
-          analisisProducto,
+          analisisDefault,
           minimo_requerido
         );
 
-        // Payload compacto con metadata enriquecida del Python
-        const payloadParaIA = resultados.slice(0, 25).map((r, idx) => ({
+        // Payload compacto con tipos explícitos
+        const payloadParaIA = resultados.slice(0, 25).map((r: ProductoResultado, idx: number) => ({
           id: idx,
-          nombre: r.nombre.substring(0, 100),
-          tienda: r.tienda.substring(0, 25),
-          precio: r.precio_valor,
-          score_python: r.score,
+          nombre: (r.nombre || '').substring(0, 100),
+          tienda: (r.tienda || '').substring(0, 25),
+          precio: r.precio_valor || 0,
+          score_python: r.score || 0,
           medidas: r.medidas_encontradas || 'no indicadas',
-          specs: r.specs_encontradas,
-          palabras_en_comun: r.palabras_comunes,
-          palabras_faltantes: r.palabras_faltantes,
-          conflicto_medidas: r.conflicto_medidas,
+          specs: r.specs_encontradas || [],
+          palabras_en_comun: r.palabras_comunes || [],
+          palabras_faltantes: r.palabras_faltantes || [],
+          conflicto_medidas: r.conflicto_medidas || false,
         }));
 
         const iaCtrl = new AbortController();
@@ -313,22 +305,20 @@ export async function POST(req: Request) {
           calidad = parsed.calidad_general || 'media';
 
           if (rankingIds.length > 0) {
-            // Construir lista reordenada, excluyendo descartados
+            // 🔥 CORREGIDO: Tipo explícito para el parámetro 'id'
             const reordenados = rankingIds
-              .filter(id => !descartados.includes(id) && id >= 0 && id < resultados.length)
-              .map(id => resultados[id]);
+              .filter((id: number) => !descartados.includes(id) && id >= 0 && id < resultados.length)
+              .map((id: number) => resultados[id]);
 
-            // Los descartados van al final (por transparencia, no se eliminan)
-            const descartadosItems = descartados
-              .filter(id => id >= 0 && id < resultados.length)
-              .map(id => ({ ...resultados[id], _descartado: true }));
-
-            resultadosFinales = [...reordenados, ...descartadosItems] as ProductoResultado[];
+            resultadosFinales = reordenados;
 
             console.log(
               `✅ Reranking IA: ${reordenados.length} relevantes, ${descartados.length} descartados, calidad: ${calidad}`
             );
           }
+        } else {
+          console.warn(`⚠️ IA respondió con error: ${iaRes.status}`);
+          resultadosFinales = ordenarSinIA(resultados);
         }
       } catch (iaErr) {
         const msg = iaErr instanceof Error ? iaErr.message : 'error';
@@ -336,11 +326,10 @@ export async function POST(req: Request) {
         resultadosFinales = ordenarSinIA(resultados);
       }
     } else {
-      // Sin IA: ordenar con lógica local enriquecida
       resultadosFinales = ordenarSinIA(resultados);
     }
 
-    // ── 3. Construir respuesta final ─────────────────────────────────────────
+    // ── Construir respuesta final ─────────────────────────────────────────
     const maxResultados = Math.max(minimo_requerido, 20);
     resultadosFinales = resultadosFinales.slice(0, maxResultados);
 
@@ -351,20 +340,17 @@ export async function POST(req: Request) {
       success: true,
       numero_item,
       producto,
-      categoria: datosPython.categoria,
       resultados: resultadosFinales,
       total_encontrados: totalFinal,
       suficientes,
       deficit: Math.max(0, minimo_requerido - totalFinal),
       minimo_requerido,
-      analisis_producto: analisisProducto,   // Devuelve el análisis al front
       calidad_resultados: calidad,
       observacion_ia: observacionIA,
       tiempo_ms: Date.now() - startTime,
       from_cache: false,
     };
 
-    // ── Cache solo si hay resultados ─────────────────────────────────────────
     if (totalFinal > 0) {
       cacheIA.set(cacheKey, { resultados: respuesta, timestamp: Date.now() });
     }
