@@ -133,26 +133,53 @@ def clasificar_producto(nombre: str) -> str:
     return "ferreteria_general"
 
 # ==========================================
-# NORMALIZACIÓN Y ANÁLISIS SEMÁNTICO
+# NORMALIZACIÓN Y ANÁLISIS SEMÁNTICO (MEJORADO)
 # ==========================================
 
 @lru_cache(maxsize=2000)
 def normalizar(texto):
+    """Normaliza texto: minúsculas, sin acentos, normaliza medidas."""
     if not texto:
         return ""
     texto = texto.lower()
+    
+    # Acentos
     reemplazos = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'}
     for orig, rep in reemplazos.items():
         texto = texto.replace(orig, rep)
+    
+    # 🔥 MEJORADO: Normalizar medidas correctamente
+    # 1x4 → 1 x 4
+    texto = re.sub(r'(\d+)\s*[xX×]\s*(\d+)', r'\1 x \2', texto)
+    # 1"x4" → 1 x 4 (elimina comillas)
+    texto = re.sub(r'(\d+)\s*["\']\s*[xX×]\s*(\d+)\s*["\']', r'\1 x \2', texto)
+    # 1" → 1 pulgadas
+    texto = re.sub(r'(\d+)\s*["\'](?![xX×])', r'\1 pulgadas', texto)
+    # 1' → 1 pie
+    texto = re.sub(r'(\d+)\s*[\']', r'\1 pies', texto)
+    
+    # Unificar espacios entre letras y números
     texto = re.sub(r'([a-z])\s+(\d)', r'\1\2', texto)
     texto = re.sub(r'(\d)\s+([a-z])', r'\1\2', texto)
-    texto = re.sub(r'(\d+)\s+(\d+)\/(\d+)', lambda m:
-        str(float(m.group(1)) + float(m.group(2))/float(m.group(3))), texto)
-    texto = re.sub(r'(\d+)\s*"', r'\1 pulgadas', texto)
-    texto = re.sub(r'(\d+)\s*\'', r'\1 pies', texto)
-    texto = re.sub(r'[^\w\s\/]', ' ', texto)
+    
+    # Fracciones (ej: 2 1/2 → 2.5)
+    texto = re.sub(r'(\d+)\s+(\d+)\/(\d+)', 
+                   lambda m: str(float(m.group(1)) + float(m.group(2))/float(m.group(3))), texto)
+    texto = re.sub(r'(\d+)\/(\d+)', 
+                   lambda m: str(float(m.group(1))/float(m.group(2))), texto)
+    
+    # Limpiar caracteres especiales
+    texto = re.sub(r'[^\w\s\/\-]', ' ', texto)
     texto = re.sub(r'\s+', ' ', texto).strip()
+    
     return texto
+
+
+def normalizar_sin_orden(texto: str) -> str:
+    """Normaliza y ordena las palabras alfabéticamente para comparación sin orden."""
+    texto_norm = normalizar(texto)
+    palabras = sorted(texto_norm.split())
+    return ' '.join(palabras)
 
 
 def extraer_medidas(texto: str) -> dict:
@@ -160,14 +187,17 @@ def extraer_medidas(texto: str) -> dict:
     medidas = {}
     texto_lower = texto.lower()
 
+    # Dimensiones 3D (ej: 10x20x30)
     dim3 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', texto_lower)
     if dim3:
         medidas['dim3'] = [float(d) for d in dim3[0]]
 
+    # Dimensiones 2D (ej: 10x20)
     dim2 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', texto_lower)
     if dim2:
         medidas['dim2'] = [float(d) for d in dim2[0]]
 
+    # Fracciones
     frac = re.findall(r'(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)', texto_lower)
     for f in frac:
         if f[0]:
@@ -175,22 +205,27 @@ def extraer_medidas(texto: str) -> dict:
         else:
             medidas['fraccion'] = float(f[3]) / float(f[4])
 
+    # Pulgadas
     pulg = re.findall(r'(\d+(?:\.\d+)?)\s*(?:"|pulgadas?|pulg\b|inch)', texto_lower)
     if pulg:
         medidas['pulgadas'] = float(pulg[0])
 
+    # Milímetros
     mm = re.findall(r'(\d+(?:\.\d+)?)\s*mm', texto_lower)
     if mm:
         medidas['mm'] = [float(m) for m in mm]
 
+    # Kilogramos
     kg = re.findall(r'(\d+(?:\.\d+)?)\s*kg', texto_lower)
     if kg:
         medidas['kg'] = float(kg[0])
 
+    # Litros
     lts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:lt|lts|litros?|l\b)', texto_lower)
     if lts:
         medidas['litros'] = float(lts[0])
 
+    # Metros
     mts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:mt|mts|metros?|m\b)', texto_lower)
     if mts:
         medidas['metros'] = float(mts[0])
@@ -212,7 +247,10 @@ def medidas_a_texto(medidas: dict) -> str:
     if 'pulgadas' in medidas:
         partes.append(f"{medidas['pulgadas']}\"")
     if 'mm' in medidas:
-        partes.append(f"{medidas['mm']}mm")
+        if isinstance(medidas['mm'], list):
+            partes.append(f"{medidas['mm'][0]}mm")
+        else:
+            partes.append(f"{medidas['mm']}mm")
     if 'kg' in medidas:
         partes.append(f"{medidas['kg']}kg")
     if 'litros' in medidas:
@@ -223,121 +261,232 @@ def medidas_a_texto(medidas: dict) -> str:
 
 
 def comparar_medidas(medidas_b: dict, medidas_e: dict) -> float:
+    """Compara medidas entre buscado y encontrado. Retorna 0-1."""
     if not medidas_b:
         return 0.5
+    if not medidas_e:
+        return 0.0
+    
     coincidencias = 0
     total = 0
+    
     for key, val_b in medidas_b.items():
         total += 1
         val_e = medidas_e.get(key)
         if val_e is None:
             continue
+        
         if isinstance(val_b, list) and isinstance(val_e, list):
             if len(val_b) == len(val_e):
                 if all(abs(a - b) < 0.5 for a, b in zip(sorted(val_b), sorted(val_e))):
                     coincidencias += 1
         elif isinstance(val_b, (int, float)) and isinstance(val_e, (int, float)):
-            if abs(val_b - val_e) < 0.1:
+            # Tolerancia del 10%
+            tolerancia = max(0.1, val_b * 0.1)
+            if abs(val_b - val_e) <= tolerancia:
                 coincidencias += 1
-    if total == 0:
-        return 0.5
-    return coincidencias / total
+        elif isinstance(val_b, list) and isinstance(val_e, (int, float)):
+            # Comparar lista contra escalar (ej: [150] vs 150)
+            if len(val_b) == 1 and abs(val_b[0] - val_e) < 0.5:
+                coincidencias += 1
+        elif isinstance(val_e, list) and isinstance(val_b, (int, float)):
+            if len(val_e) == 1 and abs(val_b - val_e[0]) < 0.5:
+                coincidencias += 1
+    
+    return coincidencias / total if total > 0 else 0.5
 
 
 def extraer_especificaciones(texto: str) -> set:
+    """Extrae especificaciones técnicas del texto."""
     specs = set()
     texto_norm = normalizar(texto)
-    materiales = ['acero', 'hierro', 'fierro', 'pino', 'madera', 'cemento', 'cal', 'arena']
+    
+    materiales = ['acero', 'hierro', 'fierro', 'pino', 'madera', 'cemento', 'cal', 'arena', 'pino radiata', 'pino insigne']
     for m in materiales:
         if m in texto_norm:
             specs.add(m)
-    tipos = ['estriado', 'liso', 'bruto', 'estructural', 'tubular', 'cuadrado', 'rectangular',
-             'redondo', 'colaborante', 'recocido', 'semibrillo', 'anticorrosivo', 'galvanizado']
+    
+    tipos = ['estriado', 'liso', 'bruto', 'sin cepillar', 'estructural', 'tubular', 'cuadrado', 'rectangular',
+             'redondo', 'colaborante', 'recocido', 'semibrillo', 'anticorrosivo', 'galvanizado', 'cepillado']
     for t in tipos:
         if t in texto_norm:
             specs.add(t)
+    
+    # Detectar sinónimos
+    if 'bruto' in texto_norm or 'sin cepillar' in texto_norm:
+        specs.add('bruto')
+    if 'cepillado' in texto_norm:
+        specs.add('cepillado')
+    
     normas = re.findall(r'\b[a-z]+\d+\b', texto_norm)
     specs.update(normas)
+    
     return specs
 
 
+# ==========================================
+# FUNCIÓN DE CONCORDANCIA MEJORADA
+# Detecta palabras invertidas, medidas equivalentes, etc.
+# ==========================================
+
 def calcular_concordancia(buscado: str, encontrado: str) -> int:
+    """Calcula coincidencia entre producto buscado y encontrado.
+    Mejorado para detectar:
+    - Palabras invertidas (ej: "Madera Pino" vs "Pino Madera")
+    - Medidas (1x4 vs 1"x4")
+    - Términos equivalentes (bruto vs sin cepillar)
+    """
     b_norm = normalizar(buscado)
     e_norm = normalizar(encontrado)
+    
     if not b_norm or not e_norm:
         return 0
-
-    seq = SequenceMatcher(None, b_norm, e_norm).ratio()
-
+    
+    # 1. SIMILITUD DE SECUENCIA (SequenceMatcher) - 15%
+    seq_ratio = SequenceMatcher(None, b_norm, e_norm).ratio()
+    
+    # 2. SIMILITUD DE CONJUNTO DE PALABRAS (ignora orden) - 30%
     palabras_b = set(b_norm.split())
     palabras_e = set(e_norm.split())
+    
     palabras_b_filtradas = {p for p in palabras_b if len(p) > 2}
     if palabras_b_filtradas:
-        cobertura = len(palabras_b_filtradas & palabras_e) / len(palabras_b_filtradas)
+        interseccion = palabras_b_filtradas & palabras_e
+        jaccard = len(interseccion) / len(palabras_b_filtradas)
     else:
-        cobertura = 0
-
+        jaccard = 0.5
+    
+    # 3. DETECCIÓN DE TÉRMINOS EQUIVALENTES - 15%
+    equivalencias = {
+        'bruto': 'sin cepillar',
+        'sin cepillar': 'bruto',
+        'cepillado': 'cepillada',
+        'cepillada': 'cepillado',
+        'fierro': 'acero',
+        'acero': 'fierro',
+        'anticorrosivo': 'antioxidante',
+        'antioxidante': 'anticorrosivo',
+        'esmalte': 'pintura esmalte',
+        'pino': 'pino radiata',
+        'pino radiata': 'pino',
+    }
+    
+    b_norm_eq = b_norm
+    e_norm_eq = e_norm
+    for orig, rep in equivalencias.items():
+        b_norm_eq = b_norm_eq.replace(orig, rep)
+        e_norm_eq = e_norm_eq.replace(orig, rep)
+    
+    seq_eq_ratio = SequenceMatcher(None, b_norm_eq, e_norm_eq).ratio()
+    
+    # 4. COINCIDENCIA DE MEDIDAS (crítica) - 25%
+    medidas_b = extraer_medidas(buscado)
+    medidas_e = extraer_medidas(encontrado)
+    medida_score = comparar_medidas(medidas_b, medidas_e)
+    
+    # Bonificación por medidas exactas
+    bono_medidas = 0
+    if medidas_b and medidas_e:
+        if medida_score >= 0.95:
+            bono_medidas = 15
+        elif medida_score >= 0.7:
+            bono_medidas = 8
+    
+    # 5. COINCIDENCIA DE ESPECIFICACIONES TÉCNICAS - 15%
     specs_b = extraer_especificaciones(buscado)
     specs_e = extraer_especificaciones(encontrado)
     if specs_b:
         spec_match = len(specs_b & specs_e) / len(specs_b)
     else:
         spec_match = 0.5
-
-    medidas_b = extraer_medidas(buscado)
-    medidas_e = extraer_medidas(encontrado)
-    medida_score = comparar_medidas(medidas_b, medidas_e)
-
-    penalizacion = 0
+    
+    # 6. CÁLCULO FINAL DEL PUNTAJE
+    score_base = (
+        seq_ratio * 0.15 +
+        jaccard * 0.30 +
+        seq_eq_ratio * 0.15 +
+        medida_score * 0.25 +
+        spec_match * 0.15
+    ) * 100
+    
+    # Aplicar bonificaciones
+    score_final = score_base + bono_medidas
+    
+    # Penalización por palabras faltantes importantes
+    palabras_importantes = {p for p in palabras_b if p in ['pino', 'madera', 'acero', 'fierro', 'cemento', 'pintura']}
+    if palabras_importantes:
+        faltantes = palabras_importantes - palabras_e
+        penalizacion = len(faltantes) * 8
+        score_final -= penalizacion
+    
+    # Penalización si el buscado tiene medidas pero el encontrado no
     if medidas_b and not medidas_e:
-        penalizacion = 0.15
-
-    score = (seq * 0.25 + cobertura * 0.30 + spec_match * 0.20 + medida_score * 0.25 - penalizacion) * 100
-    return round(min(100, max(0, score)))
+        score_final -= 15
+    
+    # Penalización por palabras faltantes críticas (más de 3)
+    if len(palabras_b_filtradas - palabras_e) > 3:
+        score_final -= 10
+    
+    return round(min(100, max(0, score_final)))
 
 
 def clasificar_concordancia(score: int):
-    if score >= 85:
-        return "exacta", "✅ Coincidencia exacta"
-    elif score >= 65:
-        return "alta", "🟢 Alta coincidencia"
-    elif score >= 45:
-        return "parcial", "🟡 Coincidencia parcial"
-    elif score >= 25:
-        return "baja", "🟠 Baja coincidencia"
+    """Clasifica el nivel de concordancia según el puntaje."""
+    if score >= 90:
+        return "exacta", "✅ Coincidencia exacta (mismo producto)"
+    elif score >= 75:
+        return "alta", "🟢 Alta coincidencia (mismo producto, variación menor)"
+    elif score >= 60:
+        return "parcial", "🟡 Coincidencia parcial (mismo tipo, varían detalles)"
+    elif score >= 40:
+        return "baja", "🟠 Baja coincidencia (producto relacionado)"
     else:
-        return "nula", "🔴 Sin coincidencia"
+        return "nula", "🔴 Sin coincidencia (producto diferente)"
+
+
+def es_mismo_producto_medidas_diferentes(buscado: str, encontrado: str) -> bool:
+    """Detecta si dos nombres describen el mismo producto pero con medidas diferentes."""
+    cat_b = clasificar_producto(buscado)
+    cat_e = clasificar_producto(encontrado)
+    
+    if cat_b != cat_e:
+        return False
+    
+    # Extraer tipo base (sin medidas)
+    base_b = re.sub(r'\d+[xX×]\d+', 'X', buscado.lower())
+    base_b = re.sub(r'\d+', '', base_b)
+    base_b = re.sub(r'["\']', '', base_b)
+    base_b = ' '.join(sorted(set(base_b.split())))
+    
+    base_e = re.sub(r'\d+[xX×]\d+', 'X', encontrado.lower())
+    base_e = re.sub(r'\d+', '', base_e)
+    base_e = re.sub(r'["\']', '', base_e)
+    base_e = ' '.join(sorted(set(base_e.split())))
+    
+    similitud = SequenceMatcher(None, base_b, base_e).ratio()
+    return similitud > 0.6
 
 
 # ==========================================
-# NUEVO: ANÁLISIS SEMÁNTICO ENRIQUECIDO
-# Genera un payload detallado para la IA
+# ANÁLISIS SEMÁNTICO ENRIQUECIDO
 # ==========================================
 
 def analizar_producto_buscado(nombre: str) -> dict:
-    """
-    Extrae toda la información estructurada del producto buscado
-    para enviársela a la IA como contexto rico.
-    """
+    """Extrae toda la información estructurada del producto buscado."""
     categoria = clasificar_producto(nombre)
     medidas = extraer_medidas(nombre)
     specs = list(extraer_especificaciones(nombre))
     nombre_norm = normalizar(nombre)
     palabras = [p for p in nombre_norm.split() if len(p) > 2]
 
-    # Detectar si tiene medidas críticas
     tiene_medidas = bool(medidas)
     medidas_texto = medidas_a_texto(medidas)
-
-    # Detectar tipo de unidad esperada
     unidades_esperadas = CATEGORIAS_PRODUCTOS.get(categoria, {}).get("unidades_relevantes", [])
 
-    # Detectar si es accesorio vs producto principal
     palabras_accesorio = ["repuesto", "accesorio", "disco", "carbón", "estuche", "funda",
                           "tornillo de", "tuerca de", "filtro para", "correa para"]
     es_accesorio = any(p in nombre.lower() for p in palabras_accesorio)
 
-    # Detectar marca si existe (palabra con mayúscula al inicio que no es inicio de frase)
     marcas_conocidas = ["sherwin", "sipa", "gerdau", "cintac", "arauco", "masisa",
                         "melon", "melón", "bío bío", "stanley", "bosch", "dewalt",
                         "makita", "hilti", "sika", "weber"]
@@ -351,6 +500,7 @@ def analizar_producto_buscado(nombre: str) -> dict:
     return {
         "nombre_original": nombre,
         "nombre_normalizado": nombre_norm,
+        "nombre_sin_orden": normalizar_sin_orden(nombre),
         "categoria": categoria,
         "palabras_clave": palabras,
         "medidas": {
@@ -393,10 +543,7 @@ def inferir_tipo_producto(nombre: str) -> dict:
 
 
 def analizar_resultado_encontrado(resultado: dict, analisis_buscado: dict) -> dict:
-    """
-    Analiza un resultado encontrado en contexto del producto buscado.
-    Retorna metadata adicional para que la IA tenga más contexto.
-    """
+    """Analiza un resultado encontrado en contexto del producto buscado."""
     nombre = resultado.get("nombre", "")
     medidas_encontradas = extraer_medidas(nombre)
     specs_encontradas = list(extraer_especificaciones(nombre))
@@ -408,14 +555,12 @@ def analizar_resultado_encontrado(resultado: dict, analisis_buscado: dict) -> di
     conflicto_medidas = False
     if medidas_buscado and medidas_encontradas:
         score_medidas = comparar_medidas(medidas_buscado, medidas_encontradas)
-        conflicto_medidas = score_medidas < 0.3
+        conflicto_medidas = score_medidas < 0.5
 
     # Detectar palabras que coinciden exactamente
     palabras_b = set(analisis_buscado["palabras_clave"])
     palabras_e = set(normalizar(nombre).split())
     palabras_comunes = list(palabras_b & palabras_e)
-
-    # Detectar palabras del buscado que FALTAN en el resultado
     palabras_faltantes = list(palabras_b - palabras_e)
 
     return {
@@ -726,9 +871,7 @@ def realizar_busqueda(producto: str, limite: int = 15):
     if not resultados:
         return [], {}
 
-    # ==========================================
     # ANÁLISIS ENRIQUECIDO DEL PRODUCTO BUSCADO
-    # ==========================================
     analisis_buscado = analizar_producto_buscado(producto)
 
     # SCORING + METADATA por resultado
@@ -745,7 +888,6 @@ def realizar_busqueda(producto: str, limite: int = 15):
         r["categoria"] = categoria
         r["precio_neto"] = round(r["precio_con_iva"] / IVA)
         r["precio_formateado"] = f"${r['precio_con_iva']:,.0f}".replace(",", ".")
-        # Metadata enriquecida para la IA
         r["_analisis"] = analisis_r
 
     resultados.sort(key=lambda x: (-x["score"], -x["prioridad_tienda"], x["precio_con_iva"]))
@@ -812,7 +954,6 @@ def busqueda_robusta():
             "etiqueta_concordancia": r.get("etiqueta_concordancia", ""),
             "categoria": r.get("categoria", categoria),
             "prioridad_tienda": r.get("prioridad_tienda", 3),
-            # Metadata enriquecida para que la IA tome decisiones
             "medidas_encontradas": analisis_r.get("medidas_encontradas", ""),
             "specs_encontradas": analisis_r.get("specs_encontradas", []),
             "palabras_comunes": analisis_r.get("palabras_comunes", []),
@@ -838,7 +979,6 @@ def busqueda_robusta():
         "suficientes": tiene_suficientes,
         "deficit": max(0, minimo_requerido - len(resultados_formateados)),
         "pais_busqueda": "CL",
-        # Análisis completo del producto buscado — consumido por la IA
         "analisis_producto": analisis_buscado,
     })
 
@@ -887,6 +1027,9 @@ def listar_categorias():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE - GRUPO ICA v3.0")
+    print("🚀 BUSCADOR CHILE - GRUPO ICA v3.1 (MEJORADO)")
+    print("   • Detección de palabras invertidas")
+    print("   • Normalización avanzada de medidas")
+    print("   • Coincidencia semántica mejorada")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=True)
