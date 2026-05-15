@@ -7,7 +7,7 @@ import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X, Sparkles,
   Download, FileSpreadsheet, AlertTriangle, ShoppingBag,
-  Upload, Eye, EyeOff
+  Upload, Eye, EyeOff, Settings, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
@@ -74,7 +74,8 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: P
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">CANTIDAD</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">VALOR C/IVA</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">LINK REFERENCIA</th>
-                  </tr>
+                    </tr>  
+                  
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {productos.slice(0, 50).map((prod: ProductoExcel, idx: number) => (
@@ -207,6 +208,12 @@ export default function MonitorMasivoICA() {
   const [pestanasDisponibles, setPestanasDisponibles] = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
 
+  // NUEVOS ESTADOS PARA CONTEXTO PERSONALIZADO
+  const [contextoPersonalizado, setContextoPersonalizado] = useState<string>("");
+  const [mostrarContexto, setMostrarContexto] = useState<boolean>(false);
+  const [usarIAContexto, setUsarIAContexto] = useState<boolean>(true);
+  const [enriqueciendo, setEnriqueciendo] = useState<boolean>(false);
+
   const notify = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -226,6 +233,35 @@ export default function MonitorMasivoICA() {
       }
     }
     return items;
+  };
+
+  // NUEVA FUNCIÓN: Enriquecer consulta con IA
+  const enriquecerConsulta = async (producto: string, contexto: string): Promise<string> => {
+    if (!contexto.trim() || !usarIAContexto) {
+      return producto;
+    }
+
+    try {
+      setEnriqueciendo(true);
+      const response = await fetch('/api/enriquecer-consulta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ producto, contexto })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.usado_ia && data.consulta_optimizada) {
+          console.log(`🤖 IA optimizó: "${producto}" → "${data.consulta_optimizada}"`);
+          return data.consulta_optimizada;
+        }
+      }
+    } catch (error) {
+      console.warn("Error enriqueciendo consulta:", error);
+    } finally {
+      setEnriqueciendo(false);
+    }
+    return producto;
   };
 
   // Cargar Excel desde archivo
@@ -409,13 +445,23 @@ export default function MonitorMasivoICA() {
     iniciarBarridoExcel();
   };
 
-  // 🔥 FUNCIÓN PRINCIPAL - Usa analizar-con-ia
+  // 🔥 FUNCIÓN PRINCIPAL MODIFICADA - Con enriquecimiento de contexto
   const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 9): Promise<ItemLista> => {
     try {
-      console.log(`🔍 [${numero}] Buscando: ${producto}`);
+      // 🔥 ENRIQUECER CONSULTA CON CONTEXTO PERSONALIZADO
+      let consultaFinal = producto;
+      if (contextoPersonalizado.trim()) {
+        consultaFinal = await enriquecerConsulta(producto, contextoPersonalizado);
+      }
+      
+      console.log(`🔍 [${numero}] Buscando: ${consultaFinal}`);
+      if (contextoPersonalizado && consultaFinal !== producto) {
+        console.log(`📝 Contexto aplicado: "${contextoPersonalizado}"`);
+        console.log(`✨ Consulta optimizada: "${consultaFinal}"`);
+      }
       
       // 1. Llamar a Python para obtener resultados
-      const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(producto)}&numero=${numero}&minimo=${minimo}`);
+      const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${numero}&minimo=${minimo}`);
       
       if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
       
@@ -562,6 +608,9 @@ export default function MonitorMasivoICA() {
 
     console.log("\n🚀 INICIANDO BARRIDO DESDE EXCEL");
     console.log(`📊 Total productos: ${productosExcel.length}`);
+    if (contextoPersonalizado) {
+      console.log(`📝 Contexto activo: "${contextoPersonalizado}"`);
+    }
 
     setProcesando(true);
     setItemsLista([]);
@@ -603,6 +652,11 @@ export default function MonitorMasivoICA() {
     if (items.length === 0) {
       notify("No se encontraron productos en la lista", 'error');
       return;
+    }
+
+    console.log("\n🚀 INICIANDO BARRIDO DESDE TEXTO");
+    if (contextoPersonalizado) {
+      console.log(`📝 Contexto activo: "${contextoPersonalizado}"`);
     }
 
     setProcesando(true);
@@ -779,7 +833,7 @@ export default function MonitorMasivoICA() {
               <h1 className="font-black text-xl tracking-tight text-slate-900">MONITOR <span className="text-orange-600">ICA</span>
                 <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">Analizador IA</span>
               </h1>
-              <p className="text-[9px] text-slate-400">Mínimo 9 resultados • IA para reranking • Colores por coincidencia</p>
+              <p className="text-[9px] text-slate-400">Mínimo 9 resultados • Contexto IA • Colores por coincidencia</p>
             </div>
           </div>
 
@@ -843,6 +897,70 @@ export default function MonitorMasivoICA() {
                 Barrido de Precios
               </label>
               {procesando && <button onClick={cancelarBarrido} className="text-[9px] font-black text-red-500">Cancelar</button>}
+            </div>
+
+            {/* ========================================== */}
+            {/* CONTEXTO PERSONALIZADO (NUEVO) */}
+            {/* ========================================== */}
+            <div className="mb-4">
+              <button
+                onClick={() => setMostrarContexto(!mostrarContexto)}
+                className="w-full flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings size={14} className="text-slate-500" />
+                  <span className="text-[9px] font-black uppercase text-slate-600">Contexto personalizado</span>
+                </div>
+                {mostrarContexto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+              
+              {mostrarContexto && (
+                <div className="mt-3 p-3 bg-slate-50 rounded-xl space-y-3 animate-in slide-in-from-top duration-200">
+                  <label className="text-[8px] font-black text-slate-400 uppercase block">
+                    📝 Describe el contexto de tu búsqueda:
+                  </label>
+                  <textarea
+                    value={contextoPersonalizado}
+                    onChange={(e) => setContextoPersonalizado(e.target.value)}
+                    placeholder="Ej: solo productos de fierro y madera, materiales de construcción, maquinaria pesada, artículos de ferretería..."
+                    className="w-full h-20 p-2 bg-white border border-slate-200 rounded-lg text-[10px] resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-[9px] text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={usarIAContexto}
+                        onChange={(e) => setUsarIAContexto(e.target.checked)}
+                        className="rounded border-slate-300"
+                      />
+                      Usar IA para optimizar la consulta
+                    </label>
+                    {contextoPersonalizado && (
+                      <button
+                        onClick={() => setContextoPersonalizado("")}
+                        className="text-[9px] text-red-500 hover:text-red-700"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
+                  
+                  {contextoPersonalizado && (
+                    <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-[8px] text-blue-600 font-black uppercase">Contexto activo</p>
+                      <p className="text-[9px] text-blue-700 mt-0.5 line-clamp-2">{contextoPersonalizado}</p>
+                    </div>
+                  )}
+                  
+                  {enriqueciendo && (
+                    <div className="flex items-center justify-center gap-2 text-[9px] text-blue-600">
+                      <Loader2 size={12} className="animate-spin" />
+                      Optimizando consulta con IA...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Carga de Excel */}
