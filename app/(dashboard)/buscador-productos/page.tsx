@@ -74,8 +74,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: P
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">CANTIDAD</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">VALOR C/IVA</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">LINK REFERENCIA</th>
-                    </tr>  
-                  
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {productos.slice(0, 50).map((prod: ProductoExcel, idx: number) => (
@@ -208,11 +207,14 @@ export default function MonitorMasivoICA() {
   const [pestanasDisponibles, setPestanasDisponibles] = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
 
-  // NUEVOS ESTADOS PARA CONTEXTO PERSONALIZADO
+  // Estados para contexto personalizado
   const [contextoPersonalizado, setContextoPersonalizado] = useState<string>("");
   const [mostrarContexto, setMostrarContexto] = useState<boolean>(false);
   const [usarIAContexto, setUsarIAContexto] = useState<boolean>(true);
   const [enriqueciendo, setEnriqueciendo] = useState<boolean>(false);
+
+  // 🔥 NUEVO ESTADO PARA SELECCIÓN MANUAL DE RESULTADOS
+  const [seleccionManual, setSeleccionManual] = useState<Map<string, ProductoResultado>>(new Map());
 
   const notify = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     const id = Date.now();
@@ -235,7 +237,7 @@ export default function MonitorMasivoICA() {
     return items;
   };
 
-  // NUEVA FUNCIÓN: Enriquecer consulta con IA
+  // Función para enriquecer consulta con IA
   const enriquecerConsulta = async (producto: string, contexto: string): Promise<string> => {
     if (!contexto.trim() || !usarIAContexto) {
       return producto;
@@ -262,6 +264,22 @@ export default function MonitorMasivoICA() {
       setEnriqueciendo(false);
     }
     return producto;
+  };
+
+  // 🔥 NUEVA FUNCIÓN: Alternar selección manual de resultado
+  const toggleSeleccionManual = (itemNumero: string, resultado: ProductoResultado) => {
+    setSeleccionManual(prev => {
+      const newMap = new Map(prev);
+      const actual = newMap.get(itemNumero);
+      
+      // Si ya está seleccionado el mismo resultado, deseleccionar
+      if (actual === resultado) {
+        newMap.delete(itemNumero);
+      } else {
+        newMap.set(itemNumero, resultado);
+      }
+      return newMap;
+    });
   };
 
   // Cargar Excel desde archivo
@@ -445,10 +463,9 @@ export default function MonitorMasivoICA() {
     iniciarBarridoExcel();
   };
 
-  // 🔥 FUNCIÓN PRINCIPAL MODIFICADA - Con enriquecimiento de contexto
-  const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 9): Promise<ItemLista> => {
+  // 🔥 FUNCIÓN PRINCIPAL - Con enriquecimiento de contexto y mínimo 15 resultados
+  const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 15): Promise<ItemLista> => {
     try {
-      // 🔥 ENRIQUECER CONSULTA CON CONTEXTO PERSONALIZADO
       let consultaFinal = producto;
       if (contextoPersonalizado.trim()) {
         consultaFinal = await enriquecerConsulta(producto, contextoPersonalizado);
@@ -460,7 +477,6 @@ export default function MonitorMasivoICA() {
         console.log(`✨ Consulta optimizada: "${consultaFinal}"`);
       }
       
-      // 1. Llamar a Python para obtener resultados
       const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${numero}&minimo=${minimo}`);
       
       if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
@@ -475,7 +491,6 @@ export default function MonitorMasivoICA() {
         console.log(`📏 Medidas: ${analisisProducto.medidas?.texto_legible || 'ninguna'}`);
       }
       
-      // 2. Si hay resultados y tenemos DeepSeek, llamar a analizar-con-ia
       let resultadosFinales = resultadosRaw;
       let mejorMatch = null;
       let calidadResultados = 'media';
@@ -515,7 +530,6 @@ export default function MonitorMasivoICA() {
         }
       }
       
-      // 3. Transformar al formato que espera el frontend
       const resultadosConMatch: ProductoResultado[] = resultadosFinales.map((r: any) => {
         let nivel: NivelMatching = 'bajo';
         let porcentaje = r.score || r.porcentaje || 0;
@@ -569,7 +583,7 @@ export default function MonitorMasivoICA() {
       console.error(`Error buscando ${producto}:`, error);
       return {
         numero, nombre: producto, resultados: [], total_encontrados: 0,
-        suficientes: false, deficit: 9, procesando: false, error: error.message
+        suficientes: false, deficit: 15, procesando: false, error: error.message
       };
     }
   };
@@ -584,7 +598,7 @@ export default function MonitorMasivoICA() {
     const numero = match ? match[1] : String(itemsLista.length + 1);
     const nombre = match ? match[2] : inputManual.trim();
 
-    const resultado = await buscarProductoRobusto(nombre, numero, 9);
+    const resultado = await buscarProductoRobusto(nombre, numero, 15);
     const existe = itemsLista.some(item => item.numero === resultado.numero);
 
     if (!existe) setItemsLista(prev => [...prev, resultado]);
@@ -594,7 +608,7 @@ export default function MonitorMasivoICA() {
       notify(`✅ ${nombre}: ${resultado.total_encontrados} resultados`, 'success');
       setInputManual("");
     } else {
-      notify(`⚠️ ${nombre}: Solo ${resultado.total_encontrados}/9 resultados`, 'warning');
+      notify(`⚠️ ${nombre}: Solo ${resultado.total_encontrados}/15 resultados`, 'warning');
     }
     setBuscandoUno(false);
   };
@@ -629,10 +643,10 @@ export default function MonitorMasivoICA() {
 
       setItemsLista(prev => [...prev, {
         numero: String(prod.numero), nombre: prod.nombre, resultados: [],
-        total_encontrados: 0, suficientes: false, deficit: 9, procesando: true
+        total_encontrados: 0, suficientes: false, deficit: 15, procesando: true
       }]);
 
-      const resultado = await buscarProductoRobusto(prod.nombre, String(prod.numero), 9);
+      const resultado = await buscarProductoRobusto(prod.nombre, String(prod.numero), 15);
 
       console.log(`   ✅ ${resultado.resultados.length} resultados encontrados`);
 
@@ -674,10 +688,10 @@ export default function MonitorMasivoICA() {
 
       setItemsLista(prev => [...prev, {
         numero: item.numero, nombre: item.nombre, resultados: [],
-        total_encontrados: 0, suficientes: false, deficit: 9, procesando: true
+        total_encontrados: 0, suficientes: false, deficit: 15, procesando: true
       }]);
 
-      const resultado = await buscarProductoRobusto(item.nombre, item.numero, 9);
+      const resultado = await buscarProductoRobusto(item.nombre, item.numero, 15);
       setItemsLista(prev => prev.map(p => p.numero === item.numero ? resultado : p));
       await new Promise(resolve => setTimeout(resolve, 800));
     }
@@ -760,6 +774,33 @@ export default function MonitorMasivoICA() {
     notify("✅ Exportación Excel completada - Todos los resultados", 'success');
   };
 
+  // 🔥 NUEVA FUNCIÓN: Exportar Excel con selección manual
+  const exportarConSeleccionManual = () => {
+    const exportData: any[] = [];
+
+    itemsLista.forEach(item => {
+      const resultadoSeleccionado = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+      
+      exportData.push({
+        ITEM: item.numero,
+        PRODUCTO_BUSCADO: item.nombre,
+        SELECCIONADO: seleccionManual.has(item.numero) ? '✓ Manual' : '✓ Automático',
+        TIENDA: resultadoSeleccionado?.tienda || '',
+        PRODUCTO_ENCONTRADO: resultadoSeleccionado?.nombre || 'SIN RESULTADOS',
+        PRECIO: resultadoSeleccionado?.precio_formateado || '-',
+        LINK: resultadoSeleccionado?.link || '-',
+        COINCIDENCIA: `${resultadoSeleccionado?.matching?.porcentaje || 0}%`
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Seleccion_manual');
+    XLSX.writeFile(wb, `seleccion_manual_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    notify("✅ Exportación con selección manual completada", 'success');
+  };
+
   const limpiarLista = () => {
     if (itemsLista.length > 0 && confirm('¿Eliminar todos los resultados?')) {
       setItemsLista([]);
@@ -768,6 +809,7 @@ export default function MonitorMasivoICA() {
       setShowModal(false);
       setArchivoExcel(null);
       setPestanasDisponibles([]);
+      setSeleccionManual(new Map());
       notify("Lista limpiada", 'error');
     }
   };
@@ -833,7 +875,7 @@ export default function MonitorMasivoICA() {
               <h1 className="font-black text-xl tracking-tight text-slate-900">MONITOR <span className="text-orange-600">ICA</span>
                 <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">Analizador IA</span>
               </h1>
-              <p className="text-[9px] text-slate-400">Mínimo 9 resultados • Contexto IA • Colores por coincidencia</p>
+              <p className="text-[9px] text-slate-400">Mínimo 15 resultados • Contexto IA • Colores por coincidencia</p>
             </div>
           </div>
 
@@ -876,6 +918,16 @@ export default function MonitorMasivoICA() {
               <FileSpreadsheet size={18} />
             </button>
 
+            {/* 🔥 NUEVO BOTÓN - Exportar con selección manual */}
+            <button
+              onClick={exportarConSeleccionManual}
+              disabled={itemsLista.length === 0}
+              className="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
+              title="Exportar Excel con selección manual"
+            >
+              <CheckCircle2 size={18} />
+            </button>
+
             <button
               onClick={limpiarLista}
               disabled={itemsLista.length === 0}
@@ -899,9 +951,7 @@ export default function MonitorMasivoICA() {
               {procesando && <button onClick={cancelarBarrido} className="text-[9px] font-black text-red-500">Cancelar</button>}
             </div>
 
-            {/* ========================================== */}
-            {/* CONTEXTO PERSONALIZADO (NUEVO) */}
-            {/* ========================================== */}
+            {/* Contexto personalizado */}
             <div className="mb-4">
               <button
                 onClick={() => setMostrarContexto(!mostrarContexto)}
@@ -1054,7 +1104,7 @@ export default function MonitorMasivoICA() {
           </div>
         </div>
 
-        {/* Resultados */}
+        {/* Resultados con selección manual */}
         <div className="lg:col-span-9 space-y-6 pb-20">
           {itemsLista.length === 0 ? (
             <div className="h-[50vh] flex flex-col items-center justify-center text-center">
@@ -1103,6 +1153,12 @@ export default function MonitorMasivoICA() {
                                     Mejor: {mejorMatch.tienda} - {mejorMatch.precio_formateado}
                                   </span>
                                 )}
+                                {/* 🔥 Indicador de selección manual */}
+                                {seleccionManual.has(item.numero) && (
+                                  <span className="text-[9px] font-black text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                                    ✓ Seleccionado manualmente
+                                  </span>
+                                )}
                               </>
                             )}
                           </div>
@@ -1122,6 +1178,7 @@ export default function MonitorMasivoICA() {
                         <table className="w-full text-left">
                           <thead className="bg-slate-50/50">
                             <tr className="text-[9px] uppercase text-slate-400 font-black tracking-widest">
+                              <th className="px-3 py-3 w-10 text-center">Sel.</th>
                               <th className="px-6 py-3">#</th>
                               <th className="px-6 py-3">Tienda</th>
                               <th className="px-6 py-3">Producto</th>
@@ -1131,10 +1188,23 @@ export default function MonitorMasivoICA() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                            {item.resultados.slice(0, 10).map((result, ridx) => {
+                            {item.resultados.slice(0, 15).map((result, ridx) => {
+                              const isSelected = seleccionManual.get(item.numero) === result;
                               const matchPct = result.matching?.porcentaje || (ridx === 0 ? 85 : ridx < 3 ? 70 : 50);
                               return (
                                 <tr key={ridx} className="hover:bg-slate-50/80 transition-all">
+                                  <td className="px-3 py-4 text-center">
+                                    <button
+                                      onClick={() => toggleSeleccionManual(item.numero, result)}
+                                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                        isSelected 
+                                          ? 'bg-purple-600 border-purple-600 text-white' 
+                                          : 'border-slate-300 hover:border-purple-400'
+                                      }`}
+                                    >
+                                      {isSelected && <CheckCircle2 size={12} />}
+                                    </button>
+                                  </td>
                                   <td className="px-6 py-4 text-[10px] font-black text-slate-300">
                                     {String(ridx + 1).padStart(2, '0')}
                                   </td>
@@ -1174,9 +1244,9 @@ export default function MonitorMasivoICA() {
                             })}
                           </tbody>
                         </table>
-                        {item.resultados.length > 10 && (
+                        {item.resultados.length > 15 && (
                           <div className="px-6 py-3 text-center text-[9px] text-slate-400 border-t">
-                            + {item.resultados.length - 10} resultados adicionales
+                            + {item.resultados.length - 15} resultados adicionales
                           </div>
                         )}
                       </div>

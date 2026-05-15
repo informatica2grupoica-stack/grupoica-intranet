@@ -765,7 +765,7 @@ def realizar_busqueda(producto: str, limite: int = 15):
 def busqueda_robusta():
     producto = request.args.get("producto", "").strip()
     numero_item = request.args.get("numero", "")
-    minimo_requerido = int(request.args.get("minimo", 9))
+    minimo_requerido = int(request.args.get("minimo", 15))
     force_refresh = request.args.get("force", "").lower() == "true"
 
     print("\n" + "=" * 60)
