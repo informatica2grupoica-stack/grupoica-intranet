@@ -33,7 +33,7 @@ import {
   ShoppingCart
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 // --- IMPORTACIÓN DEL COMPONENTE IA ---
@@ -41,10 +41,13 @@ import ChatBot from "@/components/ChatBot";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("Cargando...");
   const [userRol, setUserRol] = useState<string | null>(null);
   const [perfilId, setPerfilId] = useState<string | null>(null);
+  const [permisos, setPermisos] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -55,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         const { data: perfil } = await supabase
           .from('perfiles')
-          .select('nombre, rol, id')
+          .select('nombre, rol, id, permisos')
           .eq('user_id', session.user.id)
           .single();
 
@@ -63,10 +66,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           setUserName(perfil.nombre);
           setUserRol(perfil.rol);
           setPerfilId(perfil.id);
+          setPermisos(perfil.permisos);
         } else {
           setUserName(session.user.email?.split('@')[0] || "Usuario");
         }
       }
+      setIsLoading(false);
     };
 
     getUserData();
@@ -76,6 +81,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     await supabase.auth.signOut();
     window.location.href = "/login";
   };
+
+  // Verificar si es usuario de solo productos
+  const isOnlyProductsUser = permisos?.can_search_products_only === true;
+
+  // Redirigir si es usuario de solo productos y no está en página permitida
+  useEffect(() => {
+    if (!isLoading && isOnlyProductsUser) {
+      const allowedPaths = ['/buscador-productos', '/obuma-productos'];
+      const isAllowed = allowedPaths.includes(pathname);
+      if (!isAllowed) {
+        router.push('/buscador-productos');
+      }
+    }
+  }, [isLoading, isOnlyProductsUser, pathname, router]);
 
   // Secciones del menú SIN RRHH
   const sections = [
@@ -133,6 +152,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   ];
 
+  // Filtrar secciones para usuarios de solo productos
+  const getFilteredSections = () => {
+    if (isOnlyProductsUser) return [];
+    return sections;
+  };
+
+  const sectionsData = getFilteredSections();
+
+  // Si es usuario de solo productos, renderizar sin sidebar
+  if (isOnlyProductsUser) {
+    return (
+      <div className="flex min-h-screen bg-[#f8faff]">
+        <main className="flex-1 p-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2">
+                <img
+                  src="https://i.postimg.cc/NMhmBtKx/logo.webp"
+                  alt="Grupo ICA"
+                  className="h-8 w-auto"
+                />
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Cerrar Sesión
+              </button>
+            </div>
+            <div className="px-4">
+              {children}
+            </div>
+          </div>
+        </main>
+        <ChatBot />
+      </div>
+    );
+  }
+
+  // Render normal con sidebar para otros usuarios
   return (
     <div className="flex min-h-screen bg-[#f8faff]">
       {/* SIDEBAR */}
@@ -151,7 +211,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* NAVEGACIÓN */}
         <nav className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-          {sections.map((section, idx) => (
+          {sectionsData.map((section, idx) => (
             <div key={idx} className="mb-6">
               <h3 className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                 {section.title}

@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   UserPlus, Loader2, X, Pencil, Trash2, Search, 
   Lock, Briefcase, CheckCircle2, Circle, LayoutList, Package, Laptop,
-  Calendar, Phone, MapPin, Building, Globe
+  Calendar, Phone, MapPin, Building, Globe, Eye
 } from "lucide-react";
 
 export default function GestionUsuarios() {
@@ -37,7 +37,8 @@ export default function GestionUsuarios() {
       can_create_tasks: false,
       can_view_billing: false,
       can_manage_devices: false,
-      can_create_products: false
+      can_create_products: false,
+      can_search_products_only: false
     }
   });
 
@@ -84,7 +85,8 @@ export default function GestionUsuarios() {
       cargo: "", rol: "user",
       permisos: { 
         can_assign_tasks: false, can_create_tasks: false, 
-        can_view_billing: false, can_manage_devices: false, can_create_products: false 
+        can_view_billing: false, can_manage_devices: false, can_create_products: false,
+        can_search_products_only: false
       }
     });
     setMensaje({ tipo: "", texto: "" });
@@ -107,9 +109,13 @@ export default function GestionUsuarios() {
       region: user.region || "",
       cargo: user.cargo || "",
       rol: user.rol,
-      permisos: user.permisos || { 
-        can_assign_tasks: false, can_create_tasks: false, 
-        can_view_billing: false, can_manage_devices: false, can_create_products: false 
+      permisos: {
+        can_assign_tasks: user.permisos?.can_assign_tasks || false,
+        can_create_tasks: user.permisos?.can_create_tasks || false,
+        can_view_billing: user.permisos?.can_view_billing || false,
+        can_manage_devices: user.permisos?.can_manage_devices || false,
+        can_create_products: user.permisos?.can_create_products || false,
+        can_search_products_only: user.permisos?.can_search_products_only || false
       }
     });
     setIsModalOpen(true);
@@ -204,6 +210,11 @@ export default function GestionUsuarios() {
   // Obtener lista de roles permitidos desde el CHECK constraint
   const rolesPermitidos = ['superuser', 'admin', 'user', 'rrhh', 'jefe', 'vendedor'];
 
+  // Verificar si un usuario tiene el permiso de solo productos (para mostrar indicador)
+  const tienePermisoSoloProductos = (usuario: any) => {
+    return usuario.permisos?.can_search_products_only === true;
+  };
+
   return (
     <div className="animate-in fade-in duration-500">
       {/* HEADER */}
@@ -247,6 +258,7 @@ export default function GestionUsuarios() {
                 <th className="px-3 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Teléfono</th>
                 <th className="px-3 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-center">Cargo</th>
                 <th className="px-3 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-center">Rol</th>
+                <th className="px-3 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-center">Acceso</th>
                 <th className="px-3 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-center">Estado</th>
                 <th className="px-5 py-5 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-right">Acciones</th>
               </tr>
@@ -254,14 +266,14 @@ export default function GestionUsuarios() {
             <tbody className="divide-y divide-slate-50">
               {loadingLista ? (
                 <tr>
-                  <td colSpan={8} className="py-24 text-center">
+                  <td colSpan={9} className="py-24 text-center">
                     <Loader2 className="w-10 h-10 animate-spin mx-auto text-blue-600 mb-2 opacity-20" />
                     <p className="text-slate-400 text-xs">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : usuariosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-24 text-center">
+                  <td colSpan={9} className="py-24 text-center">
                     <p className="text-slate-400 text-sm">No se encontraron usuarios</p>
                   </td>
                 </tr>
@@ -269,18 +281,20 @@ export default function GestionUsuarios() {
                 usuariosFiltrados.map((user) => {
                   const esSuperUser = user.rol === 'superuser';
                   const soyAdminOSuper = perfilLogueado?.rol === 'admin' || perfilLogueado?.rol === 'superuser';
+                  const esSoloProductos = tienePermisoSoloProductos(user);
 
                   return (
                     <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-500 font-bold text-xs border border-white shadow-sm transition-all ${esSuperUser ? 'bg-indigo-600 text-white' : 'bg-slate-100 group-hover:bg-blue-600 group-hover:text-white'}`}>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-500 font-bold text-xs border border-white shadow-sm transition-all ${esSuperUser ? 'bg-indigo-600 text-white' : (esSoloProductos ? 'bg-emerald-600 text-white' : 'bg-slate-100 group-hover:bg-blue-600 group-hover:text-white')}`}>
                             {user.nombre?.substring(0, 1)}{user.apellido?.substring(0, 1)}
                           </div>
                           <div>
                             <p className="font-bold text-slate-800 flex items-center gap-2 text-sm">
                               {user.nombre} {user.apellido}
                               {esSuperUser && <Lock className="w-3 h-3 text-indigo-500" />}
+                              {esSoloProductos && !esSuperUser && <Eye className="w-3 h-3 text-emerald-500" />}
                             </p>
                             <p className="text-[9px] text-slate-400 font-mono">{user.email}</p>
                           </div>
@@ -288,19 +302,19 @@ export default function GestionUsuarios() {
                       </td>
                       <td className="px-3 py-4">
                         <p className="text-xs font-mono text-slate-600">{user.rut || '—'}</p>
-                      </td>
+                       </td>
                       <td className="px-3 py-4">
                         <p className="text-xs text-slate-600">{formatearFecha(user.fecha_nacimiento)}</p>
-                      </td>
+                       </td>
                       <td className="px-3 py-4">
                         <p className="text-xs text-slate-600">{user.telefono || '—'}</p>
-                      </td>
+                       </td>
                       <td className="px-3 py-4 text-center">
                         <div className="flex items-center justify-center gap-1.5 text-slate-600 text-xs">
                           <Briefcase className="w-3 h-3 text-slate-300" />
                           {user.cargo || 'Operativo'}
                         </div>
-                      </td>
+                       </td>
                       <td className="px-3 py-4 text-center">
                         <span className={`text-[9px] font-black px-2.5 py-1 rounded-full border ${
                           esSuperUser ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 
@@ -311,7 +325,18 @@ export default function GestionUsuarios() {
                         }`}>
                           {user.rol?.toUpperCase()}
                         </span>
-                      </td>
+                       </td>
+                      <td className="px-3 py-4 text-center">
+                        {esSoloProductos ? (
+                          <span className="text-[9px] font-black px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600">
+                            🔍 SOLO PRODUCTOS
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black px-2.5 py-1 rounded-full bg-slate-50 border border-slate-100 text-slate-400">
+                            COMPLETO
+                          </span>
+                        )}
+                       </td>
                       <td className="px-3 py-4 text-center">
                         <button 
                           disabled={esSuperUser || !soyAdminOSuper}
@@ -325,7 +350,7 @@ export default function GestionUsuarios() {
                         >
                           {user.activo ? "ACTIVO" : "INACTIVO"}
                         </button>
-                      </td>
+                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {!esSuperUser && soyAdminOSuper ? (
@@ -341,13 +366,13 @@ export default function GestionUsuarios() {
                             <span className="text-[9px] text-slate-300 font-bold px-2 italic uppercase">Protegido</span>
                           )}
                         </div>
-                      </td>
+                       </td>
                     </tr>
                   );
                 })
               )}
             </tbody>
-          </table>
+           </table>
         </div>
       </div>
 
@@ -426,13 +451,14 @@ export default function GestionUsuarios() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-400">⚡ Permisos Especiales</span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {[
                     { key: 'can_assign_tasks', label: 'Asignar Tareas', icon: LayoutList },
                     { key: 'can_create_tasks', label: 'Crear Tareas', icon: CheckCircle2 },
                     { key: 'can_view_billing', label: 'Ver Facturación', icon: Building },
                     { key: 'can_manage_devices', label: 'Gestionar Equipos', icon: Laptop },
                     { key: 'can_create_products', label: 'Crear Productos', icon: Package },
+                    { key: 'can_search_products_only', label: '🔍 SOLO Productos', icon: Eye },
                   ].map((p) => (
                     <button
                       key={p.key}
@@ -450,6 +476,14 @@ export default function GestionUsuarios() {
                     </button>
                   ))}
                 </div>
+                {/* Advertencia sobre el permiso SOLO Productos */}
+                {(formData.permisos as any).can_search_products_only && (
+                  <div className="mt-3 p-2 bg-amber-500/20 rounded-lg border border-amber-500/30">
+                    <p className="text-[9px] text-amber-300 text-center font-bold">
+                      ⚠️ Este usuario SOLO podrá ver el buscador de productos y nada más
+                    </p>
+                  </div>
+                )}
               </div>
 
               {mensaje.texto && (
