@@ -1,11 +1,13 @@
 import re
+import io
 import time
 import random
 import requests
 import json
+from datetime import datetime
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from functools import lru_cache
 try:
@@ -13,6 +15,11 @@ try:
     BS4_DISPONIBLE = True
 except ImportError:
     BS4_DISPONIBLE = False
+try:
+    import openpyxl
+    OPENPYXL_DISPONIBLE = True
+except ImportError:
+    OPENPYXL_DISPONIBLE = False
 
 app = Flask(__name__)
 CORS(app)
@@ -989,6 +996,127 @@ def diagnostico():
 def clear_cache():
     cache_resultados.clear()
     return jsonify({"status": "ok", "mensaje": "Caché limpiado"})
+
+
+@app.route("/python/exportar-costeo", methods=["POST"])
+def exportar_costeo():
+    """Recibe el Excel original + precios buscados, devuelve el mismo Excel con VALOR C/IVA y LINK 1 rellenados.
+    Usa openpyxl para preservar 100% el formato, estilos, fórmulas y estructura original."""
+    if not OPENPYXL_DISPONIBLE:
+        return jsonify({"error": "openpyxl no disponible en el servidor"}), 500
+
+    if "archivo" not in request.files:
+        return jsonify({"error": "No se envió el archivo Excel"}), 400
+
+    archivo = request.files["archivo"]
+    try:
+        datos = json.loads(request.form.get("datos", "{}"))
+    except Exception:
+        return jsonify({"error": "Datos JSON inválidos"}), 400
+
+    sheet_name = datos.get("sheet", "COSTEO")
+    items_data = datos.get("items", [])  # [{ numero, precio, link, tienda, match }, ...]
+
+    if not items_data:
+        return jsonify({"error": "No hay ítems con resultados"}), 400
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(archivo.read()))
+    except Exception as e:
+        return jsonify({"error": f"No se pudo abrir el Excel: {e}"}), 400
+
+    # Seleccionar pestaña
+    if sheet_name not in wb.sheetnames:
+        sheet_name = wb.sheetnames[0]
+    ws = wb[sheet_name]
+
+    # Detectar fila de encabezados y columnas clave
+    header_row_idx = None
+    col_item = col_valor_civa = col_link1 = None
+
+    for row in ws.iter_rows(min_row=1, max_row=25):
+        headers = {}
+        for cell in row:
+            h = str(cell.value or "").upper().strip()
+            if h:
+                headers[h] = cell.column
+        if "ITEM" in headers:
+            header_row_idx = row[0].row
+            col_item      = headers.get("ITEM")
+            # VALOR C/IVA — buscar columna que contenga VALOR e IVA
+            for h, c in headers.items():
+                if "VALOR" in h and "IVA" in h:
+                    col_valor_civa = c
+                    break
+            # LINK 1 — primer header que empiece con LINK
+            for h, c in sorted(headers.items(), key=lambda x: x[1]):
+                if h.startswith("LINK"):
+                    col_link1 = c
+                    break
+            break
+
+    if not header_row_idx or not col_item:
+        return jsonify({"error": "No se encontró columna ITEM en la pestaña seleccionada"}), 400
+    if not col_valor_civa:
+        return jsonify({"error": "No se encontró columna VALOR C/IVA"}), 400
+
+    # Columnas extra al final para referencia (no afectan las fórmulas)
+    max_col = ws.max_column
+    col_tienda_extra = max_col + 1
+    col_match_extra  = max_col + 2
+    ws.cell(row=header_row_idx, column=col_tienda_extra).value = "TIENDA COTIZADA"
+    ws.cell(row=header_row_idx, column=col_match_extra).value  = "% COINCIDENCIA"
+
+    # Mapa precio por item
+    precios = {str(i["numero"]): i for i in items_data}
+
+    filled = 0
+    for row in ws.iter_rows(min_row=header_row_idx + 1):
+        cell_item = row[col_item - 1]
+        if cell_item.value is None:
+            continue
+        item_str = str(cell_item.value).strip()
+        if not item_str.isdigit():
+            continue
+
+        dato = precios.get(item_str)
+        if not dato or not dato.get("precio"):
+            continue
+
+        precio = dato["precio"]
+        link   = dato.get("link", "")
+        tienda = dato.get("tienda", "")
+        match  = dato.get("match", 0)
+        r      = cell_item.row
+
+        # ✅ Rellenar VALOR C/IVA — las fórmulas F,G,H,I,J calculan desde aquí
+        ws.cell(row=r, column=col_valor_civa).value = precio
+
+        # ✅ Rellenar LINK 1
+        if col_link1 and link:
+            ws.cell(row=r, column=col_link1).value = link
+
+        # Columnas extra de referencia
+        ws.cell(row=r, column=col_tienda_extra).value = tienda
+        ws.cell(row=r, column=col_match_extra).value  = f"{match}%"
+        filled += 1
+
+    if filled == 0:
+        return jsonify({"error": "No se encontraron ítems con resultados para exportar"}), 400
+
+    # Guardar a buffer y devolver como descarga
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    fecha = datetime.now().strftime("%Y-%m-%d")
+    print(f"  📊 Export COSTEO: {filled} ítems rellenados en '{sheet_name}'")
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"COSTEO_cotizado_{fecha}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 if __name__ == "__main__":

@@ -527,9 +527,9 @@ export default function MonitorMasivoICA() {
   };
   const cancelarBarrido = () => { abortRef.current = true; notify('Cancelando...', 'warning'); };
 
-  // ─── Export: mismo archivo Excel con precios rellenados (solo VALOR C/IVA + LINK 1) ───
-  const exportarMismoExcel = () => {
-    if (!workbookOriginal || productosExcel.length === 0) {
+  // ─── Export: mismo Excel via Python/openpyxl (preserva 100% formato original) ──
+  const exportarMismoExcel = async () => {
+    if (!archivoExcel || productosExcel.length === 0) {
       notify('Carga un Excel primero para usar esta función', 'warning');
       return;
     }
@@ -538,124 +538,56 @@ export default function MonitorMasivoICA() {
       return;
     }
 
-    // Clonar el workbook completo preservando todas las propiedades
-    const wbClone = XLSX.utils.book_new();
-    workbookOriginal.SheetNames.forEach(name => {
-      wbClone.Sheets[name] = JSON.parse(JSON.stringify(workbookOriginal.Sheets[name]));
-      wbClone.SheetNames.push(name);
-    });
-    if (workbookOriginal.Props)     wbClone.Props     = { ...workbookOriginal.Props };
-    if (workbookOriginal.Custprops) wbClone.Custprops = { ...workbookOriginal.Custprops };
-    if ((workbookOriginal as any).Workbook) {
-      (wbClone as any).Workbook = JSON.parse(JSON.stringify((workbookOriginal as any).Workbook));
-    }
-    // Forzar que Excel recalcule todas las fórmulas al abrir el archivo
-    if (!(wbClone as any).Workbook) (wbClone as any).Workbook = {};
-    if (!(wbClone as any).Workbook.CalcPr) (wbClone as any).Workbook.CalcPr = {};
-    (wbClone as any).Workbook.CalcPr.fullCalcOnLoad = true;
+    const items = itemsLista
+      .map(item => {
+        const selected = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+        if (!selected?.precio_valor) return null;
+        return {
+          numero: item.numero,
+          precio: selected.precio_valor,
+          link:   selected.link || '',
+          tienda: selected.tienda || '',
+          match:  selected.matching?.porcentaje ?? 0,
+        };
+      })
+      .filter(Boolean);
 
-    const ws = wbClone.Sheets[sheetNameActual];
-    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-
-    // Detectar fila de encabezados y columnas clave
-    let headerRow = -1;
-    let colItem = -1, colValorCIVA = -1, colLink1 = -1;
-    const maxCol = jsonData.reduce((max, row) => Math.max(max, (row as any[]).length), 0);
-
-    for (let i = 0; i < Math.min(20, jsonData.length); i++) {
-      const row = jsonData[i] as any[];
-      if (!row) continue;
-      // Buscar fila que tenga exactamente "ITEM" como celda
-      if (row.some((c: any) => String(c || '').toUpperCase().trim() === 'ITEM')) {
-        headerRow = i;
-        row.forEach((cell: any, j: number) => {
-          const h = String(cell || '').toUpperCase().trim();
-          if (h === 'ITEM') colItem = j;
-          else if (h.includes('VALOR') && h.includes('IVA')) colValorCIVA = j;
-          else if (h.includes('LINK') && colLink1 < 0) colLink1 = j; // primer LINK encontrado = LINK 1
-        });
-        console.log(`📌 Export | header fila ${i+1} | ITEM col${colItem} | VALOR_IVA col${colValorCIVA} | LINK1 col${colLink1}`);
-        break;
-      }
-    }
-
-    if (headerRow === -1 || colItem === -1) {
-      notify('No se encontró columna ITEM en el Excel. Verifica la pestaña seleccionada.', 'error');
-      return;
-    }
-    if (colValorCIVA === -1) {
-      notify('No se encontró columna VALOR C/IVA. Verifica el formato del Excel.', 'error');
+    if (items.length === 0) {
+      notify('No hay resultados para exportar', 'warning');
       return;
     }
 
-    // Columnas extra al final (solo referencia — no modifican el COSTEO original)
-    const colTienda = maxCol;
-    const colMatch  = maxCol + 1;
-    const toCell = (r: number, c: number) => XLSX.utils.encode_cell({ r, c });
+    notify(`Generando Excel con ${items.length} precios...`, 'success');
 
-    ws[toCell(headerRow, colTienda)] = { v: 'TIENDA COTIZADA', t: 's' };
-    ws[toCell(headerRow, colMatch)]  = { v: '% COINCIDENCIA', t: 's' };
+    const formData = new FormData();
+    formData.append('archivo', archivoExcel);
+    formData.append('datos', JSON.stringify({ sheet: sheetNameActual, items }));
 
-    // Mapas de búsqueda
-    const resultadosPorItem = new Map<string, ItemLista>();
-    itemsLista.forEach(item => resultadosPorItem.set(item.numero, item));
+    try {
+      const res = await fetch('/python/exportar-costeo', { method: 'POST', body: formData });
 
-    let filled = 0;
-
-    for (let i = headerRow + 1; i < jsonData.length; i++) {
-      const row = jsonData[i] as any[];
-      if (!row || row.length === 0) continue;
-      const itemRaw = colItem >= 0 ? row[colItem] : null;
-      if (itemRaw == null) continue;
-      const itemStr = String(itemRaw).trim();
-      // Saltar filas de totales/no-numéricas
-      if (!itemStr || isNaN(Number(itemStr))) continue;
-
-      const itemResult = resultadosPorItem.get(itemStr);
-      if (!itemResult || itemResult.resultados.length === 0) continue;
-
-      const selected = seleccionManual.get(itemStr) || itemResult.mejor_match || itemResult.resultados[0];
-      if (!selected || !selected.precio_valor) continue;
-
-      const precioWebIVA = selected.precio_valor;
-      const porcentaje   = selected.matching?.porcentaje ?? 0;
-
-      // ✅ Escribir solo en VALOR C/IVA → las fórmulas de Costo unitario/total calculan solos
-      ws[toCell(i, colValorCIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
-
-      // ✅ Escribir LINK 1 si existe la columna
-      if (colLink1 >= 0 && selected.link) {
-        ws[toCell(i, colLink1)] = { v: selected.link, t: 's' };
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        notify(`Error: ${(err as any).error || `HTTP ${res.status}`}`, 'error');
+        return;
       }
 
-      // Columnas extra de referencia
-      ws[toCell(i, colTienda)] = { v: selected.tienda, t: 's' };
-      ws[toCell(i, colMatch)]  = { v: `${porcentaje}%`, t: 's' };
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `COSTEO_cotizado_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-      filled++;
+      notify(`✅ ${items.length} ítems exportados — formato idéntico al original`, 'success');
+    } catch (e: any) {
+      notify(`Error al exportar: ${e.message}`, 'error');
     }
-
-    if (filled === 0) {
-      notify('No se encontraron resultados para exportar. Realiza la búsqueda primero.', 'warning');
-      return;
-    }
-
-    // Actualizar rango del sheet
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    range.e.c = Math.max(range.e.c, colMatch);
-    ws['!ref'] = XLSX.utils.encode_range(range);
-
-    // Anchos de columnas extra
-    const colWidths = ws['!cols'] ? [...(ws['!cols'] as any[])] : Array(maxCol).fill({ wch: 12 });
-    while (colWidths.length <= colMatch) colWidths.push({ wch: 14 });
-    colWidths[colTienda] = { wch: 22 };
-    colWidths[colMatch]  = { wch: 14 };
-    ws['!cols'] = colWidths;
-
-    const fecha = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wbClone, `COSTEO_cotizado_${fecha}.xlsx`);
-    notify(`✅ ${filled} ítems exportados — abre el archivo y Excel calculará Costo neto y Total automáticamente`, 'success');
   };
+
 
   // ─── Export: solo mejor resultado ────────────────────────────────────────────
   const exportarMejorResultado = () => {
@@ -800,7 +732,7 @@ export default function MonitorMasivoICA() {
             </div>
 
             {/* Export: mismo Excel */}
-            <button onClick={exportarMismoExcel} disabled={itemsLista.length === 0 || !workbookOriginal}
+            <button onClick={exportarMismoExcel} disabled={itemsLista.length === 0 || !archivoExcel}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-3 rounded-2xl transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5 text-[10px] font-black"
               title="Exportar en la misma estructura del Excel original">
               <FileSpreadsheet size={16} /> MISMO EXCEL
