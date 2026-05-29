@@ -8,6 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from functools import lru_cache
+try:
+    from bs4 import BeautifulSoup
+    BS4_DISPONIBLE = True
+except ImportError:
+    BS4_DISPONIBLE = False
 
 app = Flask(__name__)
 CORS(app)
@@ -26,10 +31,11 @@ HEADERS_BROWSER = {
 
 # ─── Tiendas VTEX Chile (complementan a Google Shopping) ────────────────────
 VTEX_STORES = [
-    {"dominio": "www.easy.cl",        "nombre": "Easy",        "prioridad": 10},
-    {"dominio": "www.construmart.cl", "nombre": "Construmart", "prioridad": 10},
-    {"dominio": "www.imperial.cl",    "nombre": "Imperial",    "prioridad": 9},
-    {"dominio": "www.chilemat.cl",    "nombre": "Chilemat",    "prioridad": 9},
+    {"dominio": "www.easy.cl",           "nombre": "Easy",        "prioridad": 10},
+    {"dominio": "www.construmart.cl",    "nombre": "Construmart", "prioridad": 10},
+    {"dominio": "www.imperial.cl",       "nombre": "Imperial",    "prioridad": 9},
+    {"dominio": "www.chilemat.cl",       "nombre": "Chilemat",    "prioridad": 9},
+    {"dominio": "www.placacentro.cl",    "nombre": "Placacentro", "prioridad": 9},
 ]
 
 DOMINIOS_CHILE = {
@@ -538,6 +544,100 @@ def buscar_web_organica(producto: str, categoria: str, limite: int = 8):
     return resultados
 
 
+# ─── DuckDuckGo HTML (fuente libre, sin API key) ─────────────────────────────
+
+def buscar_duckduckgo(producto: str, limite: int = 12):
+    """Scraping de DuckDuckGo HTML — gratuito, sin límites de cuota."""
+    cache_key = get_cache_key(f"ddg_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        query = f"{producto} precio Chile comprar"
+        r = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query, "kl": "cl-es"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "es-CL,es;q=0.9",
+                "Accept": "text/html",
+            },
+            timeout=10
+        )
+        if r.status_code != 200:
+            print(f"  [DDG] HTTP {r.status_code}")
+            return []
+
+        html = r.text
+        resultados = []
+
+        if BS4_DISPONIBLE:
+            soup = BeautifulSoup(html, "lxml")
+            for result in soup.select(".result")[:limite * 2]:
+                a_tag = result.select_one(".result__a")
+                snippet_tag = result.select_one(".result__snippet")
+                if not a_tag: continue
+                title = a_tag.get_text(strip=True)
+                url = a_tag.get("href", "")
+                # DDG redirige por /l/?uddg=... — extraer URL real
+                url_m = re.search(r'uddg=([^&]+)', url)
+                if url_m:
+                    from urllib.parse import unquote
+                    url = unquote(url_m.group(1))
+                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                # Extraer precio del snippet
+                precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
+                if not precio_m: continue
+                precio_str = precio_m.group(1).replace('.', '').replace(',', '')
+                precio = limpiar_precio(precio_str)
+                if not precio: continue
+                skip = any(ind in url.lower() for ind in INDICADORES_EXTRANJEROS)
+                if skip: continue
+                domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url)
+                tienda = domain_m.group(1) if domain_m else "Web"
+                resultados.append({
+                    "tienda": tienda[:40],
+                    "nombre": limpiar_nombre(title)[:150],
+                    "precio_con_iva": precio,
+                    "url": url,
+                    "fuente": "duckduckgo",
+                    "pais": "CL",
+                })
+        else:
+            # Fallback sin BeautifulSoup — regex simple
+            from urllib.parse import unquote
+            links = re.findall(r'result__a[^>]+href="(/l/\?[^"]+)"[^>]*>([^<]+)', html)
+            snippets = re.findall(r'result__snippet[^>]*>([^<]+)', html)
+            for i, (raw_href, title) in enumerate(links[:limite * 2]):
+                url_m = re.search(r'uddg=([^&]+)', raw_href)
+                if not url_m: continue
+                url = unquote(url_m.group(1))
+                snippet = snippets[i] if i < len(snippets) else ""
+                precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
+                if not precio_m: continue
+                precio = limpiar_precio(precio_m.group(1).replace('.', '').replace(',', ''))
+                if not precio: continue
+                skip = any(ind in url.lower() for ind in INDICADORES_EXTRANJEROS)
+                if skip: continue
+                domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url)
+                tienda = domain_m.group(1) if domain_m else "Web"
+                resultados.append({
+                    "tienda": tienda[:40],
+                    "nombre": limpiar_nombre(title)[:150],
+                    "precio_con_iva": precio,
+                    "url": url,
+                    "fuente": "duckduckgo",
+                    "pais": "CL",
+                })
+
+        if resultados:
+            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        print(f"  [DDG] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [DDG] Error: {e}")
+        return []
+
+
 # ─── VTEX stores (Easy, Construmart, Imperial, Chilemat) ─────────────────────
 # Fuente ADICIONAL — no reemplaza Google Shopping
 
@@ -628,18 +728,19 @@ def realizar_busqueda(producto: str, limite: int = 15):
                 urls_vistas.add(clave)
                 resultados.append(r)
 
-    # ── Fase 1: Todas las fuentes libres + Google Shopping en paralelo ──────────
-    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Google Shopping + VTEX...")
-    with ThreadPoolExecutor(max_workers=7) as ex:
+    # ── Fase 1: Fuentes libres + Google Shopping en paralelo ─────────────────
+    print(f"  📡 Fase 1: MercadoLibre + Sodimac + DDG + Google Shopping + VTEX...")
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
+            ex.submit(buscar_duckduckgo, producto, 12): "DuckDuckGo",
             ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
         }
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, producto, 6)] = store["nombre"]
 
-        for future in as_completed(futures, timeout=12):
+        for future in as_completed(futures, timeout=14):
             nombre_f = futures[future]
             try:
                 nuevos = future.result()
@@ -653,9 +754,11 @@ def realizar_busqueda(producto: str, limite: int = 15):
         queries = generar_queries(producto, categoria)
         for query in queries[1:3]:
             if len(resultados) >= 9: break
-            print(f"  📡 Variación Serper: '{query[:50]}'...")
+            print(f"  📡 Variación DDG/Serper: '{query[:50]}'...")
             time.sleep(random.uniform(0.2, 0.3))
-            agregar(buscar_google_shopping(query, 8))
+            agregar(buscar_duckduckgo(query, 8))
+            if len(resultados) < 9:
+                agregar(buscar_google_shopping(query, 8))
 
     # ── Fase 3: Web orgánica si sigue habiendo muy pocos resultados ───────────
     if len(resultados) < 5:
@@ -764,8 +867,8 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "serper_activo": not SERPER_QUOTA_AGOTADA,
-        "fuentes": ["Google Shopping (Serper)", "MercadoLibre Chile"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "4.1"
+        "fuentes": ["DuckDuckGo (libre)", "Google Shopping (Serper)", "MercadoLibre Chile"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "4.2"
     })
 
 

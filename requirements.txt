@@ -2,3 +2,5 @@ requests
 flask
 flask-cors
 gunicorn
+beautifulsoup4
+lxml

@@ -506,20 +506,21 @@ export default function MonitorMasivoICA() {
     const ws = wbClone.Sheets[sheetNameActual];
     const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    // Encontrar encabezados y última columna
+    // Encontrar encabezados — detectar columnas existentes
     let headerRow = -1;
-    let colItem = -1, colDetalle = -1;
+    let colItem = -1, colValorCIVA = -1, colLink = -1;
     const maxColExistente = jsonData.reduce((max, row) => Math.max(max, (row as any[]).length), 0);
 
     for (let i = 0; i < Math.min(20, jsonData.length); i++) {
       const row = jsonData[i] as any[];
       if (!row) continue;
-      if (row.some((c: any) => String(c || '').toUpperCase().trim() === 'ITEM')) {
+      if (row.some((c: any) => ['ITEM', 'DETALLE'].includes(String(c || '').toUpperCase().trim()))) {
         headerRow = i;
         row.forEach((cell: any, j: number) => {
           const h = String(cell || '').toUpperCase().trim();
           if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
-          else if (h === 'DETALLE' || h.includes('DETALLE')) colDetalle = j;
+          else if (h.includes('VALOR') && h.includes('IVA')) colValorCIVA = j;
+          else if (h.includes('LINK')) colLink = j;
         });
         break;
       }
@@ -530,29 +531,27 @@ export default function MonitorMasivoICA() {
       return;
     }
 
-    // Columnas nuevas al final
-    const colWebIVA = maxColExistente;
-    const colCostoNeto = maxColExistente + 1;
-    const colCostoTotal = maxColExistente + 2;
-    const colTienda = maxColExistente + 3;
-    const colCoincidencia = maxColExistente + 4;
+    // Columnas de cotización al final (preserva columnas originales intactas)
+    const colPrecioWeb = maxColExistente;
+    const colTienda   = maxColExistente + 1;
+    const colMatch    = maxColExistente + 2;
+    const colAhorro   = maxColExistente + 3;
 
-    // Escribir encabezados nuevos
     const toCell = (r: number, c: number) => XLSX.utils.encode_cell({ r, c });
-    ws[toCell(headerRow, colWebIVA)] = { v: 'PRECIO WEB C/IVA', t: 's' };
-    ws[toCell(headerRow, colCostoNeto)] = { v: 'COSTO UNIT. NETO', t: 's' };
-    ws[toCell(headerRow, colCostoTotal)] = { v: 'COSTO TOTAL NETO', t: 's' };
-    ws[toCell(headerRow, colTienda)] = { v: 'TIENDA ENCONTRADA', t: 's' };
-    ws[toCell(headerRow, colCoincidencia)] = { v: '% COINCIDENCIA', t: 's' };
 
-    // Mapa de resultados por item número
+    // Encabezados nuevos
+    ws[toCell(headerRow, colPrecioWeb)] = { v: 'PRECIO WEB C/IVA', t: 's' };
+    ws[toCell(headerRow, colTienda)]    = { v: 'TIENDA COTIZACIÓN', t: 's' };
+    ws[toCell(headerRow, colMatch)]     = { v: '% COINCIDENCIA', t: 's' };
+    ws[toCell(headerRow, colAhorro)]    = { v: 'DIFERENCIA ($)', t: 's' };
+
+    // Mapas
     const resultadosPorItem = new Map<string, ItemLista>();
     itemsLista.forEach(item => resultadosPorItem.set(item.numero, item));
+    const prodPorNumero = new Map<string, ProductoExcel>();
+    productosExcel.forEach(p => prodPorNumero.set(String(p.numero), p));
 
-    const productosExcelPorNumero = new Map<string, ProductoExcel>();
-    productosExcel.forEach(p => productosExcelPorNumero.set(String(p.numero), p));
-
-    // Rellenar cada fila del Excel original
+    // Rellenar filas
     for (let i = headerRow + 1; i < jsonData.length; i++) {
       const row = jsonData[i] as any[];
       if (!row || row.length === 0) continue;
@@ -563,43 +562,46 @@ export default function MonitorMasivoICA() {
       const itemResult = resultadosPorItem.get(itemNumStr);
       if (!itemResult) continue;
 
-      const prodOriginal = productosExcelPorNumero.get(itemNumStr);
-      const cantidad = prodOriginal?.cantidad || 1;
-
-      // Resultado seleccionado (manual > mejor_match > primer resultado)
+      const prodOrig = prodPorNumero.get(itemNumStr);
       const selected = seleccionManual.get(itemNumStr) || itemResult.mejor_match || itemResult.resultados[0];
       if (!selected) continue;
 
       const precioWebIVA = selected.precio_valor || 0;
-      const costoNeto = Math.round(precioWebIVA / IVA);
-      const costoTotal = Math.round(costoNeto * cantidad);
+      const precioRefCIVA = prodOrig?.valor_civa || 0;
+      const diferencia = precioRefCIVA > 0 ? precioRefCIVA - precioWebIVA : 0;
       const porcentaje = selected.matching?.porcentaje ?? 0;
 
-      ws[toCell(i, colWebIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
-      ws[toCell(i, colCostoNeto)] = { v: costoNeto, t: 'n', z: '"$"#,##0' };
-      ws[toCell(i, colCostoTotal)] = { v: costoTotal, t: 'n', z: '"$"#,##0' };
-      ws[toCell(i, colTienda)] = { v: selected.tienda, t: 's' };
-      ws[toCell(i, colCoincidencia)] = { v: `${porcentaje}%`, t: 's' };
+      // Actualizar VALOR C/IVA con precio web encontrado
+      if (colValorCIVA >= 0) {
+        ws[toCell(i, colValorCIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
+      }
+      // Actualizar LINK con link del producto encontrado
+      if (colLink >= 0 && selected.link) {
+        ws[toCell(i, colLink)] = { v: selected.link, t: 's' };
+      }
+      // Columnas adicionales de cotización
+      ws[toCell(i, colPrecioWeb)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
+      ws[toCell(i, colTienda)]    = { v: selected.tienda, t: 's' };
+      ws[toCell(i, colMatch)]     = { v: `${porcentaje}%`, t: 's' };
+      ws[toCell(i, colAhorro)]    = { v: diferencia, t: 'n', z: '"$"#,##0' };
     }
 
-    // Actualizar rango del sheet
+    // Actualizar rango y anchos
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    range.e.c = Math.max(range.e.c, colCoincidencia);
+    range.e.c = Math.max(range.e.c, colAhorro);
     ws['!ref'] = XLSX.utils.encode_range(range);
 
-    // Ajustar anchos de columnas nuevas
-    const colWidths = ws['!cols'] || Array(colWebIVA).fill({ wch: 12 });
-    while (colWidths.length <= colCoincidencia) colWidths.push({ wch: 12 });
-    colWidths[colWebIVA] = { wch: 18 };
-    colWidths[colCostoNeto] = { wch: 18 };
-    colWidths[colCostoTotal] = { wch: 18 };
-    colWidths[colTienda] = { wch: 22 };
-    colWidths[colCoincidencia] = { wch: 14 };
+    const colWidths = ws['!cols'] || Array(colPrecioWeb).fill({ wch: 12 });
+    while (colWidths.length <= colAhorro) colWidths.push({ wch: 14 });
+    colWidths[colPrecioWeb] = { wch: 18 };
+    colWidths[colTienda]    = { wch: 22 };
+    colWidths[colMatch]     = { wch: 14 };
+    colWidths[colAhorro]    = { wch: 16 };
     ws['!cols'] = colWidths;
 
     const fecha = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wbClone, `COSTEO_actualizado_${fecha}.xlsx`);
-    notify('✅ Excel exportado con estructura original + precios web', 'success');
+    XLSX.writeFile(wbClone, `COSTEO_cotizado_${fecha}.xlsx`);
+    notify('✅ Excel exportado — misma estructura con precios web', 'success');
   };
 
   // ─── Export: solo mejor resultado ────────────────────────────────────────────
@@ -666,6 +668,12 @@ export default function MonitorMasivoICA() {
   const getMatchingColor = (p = 0) => p >= 85 ? 'bg-emerald-100 text-emerald-700' : p >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
   const getMatchingIcon = (p = 0) => p >= 85 ? '🟢' : p >= 60 ? '🟡' : '🔴';
 
+  // Obtener precio de referencia del COSTEO original para un item
+  const getPrecioReferencia = (itemNumero: string): number => {
+    const prod = productosExcel.find(p => String(p.numero) === itemNumero);
+    return prod?.valor_civa || 0;
+  };
+
   const estadisticas = useMemo(() => {
     const total = itemsLista.length;
     const completos = itemsLista.filter(i => i.suficientes).length;
@@ -675,8 +683,23 @@ export default function MonitorMasivoICA() {
       ? Math.round(conMatch.reduce((s, i) => s + (i.mejor_match?.matching?.porcentaje ?? 0), 0) / conMatch.length)
       : 0;
     const sinResultados = itemsLista.filter(i => !i.procesando && i.resultados.length === 0).length;
-    return { total, completos, totalResultados, promedioMatching, sinResultados };
-  }, [itemsLista]);
+
+    // Calcular ahorro total vs referencia COSTEO
+    let ahorroTotal = 0;
+    let itemsConComparacion = 0;
+    itemsLista.forEach(item => {
+      const mejor = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+      const ref = getPrecioReferencia(item.numero);
+      if (mejor && ref > 0) {
+        const prod = productosExcel.find(p => String(p.numero) === item.numero);
+        const cantidad = prod?.cantidad || 1;
+        ahorroTotal += (ref - (mejor.precio_valor || 0)) * cantidad;
+        itemsConComparacion++;
+      }
+    });
+
+    return { total, completos, totalResultados, promedioMatching, sinResultados, ahorroTotal, itemsConComparacion };
+  }, [itemsLista, seleccionManual, productosExcel]);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -899,23 +922,36 @@ export default function MonitorMasivoICA() {
 
             {/* Estadísticas */}
             {itemsLista.length > 0 && (
-              <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-2 text-center">
-                <div className="bg-slate-50 rounded-2xl p-3">
-                  <p className="text-[8px] text-slate-400">Items</p>
-                  <p className="font-black text-lg">{estadisticas.total}</p>
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="bg-slate-50 rounded-2xl p-3">
+                    <p className="text-[8px] text-slate-400">Items</p>
+                    <p className="font-black text-lg">{estadisticas.total}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-3">
+                    <p className="text-[8px] text-slate-400">Resultados</p>
+                    <p className="font-black text-lg">{estadisticas.totalResultados}</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-2xl p-3">
+                    <p className="text-[8px] text-emerald-500">Match prom.</p>
+                    <p className="font-black text-lg text-emerald-700">{estadisticas.promedioMatching}%</p>
+                  </div>
+                  <div className={`rounded-2xl p-3 ${estadisticas.sinResultados > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                    <p className={`text-[8px] ${estadisticas.sinResultados > 0 ? 'text-red-500' : 'text-slate-400'}`}>Sin resultados</p>
+                    <p className={`font-black text-lg ${estadisticas.sinResultados > 0 ? 'text-red-700' : 'text-slate-700'}`}>{estadisticas.sinResultados}</p>
+                  </div>
                 </div>
-                <div className="bg-slate-50 rounded-2xl p-3">
-                  <p className="text-[8px] text-slate-400">Resultados</p>
-                  <p className="font-black text-lg">{estadisticas.totalResultados}</p>
-                </div>
-                <div className="bg-emerald-50 rounded-2xl p-3">
-                  <p className="text-[8px] text-emerald-500">Match promedio</p>
-                  <p className="font-black text-lg text-emerald-700">{estadisticas.promedioMatching}%</p>
-                </div>
-                <div className={`rounded-2xl p-3 ${estadisticas.sinResultados > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
-                  <p className={`text-[8px] ${estadisticas.sinResultados > 0 ? 'text-red-500' : 'text-slate-400'}`}>Sin resultados</p>
-                  <p className={`font-black text-lg ${estadisticas.sinResultados > 0 ? 'text-red-700' : 'text-slate-700'}`}>{estadisticas.sinResultados}</p>
-                </div>
+                {estadisticas.itemsConComparacion > 0 && (
+                  <div className={`rounded-2xl p-3 text-center ${estadisticas.ahorroTotal >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                    <p className={`text-[8px] font-black uppercase ${estadisticas.ahorroTotal >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {estadisticas.ahorroTotal >= 0 ? '💰 Ahorro vs COSTEO' : '⚠️ Sobrecosto vs COSTEO'}
+                    </p>
+                    <p className={`font-black text-base ${estadisticas.ahorroTotal >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {estadisticas.ahorroTotal >= 0 ? '+' : ''}{Math.round(estadisticas.ahorroTotal).toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}
+                    </p>
+                    <p className="text-[8px] text-slate-400">{estadisticas.itemsConComparacion} items comparados</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -988,13 +1024,25 @@ export default function MonitorMasivoICA() {
                       </div>
                     </div>
 
-                    {item.resultados.length > 0 && !item.procesando && (
-                      <div className="text-[9px] text-slate-400 bg-white/60 px-3 py-1.5 rounded-full border border-slate-100">
-                        💰 Mín: ${Math.min(...item.resultados.map(r => r.precio_valor || Infinity)).toLocaleString('es-CL')}
-                        &nbsp;·&nbsp;
-                        💰 Máx: ${Math.max(...item.resultados.map(r => r.precio_valor || 0)).toLocaleString('es-CL')}
-                      </div>
-                    )}
+                    {item.resultados.length > 0 && !item.procesando && (() => {
+                      const ref = getPrecioReferencia(item.numero);
+                      const mejorPrecio = Math.min(...item.resultados.map(r => r.precio_valor || Infinity));
+                      const diferencia = ref > 0 ? mejorPrecio - ref : null;
+                      return (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="text-[9px] text-slate-400 bg-white/60 px-3 py-1.5 rounded-full border border-slate-100">
+                            Mín: ${mejorPrecio.toLocaleString('es-CL')}
+                            &nbsp;·&nbsp;
+                            Máx: ${Math.max(...item.resultados.map(r => r.precio_valor || 0)).toLocaleString('es-CL')}
+                          </div>
+                          {ref > 0 && diferencia !== null && (
+                            <div className={`text-[9px] font-black px-3 py-1.5 rounded-full border ${diferencia < 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                              Ref: ${ref.toLocaleString('es-CL')} · {diferencia < 0 ? `Ahorro $${Math.abs(diferencia).toLocaleString('es-CL')}` : `+$${diferencia.toLocaleString('es-CL')} sobre ref`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Tabla de resultados */}
@@ -1008,7 +1056,7 @@ export default function MonitorMasivoICA() {
                             <th className="px-4 py-3">Tienda</th>
                             <th className="px-4 py-3">Producto encontrado</th>
                             <th className="px-4 py-3 text-right">Precio c/IVA</th>
-                            <th className="px-4 py-3 text-right">Precio neto</th>
+                            {getPrecioReferencia(item.numero) > 0 && <th className="px-4 py-3 text-right">vs Ref</th>}
                             <th className="px-4 py-3 text-center">Match</th>
                             <th className="px-4 py-3 text-center">Link</th>
                           </tr>
@@ -1017,7 +1065,11 @@ export default function MonitorMasivoICA() {
                           {item.resultados.slice(0, 15).map((r, ridx) => {
                             const isSelected = seleccionManual.get(item.numero) === r || (!seleccionManual.has(item.numero) && ridx === 0 && r === item.mejor_match);
                             const pctR = r.matching?.porcentaje ?? 0;
-                            const precioNeto = Math.round((r.precio_valor || 0) / IVA);
+                            const precioRef = getPrecioReferencia(item.numero);
+                            const precioWeb = r.precio_valor || 0;
+                            const diferencia = precioRef > 0 ? precioWeb - precioRef : null;
+                            const esBarato = diferencia !== null && diferencia < 0;
+                            const esCaro = diferencia !== null && diferencia > 0;
                             return (
                               <tr key={ridx} className={`hover:bg-slate-50/80 transition-all ${isSelected ? 'bg-blue-50/30' : ''}`}>
                                 <td className="px-3 py-3 text-center">
@@ -1037,11 +1089,19 @@ export default function MonitorMasivoICA() {
                                   <p className="text-xs font-medium text-slate-600 leading-tight max-w-sm line-clamp-2">{r.nombre}</p>
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <span className="text-sm font-black text-slate-900">{r.precio_formateado}</span>
+                                  <span className={`text-sm font-black ${esBarato ? 'text-emerald-700' : esCaro ? 'text-red-600' : 'text-slate-900'}`}>
+                                    {r.precio_formateado}
+                                  </span>
                                 </td>
-                                <td className="px-4 py-3 text-right">
-                                  <span className="text-xs text-slate-500">${precioNeto.toLocaleString('es-CL')}</span>
-                                </td>
+                                {precioRef > 0 && (
+                                  <td className="px-4 py-3 text-right">
+                                    {diferencia !== null ? (
+                                      <span className={`text-[9px] font-black px-2 py-1 rounded-full ${esBarato ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                        {esBarato ? '▼' : '▲'} {Math.abs(diferencia).toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}
+                                      </span>
+                                    ) : '—'}
+                                  </td>
+                                )}
                                 <td className="px-4 py-3 text-center">
                                   <span className={`text-[9px] font-black px-2 py-1 rounded-full ${getMatchingColor(pctR)}`}>
                                     {getMatchingIcon(pctR)} {pctR}%
