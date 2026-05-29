@@ -41,8 +41,7 @@ VTEX_STORES = [
     {"dominio": "www.easy.cl",           "nombre": "Easy",        "prioridad": 10},
     {"dominio": "www.construmart.cl",    "nombre": "Construmart", "prioridad": 10},
     {"dominio": "www.imperial.cl",       "nombre": "Imperial",    "prioridad": 9},
-    {"dominio": "www.chilemat.cl",       "nombre": "Chilemat",    "prioridad": 9},
-    {"dominio": "www.placacentro.cl",    "nombre": "Placacentro", "prioridad": 9},
+    # Chilemat y Placacentro removidos: bloquean IPs de Vercel (respuesta vacía / SSL error)
 ]
 
 DOMINIOS_CHILE = {
@@ -372,7 +371,12 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         r = requests.get(
             "https://api.mercadolibre.com/sites/MLC/search",
             params={"q": producto, "limit": limite, "condition": "new"},
-            headers={"User-Agent": "Mozilla/5.0"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "es-CL,es;q=0.9",
+                "Referer": "https://www.mercadolibre.cl/",
+            },
             timeout=8
         )
         if r.status_code != 200:
@@ -413,7 +417,7 @@ def fetch_serper(query: str, search_type: str = "shopping", retries: int = 2) ->
         print("  [Serper] ⛔ Cuota agotada — omitiendo llamada")
         return {}
     url = f"https://google.serper.dev/{search_type}"
-    payload = json.dumps({"q": query, "gl": "cl", "hl": "es", "num": 20, "location": "Chile"})
+    payload = json.dumps({"q": query, "gl": "cl", "hl": "es", "num": 20})
     headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     for intento in range(retries):
         try:
@@ -439,13 +443,14 @@ def buscar_sodimac(query: str, limite: int = 12):
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
     try:
-        r = requests.get(
+        # Intentar endpoint nuevo primero, luego el legacy
+        for endpoint in [
             "https://www.sodimac.cl/s/search/resources/v2/summary",
-            params={"Ntt": query, "Nrpp": limite, "No": 0, "lang": "es-cl",
-                    "Ns": "product.sortPrice|0", "country": "CL"},
-            headers=HEADERS_BROWSER,
-            timeout=8
-        )
+            "https://sodimac.cl/s/search/resources/v2/summary",
+        ]:
+            r = requests.get(endpoint, params={"Ntt": query, "Nrpp": limite, "No": 0, "lang": "es-cl", "Ns": "product.sortPrice|0", "country": "CL"}, headers=HEADERS_BROWSER, timeout=8)
+            if r.status_code == 200:
+                break
         if r.status_code != 200:
             print(f"  [Sodimac] HTTP {r.status_code}")
             return []
@@ -695,6 +700,53 @@ def buscar_vtex(store: dict, query: str, limite: int = 8):
         return []
 
 
+# ─── Falabella Chile ─────────────────────────────────────────────────────────
+def buscar_falabella(query: str, limite: int = 10):
+    cache_key = get_cache_key(f"falabella_{query}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        r = requests.get(
+            "https://www.falabella.com/s/browse/v1/listing/cl",
+            params={"query": query, "currentPage": 1, "sortBy": "Relevance"},
+            headers={**HEADERS_BROWSER, "Accept": "application/json"},
+            timeout=8
+        )
+        if r.status_code != 200:
+            print(f"  [Falabella] HTTP {r.status_code}")
+            return []
+        data = r.json()
+        resultados = []
+        skus = (data.get("state") or {}).get("resultList", {}).get("SkuList") or []
+        for sku in skus[:limite]:
+            nombre = limpiar_nombre(sku.get("displayName") or sku.get("name") or "")
+            if len(nombre) < 4: continue
+            precio = None
+            prices = sku.get("prices") or []
+            for p in prices:
+                val = p.get("originalPrice") or p.get("price")
+                if val: precio = limpiar_precio(str(int(float(val)))); break
+            if not precio: continue
+            url_prod = sku.get("url") or ""
+            if url_prod and not url_prod.startswith("http"):
+                url_prod = f"https://www.falabella.com{url_prod}"
+            resultados.append({
+                "tienda": "Falabella",
+                "nombre": nombre[:150],
+                "precio_con_iva": precio,
+                "url": url_prod,
+                "fuente": "falabella_direct",
+                "pais": "CL",
+            })
+        if resultados:
+            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        print(f"  [Falabella] {len(resultados)} productos")
+        return resultados
+    except Exception as e:
+        print(f"  [Falabella] Error: {e}")
+        return []
+
+
 # ─── Generador de queries ─────────────────────────────────────────────────────
 
 def generar_queries(producto: str, categoria: str) -> list:
@@ -739,16 +791,19 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 resultados.append(r)
 
     # ── Fase 1: Fuentes libres + Google Shopping en paralelo ─────────────────
-    print(f"  📡 Fase 1: MercadoLibre + Sodimac + DDG + Google Shopping + VTEX...")
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    # Query corta para VTEX (mejora resultados en tiendas que rechazan queries largas)
+    query_vtex = ' '.join(producto.split()[:5])
+
+    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Google Shopping + VTEX...")
+    with ThreadPoolExecutor(max_workers=7) as ex:
         futures = {
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
-            ex.submit(buscar_duckduckgo, producto, 12): "DuckDuckGo",
             ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
+            ex.submit(buscar_falabella, query_vtex, 8): "Falabella",
         }
         for store in VTEX_STORES:
-            futures[ex.submit(buscar_vtex, store, producto, 6)] = store["nombre"]
+            futures[ex.submit(buscar_vtex, store, query_vtex, 6)] = store["nombre"]
 
         for future in as_completed(futures, timeout=30):
             nombre_f = futures[future]
@@ -764,11 +819,9 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         queries = generar_queries(producto, categoria)
         for query in queries[1:3]:
             if len(resultados) >= 9: break
-            print(f"  📡 Variación DDG/Serper: '{query[:50]}'...")
+            print(f"  📡 Variación Serper: '{query[:50]}'...")
             time.sleep(random.uniform(0.2, 0.3))
-            agregar(buscar_duckduckgo(query, 8))
-            if len(resultados) < 9:
-                agregar(buscar_google_shopping(query, 8))
+            agregar(buscar_google_shopping(query, 8))
 
     # ── Fase 3: Web orgánica si sigue habiendo muy pocos resultados ───────────
     if len(resultados) < 5:
