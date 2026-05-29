@@ -5,19 +5,20 @@ export const maxDuration = 60
 
 const BACKEND = process.env.PYTHON_BACKEND_URL || 'http://localhost:5000'
 
-async function proxy(req: NextRequest, params: { path: string[] }) {
-  const path = params.path.join('/')
+async function proxy(req: NextRequest, path: string[]) {
+  const pathStr = path.join('/')
   const search = req.nextUrl.search
-  const url = `${BACKEND}/python/${path}${search}`
+  const url = `${BACKEND}/python/${pathStr}${search}`
 
   try {
-    const isMultipart = req.headers.get('content-type')?.includes('multipart/form-data')
+    const contentType = req.headers.get('content-type') || ''
+    const isMultipart = contentType.includes('multipart/form-data')
 
     const fetchOptions: RequestInit = {
       method: req.method,
       headers: {
         'Accept': req.headers.get('accept') || '*/*',
-        ...(isMultipart ? {} : { 'Content-Type': req.headers.get('content-type') || 'application/json' }),
+        ...(!isMultipart && { 'Content-Type': contentType || 'application/json' }),
       },
     }
 
@@ -26,14 +27,14 @@ async function proxy(req: NextRequest, params: { path: string[] }) {
     }
 
     const res = await fetch(url, fetchOptions)
+    const resContentType = res.headers.get('content-type') || ''
 
-    const contentType = res.headers.get('content-type') || ''
-    if (contentType.includes('application/vnd.openxml') || contentType.includes('octet-stream')) {
+    if (resContentType.includes('openxml') || resContentType.includes('octet-stream')) {
       const buffer = await res.arrayBuffer()
       return new NextResponse(buffer, {
         status: res.status,
         headers: {
-          'Content-Type': contentType,
+          'Content-Type': resContentType,
           'Content-Disposition': res.headers.get('content-disposition') || 'attachment',
         },
       })
@@ -42,7 +43,7 @@ async function proxy(req: NextRequest, params: { path: string[] }) {
     const data = await res.text()
     return new NextResponse(data, {
       status: res.status,
-      headers: { 'Content-Type': contentType || 'application/json' },
+      headers: { 'Content-Type': resContentType || 'application/json' },
     })
 
   } catch (err: any) {
@@ -54,9 +55,14 @@ async function proxy(req: NextRequest, params: { path: string[] }) {
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxy(req, params)
+type Params = Promise<{ path: string[] }>
+
+export async function GET(req: NextRequest, { params }: { params: Params }) {
+  const { path } = await params
+  return proxy(req, path)
 }
-export async function POST(req: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxy(req, params)
+
+export async function POST(req: NextRequest, { params }: { params: Params }) {
+  const { path } = await params
+  return proxy(req, path)
 }
