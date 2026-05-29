@@ -377,7 +377,7 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
                 "Accept-Language": "es-CL,es;q=0.9",
                 "Referer": "https://www.mercadolibre.cl/",
             },
-            timeout=6
+            timeout=(4, 6)
         )
         if r.status_code != 200:
             print(f"  [ML] HTTP {r.status_code}")
@@ -427,7 +427,7 @@ def buscar_google(producto: str, limite: int = 15):
                 "Accept-Encoding": "gzip, deflate, br",
                 "Referer": "https://www.google.cl/",
             },
-            timeout=7
+            timeout=(5, 8)  # (connect, read)
         )
         if r.status_code != 200:
             print(f"  [Google] HTTP {r.status_code}")
@@ -517,7 +517,7 @@ def buscar_bing(producto: str, limite: int = 15):
                 "Accept": "text/html",
                 "Accept-Language": "es-CL,es;q=0.9",
             },
-            timeout=7
+            timeout=(5, 8)
         )
         if r.status_code != 200:
             print(f"  [Bing] HTTP {r.status_code}")
@@ -576,7 +576,7 @@ def buscar_sodimac(query: str, limite: int = 12):
             "https://www.sodimac.cl/s/search/resources/v2/summary",
             "https://sodimac.cl/s/search/resources/v2/summary",
         ]:
-            r = requests.get(endpoint, params={"Ntt": query, "Nrpp": limite, "No": 0, "lang": "es-cl", "Ns": "product.sortPrice|0", "country": "CL"}, headers=HEADERS_BROWSER, timeout=8)
+            r = requests.get(endpoint, params={"Ntt": query, "Nrpp": limite, "No": 0, "lang": "es-cl", "Ns": "product.sortPrice|0", "country": "CL"}, headers=HEADERS_BROWSER, timeout=(4, 7))
             if r.status_code == 200:
                 break
         if r.status_code != 200:
@@ -629,7 +629,7 @@ def buscar_vtex(store: dict, query: str, limite: int = 8):
             f"https://{store['dominio']}/api/catalog_system/pub/products/search",
             params={"ft": query, "_from": 0, "_to": limite - 1},
             headers={**HEADERS_BROWSER, "Accept": "application/json"},
-            timeout=8
+            timeout=(4, 7)
         )
         if r.status_code != 200: return []
         resultados = []
@@ -684,7 +684,7 @@ def buscar_duckduckgo(producto: str, limite: int = 15):
                 "Accept-Language": "es-CL,es;q=0.9",
                 "Content-Type": "application/x-www-form-urlencoded",
             },
-            timeout=8,
+            timeout=(5, 10),
             allow_redirects=True,
         )
         if r.status_code != 200:
@@ -752,7 +752,7 @@ def buscar_homecenter(query: str, limite: int = 8):
             "https://www.homecenter.cl/api/catalog_system/pub/products/search",
             params={"ft": query, "_from": 0, "_to": limite - 1},
             headers={**HEADERS_BROWSER, "Accept": "application/json"},
-            timeout=6
+            timeout=(4, 6)
         )
         if r.status_code != 200:
             print(f"  [Homecenter] HTTP {r.status_code}")
@@ -838,7 +838,10 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
     query_vtex = ' '.join(palabras_clave[:5])
 
     print(f"  📡 Fase 1: Google + DDG + Bing + ML + Sodimac + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    # IMPORTANTE: NO usar "with" — el context manager espera todos los threads
+    # aunque as_completed ya haya hecho timeout, causando 504 en Vercel.
+    ex = ThreadPoolExecutor(max_workers=12)
+    try:
         futures = {
             ex.submit(buscar_google, producto, limite): "Google",
             ex.submit(buscar_duckduckgo, producto, limite): "DuckDuckGo",
@@ -850,23 +853,23 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
 
-        for future in as_completed(futures, timeout=20):
-            nombre_f = futures[future]
-            try:
-                nuevos = future.result()
-                agregar(nuevos)
-                print(f"  ✅ {nombre_f}: {len(nuevos)} | Total: {len(resultados)}")
-            except Exception as e:
-                print(f"  ❌ {nombre_f}: {e}")
-
-    # ── Fase 2: Queries adicionales con Bing si hay pocos resultados ──────────
-    if len(resultados) < 9:
-        queries = generar_queries(producto, categoria)
-        for query in queries[1:2]:
-            if len(resultados) >= 9: break
-            print(f"  📡 Variación Bing: '{query[:50]}'...")
-            time.sleep(random.uniform(0.1, 0.2))
-            agregar(buscar_bing(query, 8))
+        try:
+            for future in as_completed(futures, timeout=18):
+                nombre_f = futures[future]
+                try:
+                    nuevos = future.result()
+                    agregar(nuevos)
+                    print(f"  ✅ {nombre_f}: {len(nuevos)} | Total: {len(resultados)}")
+                except Exception as e:
+                    print(f"  ❌ {nombre_f}: {e}")
+        except Exception:
+            print(f"  ⚠️ Timeout global (18s) — continuando con {len(resultados)} resultados parciales")
+    finally:
+        # cancel_futures=True disponible Python 3.9+ — cancela pendientes y no bloquea
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            ex.shutdown(wait=False)  # Python < 3.9
 
     if not resultados:
         return [], {}
@@ -1008,7 +1011,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["Google Chile", "DuckDuckGo", "Bing Chile", "MercadoLibre Chile", "Sodimac", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "5.2"
+        "version": "5.3"
     })
 
 
@@ -1221,7 +1224,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v5.1")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v5.3")
     print("   FUENTES (toda la web chilena):")
     print("   • Google Chile (scraper — IP real de oficina)")
     print("   • Bing Chile (scraper — sin API key)")
