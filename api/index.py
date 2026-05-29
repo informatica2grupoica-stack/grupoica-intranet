@@ -1137,4 +1137,10 @@ if __name__ == "__main__":
     print("   • Easy, Construmart, Imperial (VTEX directo)")
     print("   ARQUITECTURA: ThreadPoolExecutor (paralelo)")
     print("=" * 60)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    try:
+        from waitress import serve
+        print("✅ Waitress activo en http://0.0.0.0:5000")
+        serve(app, host="0.0.0.0", port=5000, threads=16)
+    except ImportError:
+        print("⚠️  Waitress no instalado, usando Flask dev server")
+        app.run(host="0.0.0.0", port=5000, debug=True)
