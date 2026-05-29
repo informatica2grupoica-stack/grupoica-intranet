@@ -42,8 +42,6 @@ VTEX_STORES = [
     {"dominio": "www.easy.cl",        "nombre": "Easy",        "prioridad": 10},
     {"dominio": "www.construmart.cl", "nombre": "Construmart", "prioridad": 10},
     {"dominio": "www.imperial.cl",    "nombre": "Imperial",    "prioridad": 9},
-    {"dominio": "www.chilemat.cl",    "nombre": "Chilemat",    "prioridad": 9},
-    {"dominio": "www.placacentro.cl", "nombre": "Placacentro", "prioridad": 9},
 ]
 
 DOMINIOS_CHILE = {
@@ -377,10 +375,10 @@ def buscar_google_shopping(producto: str, limite: int = 15):
     try:
         r = requests.get(
             "https://www.google.cl/search",
-            params={"q": producto, "tbm": "shop", "hl": "es", "gl": "cl", "num": 30},
+            params={"q": producto + " precio Chile", "tbm": "shop", "hl": "es", "gl": "cl", "num": 30},
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,*/*",
+                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
                 "Accept-Language": "es-CL,es;q=0.9,en;q=0.8",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Referer": "https://www.google.cl/",
@@ -388,58 +386,83 @@ def buscar_google_shopping(producto: str, limite: int = 15):
                 "sec-ch-ua-platform": '"Windows"',
                 "Sec-Fetch-Site": "same-origin",
                 "Sec-Fetch-Mode": "navigate",
+                "Cache-Control": "no-cache",
             },
-            timeout=(5, 10)
+            timeout=(5, 12)
         )
+        if r.status_code == 429:
+            print(f"  [GShop] HTTP 429 (rate limit) — saltando")
+            return []
         if r.status_code != 200:
             print(f"  [GShop] HTTP {r.status_code}")
             return []
 
-        soup = BeautifulSoup(r.text, "lxml")
+        html = r.text
+        soup = BeautifulSoup(html, "lxml")
         resultados = []
 
-        # ── Estrategia 1: tarjetas Shopping clásicas ──────────────────────────
-        cards = (soup.select("div.sh-dgr__content")
-                 or soup.select("div.KZmu8e")
-                 or soup.select("li.sh-dlr__list-result"))
+        # ── Estrategia 1: selectores CSS múltiples (Google cambia clases con frecuencia) ──
+        CARD_SELECTORS = [
+            "div.sh-dgr__content",
+            "div.KZmu8e",
+            "li.sh-dlr__list-result",
+            "div.xcR77d",
+            "div.i0X6df",
+            "div[data-sh-gr]",
+            "div.sh-pr__product-results-grid > div",
+        ]
+        cards = []
+        for sel in CARD_SELECTORS:
+            cards = soup.select(sel)
+            if cards:
+                break
 
-        for card in cards:
-            name_el = card.select_one("h3, div.EI11Pd, [role='heading'], .translate-content, .tAxDx")
-            if not name_el:
-                continue
-            nombre = limpiar_nombre(name_el.get_text(strip=True))
-            if len(nombre) < 4:
-                continue
-
-            precio = None
-            for price_sel in ["span.a8Pemb", "div.e10twf", "span.kHxwFf", "b", "strong"]:
-                pel = card.select_one(price_sel)
+        def _extraer_precio_elemento(el):
+            # Intenta varios selectores de precio
+            for ps in ["span.a8Pemb", "div.e10twf", "span.kHxwFf", ".notranslate",
+                       "b", "strong", "[aria-label*='$']"]:
+                pel = el.select_one(ps)
                 if not pel:
                     continue
                 txt = pel.get("aria-label", "") or pel.get_text(strip=True)
-                pm = re.search(r'\$\s*([\d\.,]+)', txt)
+                pm = re.search(r'\$\s*([\d\.]{3,})', txt)
                 if pm:
-                    precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
-                    if precio:
-                        break
-            if not precio:
-                pm = re.search(r'\$\s*([\d\.]{3,})', card.get_text())
-                if pm:
-                    precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+                    p = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+                    if p:
+                        return p
+            # Fallback: buscar en texto completo del card
+            pm = re.search(r'\$\s*([\d\.]{3,})', el.get_text())
+            if pm:
+                return limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+            return None
+
+        for card in cards:
+            name_el = card.select_one(
+                "h3, h4, div.EI11Pd, [role='heading'], .translate-content, .tAxDx, "
+                ".Xjkr3b, .sh-np__click-target, a[aria-label]"
+            )
+            nombre = ""
+            if name_el:
+                nombre = limpiar_nombre(name_el.get("aria-label", "") or name_el.get_text(strip=True))
+            if len(nombre) < 4:
+                continue
+            precio = _extraer_precio_elemento(card)
             if not precio:
                 continue
-
-            store_el = card.select_one("div.aULzUe, div.IuHnof, div.LbUacb, span.E5ocAb, .qIEPib")
-            tienda = store_el.get_text(strip=True)[:40] if store_el else "Tienda Chile"
-
+            store_el = card.select_one(
+                "div.aULzUe, div.IuHnof, div.LbUacb, span.E5ocAb, .qIEPib, "
+                ".sh-np__seller-container, .JNKF3c, .mvMUEb"
+            )
+            tienda = store_el.get_text(strip=True)[:40] if store_el else "Google Shopping"
             link_el = card.select_one("a[href]")
             url_prod = link_el.get("href", "") if link_el else ""
-            if url_prod.startswith("/"):
+            if url_prod.startswith("/url?"):
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(url_prod).query)
+                url_prod = qs.get("q", [url_prod])[0]
+            elif url_prod.startswith("/"):
                 url_prod = "https://www.google.cl" + url_prod
-
             if any(ind in tienda.lower() or ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
                 continue
-
             resultados.append({
                 "tienda": tienda,
                 "nombre": nombre[:150],
@@ -451,14 +474,63 @@ def buscar_google_shopping(producto: str, limite: int = 15):
             if len(resultados) >= limite:
                 break
 
-        # ── Estrategia 2: JSON incrustado en <script> ─────────────────────────
+        # ── Estrategia 2: JSON-LD structured data ─────────────────────────────
+        if not resultados:
+            for script in soup.select('script[type="application/ld+json"]'):
+                try:
+                    data = json.loads(script.string or "")
+                    offers = data.get("offers", data.get("Offers", []))
+                    if isinstance(offers, dict):
+                        offers = [offers]
+                    nombre_prod = data.get("name", "")
+                    for offer in offers:
+                        p = limpiar_precio(str(offer.get("price", "")))
+                        if p and nombre_prod:
+                            resultados.append({
+                                "tienda": offer.get("seller", {}).get("name", "Google Shopping") if isinstance(offer.get("seller"), dict) else "Google Shopping",
+                                "nombre": limpiar_nombre(nombre_prod)[:150],
+                                "precio_con_iva": p,
+                                "url": offer.get("url", ""),
+                                "fuente": "google_shopping",
+                                "pais": "CL",
+                            })
+                except Exception:
+                    pass
+            if resultados:
+                resultados = resultados[:limite]
+
+        # ── Estrategia 3: regex en HTML crudo — busca bloques nombre+precio ────
+        if not resultados:
+            # Busca patrones "texto largo ... $precio" en el HTML
+            bloques = re.findall(
+                r'(?:title|aria-label)="([^"]{10,120})"[^<]{0,500}\$\s*([\d\.]{4,10})',
+                html
+            )
+            vistos = set()
+            for nombre_raw, precio_raw in bloques[:limite * 3]:
+                p = limpiar_precio(re.sub(r'[^\d]', '', precio_raw))
+                if not p or nombre_raw in vistos:
+                    continue
+                vistos.add(nombre_raw)
+                resultados.append({
+                    "tienda": "Google Shopping",
+                    "nombre": limpiar_nombre(nombre_raw)[:150],
+                    "precio_con_iva": p,
+                    "url": "",
+                    "fuente": "google_shopping",
+                    "pais": "CL",
+                })
+                if len(resultados) >= limite:
+                    break
+
+        # ── Estrategia 4: JSON en scripts (window.shopping_...) ───────────────
         if not resultados:
             for script in soup.select("script"):
                 txt = script.string or ""
                 if '"Price"' not in txt and '"price"' not in txt:
                     continue
                 pairs = re.findall(
-                    r'"(?:title|name)"\s*:\s*"([^"]{5,})"[^}]{0,200}"[Pp]rice"\s*:\s*"?\$?\s*([\d\.,]+)',
+                    r'"(?:title|name|productName)"\s*:\s*"([^"]{5,120})"[^}]{0,300}"[Pp]rice"\s*:\s*"?\$?\s*([\d\.,]+)',
                     txt
                 )
                 for nombre_raw, precio_raw in pairs[:limite]:
@@ -566,7 +638,59 @@ def buscar_duckduckgo(producto: str, limite: int = 12):
         return []
 
 
-# ─── VTEX stores (Easy, Construmart, Imperial, Chilemat, Placacentro) ─────────
+# ─── Sodimac Chile (API propia) ───────────────────────────────────────────────
+
+def buscar_sodimac(query: str, limite: int = 8):
+    cache_key = get_cache_key(f"sodimac_{query}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        r = requests.get(
+            "https://www.sodimac.cl/sodimac-cl/search",
+            params={"Ntt": query, "gridView": "grid3", "sortBy": "bestmatch",
+                    "page": 0, "ruleContext": "CL", "jsonContent": "true"},
+            headers={**HEADERS_BROWSER, "Accept": "application/json"},
+            timeout=(4, 8),
+        )
+        if r.status_code != 200:
+            print(f"  [Sodimac] HTTP {r.status_code}")
+            return []
+        data = r.json()
+        productos = (data.get("state", {}).get("resultList", [])
+                     or data.get("resultList", [])
+                     or data.get("products", []))
+        resultados = []
+        for prod in productos[:limite]:
+            nombre = limpiar_nombre(prod.get("displayName", prod.get("name", "")))
+            if len(nombre) < 4:
+                continue
+            precio_raw = (prod.get("price", {}).get("BasePriceSales")
+                          or prod.get("price", {}).get("BasePriceReference")
+                          or prod.get("priceSales")
+                          or prod.get("price"))
+            precio = limpiar_precio(str(precio_raw or ""))
+            if not precio:
+                continue
+            url_prod = prod.get("url", prod.get("pdpUrl", ""))
+            if url_prod and not url_prod.startswith("http"):
+                url_prod = "https://www.sodimac.cl" + url_prod
+            resultados.append({
+                "tienda": "Sodimac",
+                "nombre": nombre[:150],
+                "precio_con_iva": precio,
+                "url": url_prod,
+                "fuente": "vtex_direct",
+                "pais": "CL",
+            })
+        cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [Sodimac] {len(resultados)} productos")
+        return resultados
+    except Exception as e:
+        print(f"  [Sodimac] Error: {e}")
+        return []
+
+
+# ─── VTEX stores (Easy, Construmart, Imperial) ────────────────────────────────
 
 def buscar_vtex(store: dict, query: str, limite: int = 8):
     cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
@@ -661,16 +785,22 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         and len(w) > 2
         and w.lower() not in PALABRAS_IGNORAR
     ]
-    query_vtex = ' '.join(palabras_clave[:5])
+    # VTEX falla con acentos — normalizar antes de enviar
+    def _sin_acentos(t):
+        for a, b in {'á':'a','é':'e','í':'i','ó':'o','ú':'u','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','ñ':'n','Ñ':'N'}.items():
+            t = t.replace(a, b)
+        return t
+    query_vtex = _sin_acentos(' '.join(palabras_clave[:5]))
 
-    print(f"  📡 Google Shopping + DDG + VTEX × {len(VTEX_STORES)} tiendas (VTEX: '{query_vtex}')")
+    print(f"  📡 GShop + DDG + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
 
     # IMPORTANTE: NO usar "with" — espera todos los threads al salir aunque haya timeout
-    ex = ThreadPoolExecutor(max_workers=10)
+    ex = ThreadPoolExecutor(max_workers=12)
     try:
         futures = {
             ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
             ex.submit(buscar_duckduckgo, producto, 12): "DuckDuckGo",
+            ex.submit(buscar_sodimac, query_vtex, 8): "Sodimac",
         }
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
@@ -852,8 +982,8 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["Google Shopping (scraper)", "DuckDuckGo"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.0"
+        "fuentes": ["Google Shopping (scraper)", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "6.1"
     })
 
 
@@ -880,6 +1010,16 @@ def diagnostico():
         }
     except Exception as e:
         resultado["duckduckgo"] = {"ok": False, "error": str(e)}
+
+    # Test Sodimac
+    try:
+        items = buscar_sodimac("tornillo", 3)
+        resultado["sodimac"] = {
+            "ok": len(items) > 0, "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else ""
+        }
+    except Exception as e:
+        resultado["sodimac"] = {"ok": False, "error": str(e)}
 
     # Test VTEX Easy
     try:
@@ -1027,7 +1167,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.0")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.1")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
