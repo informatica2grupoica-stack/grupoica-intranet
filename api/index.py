@@ -1,5 +1,6 @@
 import re
 import io
+import os
 import time
 import random
 import requests
@@ -25,7 +26,7 @@ app = Flask(__name__)
 CORS(app)
 
 IVA = 1.19
-SERPER_API_KEY = "2a1e02a687f2b1e29d461b6d8acce180b707942e"
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "2a1e02a687f2b1e29d461b6d8acce180b707942e")
 
 cache_resultados = {}
 CACHE_TTL = 300  # 5 minutos
@@ -406,33 +407,93 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         return []
 
 
-# ─── Google Shopping via Serper (fuente principal de la web) ─────────────────
+# ─── Bing Search (reemplazo libre de Serper — funciona desde IPs cloud) ──────
 
-SERPER_QUOTA_AGOTADA = False  # Flag global para evitar llamadas inútiles
+def buscar_bing(producto: str, limite: int = 15):
+    """Busca en Bing.com y extrae precios de snippets. Gratuito, sin API key."""
+    cache_key = get_cache_key(f"bing_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        query = f"{producto} precio Chile"
+        r = requests.get(
+            "https://www.bing.com/search",
+            params={"q": query, "cc": "CL", "setlang": "es", "count": 20},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+                "Accept": "text/html",
+                "Accept-Language": "es-CL,es;q=0.9",
+            },
+            timeout=10
+        )
+        if r.status_code != 200:
+            print(f"  [Bing] HTTP {r.status_code}")
+            return []
+        if not BS4_DISPONIBLE:
+            return []
+        soup = BeautifulSoup(r.text, "lxml")
+        resultados = []
+        for result in soup.select(".b_algo"):
+            a_tag = result.select_one("h2 a")
+            caption = result.select_one(".b_caption p, .b_snippet")
+            if not a_tag: continue
+            url_res = a_tag.get("href", "")
+            title = a_tag.get_text(strip=True)
+            snippet = caption.get_text(strip=True) if caption else ""
+            # Extraer precio CLP del snippet (ignora USD decimales)
+            precio_m = re.search(r'\$\s*(\d[\d\.]{2,})', snippet + " " + title)
+            if not precio_m: continue
+            precio_str = precio_m.group(1).replace('.', '')
+            precio = limpiar_precio(precio_str)
+            if not precio: continue
+            # Solo dominios chilenos
+            if not any(x in url_res.lower() for x in ['.cl', 'mercadolibre']): continue
+            if any(ind in url_res.lower() for ind in INDICADORES_EXTRANJEROS): continue
+            domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url_res)
+            tienda = domain_m.group(1) if domain_m else "Web"
+            resultados.append({
+                "tienda": tienda[:40],
+                "nombre": limpiar_nombre(title)[:150],
+                "precio_con_iva": precio,
+                "url": url_res,
+                "fuente": "bing_cl",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite: break
+        if resultados:
+            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        print(f"  [Bing] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [Bing] Error: {e}")
+        return []
 
 
-def fetch_serper(query: str, search_type: str = "shopping", retries: int = 2) -> dict:
+# ─── Google Shopping via Serper (fallback si Bing no alcanza) ─────────────────
+
+SERPER_QUOTA_AGOTADA = False
+
+
+def fetch_serper(query: str, search_type: str = "shopping", retries: int = 1) -> dict:
     global SERPER_QUOTA_AGOTADA
     if SERPER_QUOTA_AGOTADA:
-        print("  [Serper] ⛔ Cuota agotada — omitiendo llamada")
         return {}
     url = f"https://google.serper.dev/{search_type}"
-    payload = json.dumps({"q": query, "gl": "cl", "hl": "es", "num": 20})
-    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
-    for intento in range(retries):
-        try:
-            r = requests.post(url, headers=headers, data=payload, timeout=10)
-            if r.status_code == 200:
-                return r.json()
-            if r.status_code in (402, 429):
-                SERPER_QUOTA_AGOTADA = True
-                print(f"  [Serper] ⛔ CUOTA AGOTADA (HTTP {r.status_code}) — se desactiva Serper para esta sesión")
-                return {}
-            print(f"  [Serper] HTTP {r.status_code} en intento {intento+1}")
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"  [Serper] Intento {intento+1}: {e}")
-            time.sleep(0.3)
+    try:
+        r = requests.post(
+            url,
+            headers={'X-API-KEY': SERPER_API_KEY},
+            json={"q": query, "gl": "cl", "hl": "es", "num": 10},
+            timeout=8
+        )
+        if r.status_code == 200:
+            return r.json()
+        if r.status_code in (400, 401, 402, 429):
+            SERPER_QUOTA_AGOTADA = True
+            print(f"  [Serper] ⛔ Desactivado (HTTP {r.status_code})")
+            return {}
+    except Exception as e:
+        print(f"  [Serper] Error: {e}")
     return {}
 
 
@@ -490,7 +551,7 @@ def buscar_sodimac(query: str, limite: int = 12):
         return []
 
 
-def buscar_google_shopping(producto: str, limite: int = 20):
+def buscar_google_shopping(producto: str, limite: int = 15):
     cache_key = get_cache_key(f"gs_{producto}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
@@ -791,19 +852,20 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 resultados.append(r)
 
     # ── Fase 1: Fuentes libres + Google Shopping en paralelo ─────────────────
-    # Query corta para VTEX (mejora resultados en tiendas que rechazan queries largas)
-    query_vtex = ' '.join(producto.split()[:5])
+    # Query VTEX: solo palabras clave sin números ni dimensiones (mejora resultados)
+    palabras_clave = [w for w in producto.split() if not re.match(r'^[\d\.,xX×"\']+$', w) and len(w) > 2]
+    query_vtex = ' '.join(palabras_clave[:4])
 
-    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Google Shopping + VTEX...")
+    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Bing + Serper + VTEX... (VTEX query: '{query_vtex}')")
     with ThreadPoolExecutor(max_workers=7) as ex:
         futures = {
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
+            ex.submit(buscar_bing, producto, limite): "Bing",
             ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
-            ex.submit(buscar_falabella, query_vtex, 8): "Falabella",
         }
         for store in VTEX_STORES:
-            futures[ex.submit(buscar_vtex, store, query_vtex, 6)] = store["nombre"]
+            futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
 
         for future in as_completed(futures, timeout=30):
             nombre_f = futures[future]
@@ -817,11 +879,13 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
     # ── Fase 2: Queries adicionales si hay pocos resultados ───────────────────
     if len(resultados) < 9:
         queries = generar_queries(producto, categoria)
-        for query in queries[1:3]:
+        for query in queries[1:2]:
             if len(resultados) >= 9: break
-            print(f"  📡 Variación Serper: '{query[:50]}'...")
-            time.sleep(random.uniform(0.2, 0.3))
-            agregar(buscar_google_shopping(query, 8))
+            print(f"  📡 Variación: '{query[:50]}'...")
+            time.sleep(random.uniform(0.1, 0.2))
+            agregar(buscar_bing(query, 8))
+            if len(resultados) < 9:
+                agregar(buscar_google_shopping(query, 8))
 
     # ── Fase 3: Web orgánica si sigue habiendo muy pocos resultados ───────────
     if len(resultados) < 5:
