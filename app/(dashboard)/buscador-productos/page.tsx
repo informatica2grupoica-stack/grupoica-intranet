@@ -102,10 +102,12 @@ interface ProductoResultado {
   tienda: string;
   nombre: string;
   precio_valor: number;
+  precio_neto?: number;
   precio_formateado: string;
   link: string;
   canal: string;
   busqueda_original: string;
+  score?: number;
   matching?: { porcentaje: number; nivel: NivelMatching; razon: string };
 }
 

@@ -13,50 +13,50 @@ app = Flask(__name__)
 CORS(app)
 
 IVA = 1.19
-# Serper solo como fallback de último recurso
 SERPER_API_KEY = "2a1e02a687f2b1e29d461b6d8acce180b707942e"
 
 cache_resultados = {}
-CACHE_TTL = 300
+CACHE_TTL = 300  # 5 minutos
 
 HEADERS_BROWSER = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/html, */*",
-    "Accept-Language": "es-CL,es;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
+    "Accept-Language": "es-CL,es;q=0.9",
 }
 
-# ─── Tiendas VTEX Chile ──────────────────────────────────────────────────────
+# ─── Tiendas VTEX Chile (complementan a Google Shopping) ────────────────────
 VTEX_STORES = [
-    {"dominio": "www.easy.cl",       "nombre": "Easy",       "prioridad": 10},
-    {"dominio": "www.construmart.cl", "nombre": "Construmart","prioridad": 10},
-    {"dominio": "www.imperial.cl",   "nombre": "Imperial",   "prioridad": 9},
-    {"dominio": "www.chilemat.cl",   "nombre": "Chilemat",   "prioridad": 9},
-    {"dominio": "www.placacentro.cl","nombre": "Placacentro","prioridad": 8},
+    {"dominio": "www.easy.cl",        "nombre": "Easy",        "prioridad": 10},
+    {"dominio": "www.construmart.cl", "nombre": "Construmart", "prioridad": 10},
+    {"dominio": "www.imperial.cl",    "nombre": "Imperial",    "prioridad": 9},
+    {"dominio": "www.chilemat.cl",    "nombre": "Chilemat",    "prioridad": 9},
 ]
 
 DOMINIOS_CHILE = {
-    "sodimac": {"dominio": "sodimac.com", "tipo": "ferretería_grande", "prioridad": 10},
-    "easy": {"dominio": "easy.cl", "tipo": "ferretería_grande", "prioridad": 10},
-    "construmart": {"dominio": "construmart.cl", "tipo": "materiales_construccion", "prioridad": 10},
-    "imperial": {"dominio": "imperial.cl", "tipo": "ferretería_grande", "prioridad": 9},
-    "chilemat": {"dominio": "chilemat.cl", "tipo": "materiales_construccion", "prioridad": 9},
-    "cic": {"dominio": "cic.cl", "tipo": "materiales_construccion", "prioridad": 9},
-    "aceroscmpc": {"dominio": "aceroscmpc.cl", "tipo": "aceros", "prioridad": 9},
-    "mvm": {"dominio": "mvm.cl", "tipo": "aceros", "prioridad": 8},
-    "cintac": {"dominio": "cintac.cl", "tipo": "aceros", "prioridad": 8},
-    "sherwin": {"dominio": "sherwin-williams.cl", "tipo": "pinturas", "prioridad": 8},
-    "sipa": {"dominio": "sipa.cl", "tipo": "pinturas", "prioridad": 8},
-    "seton": {"dominio": "seton.cl", "tipo": "señalética", "prioridad": 8},
-    "prevenco": {"dominio": "prevenco.cl", "tipo": "señalética", "prioridad": 8},
-    "mercadolibre": {"dominio": "mercadolibre.cl", "tipo": "marketplace", "prioridad": 6},
+    "sodimac":    {"dominio": "sodimac.cl",          "prioridad": 10},
+    "easy":       {"dominio": "easy.cl",              "prioridad": 10},
+    "construmart":{"dominio": "construmart.cl",       "prioridad": 10},
+    "imperial":   {"dominio": "imperial.cl",          "prioridad": 9},
+    "chilemat":   {"dominio": "chilemat.cl",          "prioridad": 9},
+    "cic":        {"dominio": "cic.cl",               "prioridad": 9},
+    "aceroscmpc": {"dominio": "aceroscmpc.cl",        "prioridad": 9},
+    "mvm":        {"dominio": "mvm.cl",               "prioridad": 8},
+    "cintac":     {"dominio": "cintac.cl",            "prioridad": 8},
+    "sherwin":    {"dominio": "sherwin-williams.cl",  "prioridad": 8},
+    "sipa":       {"dominio": "sipa.cl",              "prioridad": 8},
+    "seton":      {"dominio": "seton.cl",             "prioridad": 8},
+    "prevenco":   {"dominio": "prevenco.cl",          "prioridad": 8},
+    "mercadolibre":{"dominio": "mercadolibre.cl",     "prioridad": 6},
+    "falabella":  {"dominio": "falabella.com",        "prioridad": 5},
+    "paris":      {"dominio": "paris.cl",             "prioridad": 5},
+    "ripley":     {"dominio": "ripley.cl",            "prioridad": 5},
 }
 
 INDICADORES_EXTRANJEROS = [
     "amazon.com", "ebay.com", "aliexpress", "wish.com",
     "walmart.com", "homedepot.com", "lowes.com",
     ".com.ar", ".com.mx", ".com.pe", ".com.co",
+    "mercadolibre.com.ar", "mercadolibre.com.mx",
 ]
 
 MONEDAS_EXTRANJERAS = re.compile(r'\b(USD|EUR|ARS|PEN|COP|MXN)\b', re.IGNORECASE)
@@ -64,37 +64,44 @@ MONEDAS_EXTRANJERAS = re.compile(r'\b(USD|EUR|ARS|PEN|COP|MXN)\b', re.IGNORECASE
 CATEGORIAS_PRODUCTOS = {
     "madera": {
         "palabras_clave": ["madera", "pino", "mdf", "osb", "terciado", "plywood", "listón", "tablón", "tabla", "eucalipto"],
-        "queries_extra": ["{producto} madera Chile precio", "{producto} maderera Chile"],
+        "tiendas_prioritarias": ["construmart", "sodimac", "easy", "placacentro"],
+        "queries_extra": ["madera {producto} Chile precio", "{producto} maderas precio CLP"],
         "unidades_relevantes": ["metro", "mt", "m2", "tabla", "unidad"],
     },
     "metal_acero": {
         "palabras_clave": ["fierro", "acero", "tubo", "tubular", "barra", "pletina", "pilar", "viga", "placa acero", "ángulo", "canal", "perfil"],
+        "tiendas_prioritarias": ["aceroscmpc", "mvm", "cintac"],
         "queries_extra": ["{producto} acero Chile precio", "{producto} metalúrgica Chile"],
         "unidades_relevantes": ["kg", "metro", "barra", "mt"],
     },
     "cemento_hormigon": {
         "palabras_clave": ["cemento", "cal", "arena", "grava", "estabilizado", "hormigón", "concreto", "mortero"],
+        "tiendas_prioritarias": ["chilemat", "construmart", "cic"],
         "queries_extra": ["{producto} precio Chile kg", "{producto} saco Chile ferretería"],
         "unidades_relevantes": ["saco", "kg", "m3", "bolsa"],
     },
     "ferreteria_general": {
         "palabras_clave": ["clavo", "tornillo", "perno", "malla", "soldadura", "alambre", "desmoldante", "tuerca", "remache"],
-        "queries_extra": ["{producto} ferretería Chile precio"],
+        "tiendas_prioritarias": ["sodimac", "easy", "imperial", "construmart"],
+        "queries_extra": ["{producto} ferretería Chile precio", "{producto} precio Chile"],
         "unidades_relevantes": ["caja", "kg", "unidad", "paquete"],
     },
     "pintura_recubrimiento": {
         "palabras_clave": ["pintura", "anticorrosivo", "esmalte", "látex", "barniz", "semibrillo", "microesferas", "imprimante", "sellador"],
-        "queries_extra": ["{producto} pintura Chile litro precio"],
+        "tiendas_prioritarias": ["sherwin", "sipa", "sodimac", "easy"],
+        "queries_extra": ["{producto} pintura Chile litro precio", "{producto} Chile galón precio"],
         "unidades_relevantes": ["litro", "galón", "lt", "gl", "cuñete"],
     },
     "senaletica": {
-        "palabras_clave": ["letrero", "señal", "tránsito", "paso cebra", "señalética", "delineador", "tachas"],
-        "queries_extra": ["{producto} señalética Chile precio"],
+        "palabras_clave": ["letrero", "señal", "tránsito", "paso cebra", "señalética", "delineador", "tachas", "tineta", "fastrack"],
+        "tiendas_prioritarias": ["seton", "prevenco"],
+        "queries_extra": ["{producto} señalética Chile precio", "{producto} tránsito Chile comprar"],
         "unidades_relevantes": ["unidad", "metro", "m2", "kit"],
     },
     "herramienta_medicion": {
-        "palabras_clave": ["lienza", "rollo", "plomada", "nivel", "metro", "cinta"],
-        "queries_extra": ["{producto} Chile precio ferretería"],
+        "palabras_clave": ["lienza", "rollo", "plomada", "nivel", "cinta", "metro"],
+        "tiendas_prioritarias": ["sodimac", "easy", "imperial"],
+        "queries_extra": ["{producto} Chile precio", "{producto} ferretería Chile"],
         "unidades_relevantes": ["unidad", "metro"],
     },
 }
@@ -106,8 +113,7 @@ def get_cache_key(producto, limite):
 
 def limpiar_cache_expirado():
     ahora = time.time()
-    expirados = [k for k, v in cache_resultados.items() if ahora - v['timestamp'] > CACHE_TTL]
-    for k in expirados:
+    for k in [k for k, v in cache_resultados.items() if ahora - v['timestamp'] > CACHE_TTL]:
         del cache_resultados[k]
 
 
@@ -125,8 +131,7 @@ def normalizar(texto):
     if not texto:
         return ""
     texto = texto.lower()
-    reemplazos = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'}
-    for orig, rep in reemplazos.items():
+    for orig, rep in {'á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n'}.items():
         texto = texto.replace(orig, rep)
     texto = re.sub(r'(\d+)\s*[xX×]\s*(\d+)', r'\1 x \2', texto)
     texto = re.sub(r'(\d+)\s*["\']\s*[xX×]\s*(\d+)\s*["\']', r'\1 x \2', texto)
@@ -139,178 +144,131 @@ def normalizar(texto):
     texto = re.sub(r'(\d+)\/(\d+)',
                    lambda m: str(float(m.group(1))/float(m.group(2))), texto)
     texto = re.sub(r'[^\w\s\/\-]', ' ', texto)
-    texto = re.sub(r'\s+', ' ', texto).strip()
-    return texto
+    return re.sub(r'\s+', ' ', texto).strip()
 
 
 def extraer_medidas(texto: str) -> dict:
     medidas = {}
-    texto_lower = texto.lower()
-    dim3 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', texto_lower)
-    if dim3:
-        medidas['dim3'] = [float(d) for d in dim3[0]]
-    dim2 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', texto_lower)
-    if dim2:
-        medidas['dim2'] = [float(d) for d in dim2[0]]
-    frac = re.findall(r'(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)', texto_lower)
+    t = texto.lower()
+    dim3 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', t)
+    if dim3: medidas['dim3'] = [float(d) for d in dim3[0]]
+    dim2 = re.findall(r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)', t)
+    if dim2: medidas['dim2'] = [float(d) for d in dim2[0]]
+    frac = re.findall(r'(\d+)\s+(\d+)\/(\d+)|(\d+)\/(\d+)', t)
     for f in frac:
-        if f[0]:
-            medidas['fraccion'] = float(f[0]) + float(f[1]) / float(f[2])
-        else:
-            medidas['fraccion'] = float(f[3]) / float(f[4])
-    pulg = re.findall(r'(\d+(?:\.\d+)?)\s*(?:"|pulgadas?|pulg\b|inch)', texto_lower)
-    if pulg:
-        medidas['pulgadas'] = float(pulg[0])
-    mm = re.findall(r'(\d+(?:\.\d+)?)\s*mm', texto_lower)
-    if mm:
-        medidas['mm'] = [float(m) for m in mm]
-    kg = re.findall(r'(\d+(?:\.\d+)?)\s*kg', texto_lower)
-    if kg:
-        medidas['kg'] = float(kg[0])
-    lts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:lt|lts|litros?|l\b)', texto_lower)
-    if lts:
-        medidas['litros'] = float(lts[0])
-    mts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:mt|mts|metros?|m\b)', texto_lower)
-    if mts:
-        medidas['metros'] = float(mts[0])
+        medidas['fraccion'] = float(f[0]) + float(f[1])/float(f[2]) if f[0] else float(f[3])/float(f[4])
+    pulg = re.findall(r'(\d+(?:\.\d+)?)\s*(?:"|pulgadas?|pulg\b|inch)', t)
+    if pulg: medidas['pulgadas'] = float(pulg[0])
+    mm = re.findall(r'(\d+(?:\.\d+)?)\s*mm', t)
+    if mm: medidas['mm'] = [float(m) for m in mm]
+    kg = re.findall(r'(\d+(?:\.\d+)?)\s*kg', t)
+    if kg: medidas['kg'] = float(kg[0])
+    lts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:lt|lts|litros?|l\b)', t)
+    if lts: medidas['litros'] = float(lts[0])
+    mts = re.findall(r'(\d+(?:\.\d+)?)\s*(?:mt|mts|metros?|m\b)', t)
+    if mts: medidas['metros'] = float(mts[0])
     return medidas
 
 
 def medidas_a_texto(medidas: dict) -> str:
     partes = []
     if 'dim3' in medidas:
-        v = medidas['dim3']
-        partes.append(f"{v[0]}x{v[1]}x{v[2]}")
+        v = medidas['dim3']; partes.append(f"{v[0]}x{v[1]}x{v[2]}")
     if 'dim2' in medidas:
-        v = medidas['dim2']
-        partes.append(f"{v[0]}x{v[1]}")
-    if 'fraccion' in medidas:
-        partes.append(f"{medidas['fraccion']:.2f}\"")
-    if 'pulgadas' in medidas:
-        partes.append(f"{medidas['pulgadas']}\"")
+        v = medidas['dim2']; partes.append(f"{v[0]}x{v[1]}")
+    if 'fraccion' in medidas: partes.append(f"{medidas['fraccion']:.2f}\"")
+    if 'pulgadas' in medidas: partes.append(f"{medidas['pulgadas']}\"")
     if 'mm' in medidas:
-        mm = medidas['mm']
-        partes.append(f"{mm[0] if isinstance(mm, list) else mm}mm")
-    if 'kg' in medidas:
-        partes.append(f"{medidas['kg']}kg")
-    if 'litros' in medidas:
-        partes.append(f"{medidas['litros']}lt")
-    if 'metros' in medidas:
-        partes.append(f"{medidas['metros']}m")
+        mm = medidas['mm']; partes.append(f"{mm[0] if isinstance(mm, list) else mm}mm")
+    if 'kg' in medidas: partes.append(f"{medidas['kg']}kg")
+    if 'litros' in medidas: partes.append(f"{medidas['litros']}lt")
+    if 'metros' in medidas: partes.append(f"{medidas['metros']}m")
     return ", ".join(partes) if partes else "sin medidas"
 
 
 def comparar_medidas(medidas_b: dict, medidas_e: dict) -> float:
-    if not medidas_b:
-        return 0.5
-    if not medidas_e:
-        return 0.0
-    coincidencias = 0
-    total = 0
+    if not medidas_b: return 0.5
+    if not medidas_e: return 0.0
+    coincidencias = total = 0
     for key, val_b in medidas_b.items():
         total += 1
         val_e = medidas_e.get(key)
-        if val_e is None:
-            continue
+        if val_e is None: continue
         if isinstance(val_b, list) and isinstance(val_e, list):
-            if len(val_b) == len(val_e) and all(abs(a - b) < 0.5 for a, b in zip(sorted(val_b), sorted(val_e))):
+            if len(val_b) == len(val_e) and all(abs(a-b) < 0.5 for a, b in zip(sorted(val_b), sorted(val_e))):
                 coincidencias += 1
         elif isinstance(val_b, (int, float)) and isinstance(val_e, (int, float)):
-            if abs(val_b - val_e) <= max(0.1, val_b * 0.1):
-                coincidencias += 1
+            if abs(val_b - val_e) <= max(0.1, val_b * 0.1): coincidencias += 1
         elif isinstance(val_b, list) and isinstance(val_e, (int, float)):
-            if len(val_b) == 1 and abs(val_b[0] - val_e) < 0.5:
-                coincidencias += 1
+            if len(val_b) == 1 and abs(val_b[0] - val_e) < 0.5: coincidencias += 1
         elif isinstance(val_e, list) and isinstance(val_b, (int, float)):
-            if len(val_e) == 1 and abs(val_b - val_e[0]) < 0.5:
-                coincidencias += 1
+            if len(val_e) == 1 and abs(val_b - val_e[0]) < 0.5: coincidencias += 1
     return coincidencias / total if total > 0 else 0.5
 
 
 def extraer_especificaciones(texto: str) -> set:
     specs = set()
-    texto_norm = normalizar(texto)
-    materiales = ['acero', 'hierro', 'fierro', 'pino', 'madera', 'cemento', 'cal', 'arena']
-    tipos = ['estriado', 'liso', 'bruto', 'estructural', 'tubular', 'cuadrado', 'rectangular',
-             'redondo', 'galvanizado', 'cepillado', 'anticorrosivo', 'semibrillo']
-    for m in materiales + tipos:
-        if m in texto_norm:
-            specs.add(m)
-    if 'bruto' in texto_norm or 'sin cepillar' in texto_norm:
-        specs.add('bruto')
-    normas = re.findall(r'\b[a-z]+\d+\b', texto_norm)
-    specs.update(normas)
+    t = normalizar(texto)
+    for m in ['acero','hierro','fierro','pino','madera','cemento','cal','arena']:
+        if m in t: specs.add(m)
+    for tp in ['estriado','liso','bruto','estructural','tubular','cuadrado','rectangular',
+               'redondo','galvanizado','cepillado','anticorrosivo','semibrillo']:
+        if tp in t: specs.add(tp)
+    if 'bruto' in t or 'sin cepillar' in t: specs.add('bruto')
+    specs.update(re.findall(r'\b[a-z]+\d+\b', t))
     return specs
 
 
 def calcular_concordancia(buscado: str, encontrado: str) -> int:
     b_norm = normalizar(buscado)
     e_norm = normalizar(encontrado)
-    if not b_norm or not e_norm:
-        return 0
+    if not b_norm or not e_norm: return 0
     seq_ratio = SequenceMatcher(None, b_norm, e_norm).ratio()
     palabras_b = set(b_norm.split())
     palabras_e = set(e_norm.split())
-    palabras_b_filtradas = {p for p in palabras_b if len(p) > 2}
-    jaccard = len(palabras_b_filtradas & palabras_e) / len(palabras_b_filtradas) if palabras_b_filtradas else 0.5
-    equivalencias = {
-        'bruto': 'sin cepillar', 'sin cepillar': 'bruto',
-        'fierro': 'acero', 'acero': 'fierro',
-        'anticorrosivo': 'antioxidante', 'antioxidante': 'anticorrosivo',
-        'pino': 'pino radiata', 'pino radiata': 'pino',
-    }
-    b_eq = b_norm
-    e_eq = e_norm
-    for orig, rep in equivalencias.items():
+    palabras_b_f = {p for p in palabras_b if len(p) > 2}
+    jaccard = len(palabras_b_f & palabras_e) / len(palabras_b_f) if palabras_b_f else 0.5
+    equiv = {'bruto':'sin cepillar','fierro':'acero','acero':'fierro',
+             'anticorrosivo':'antioxidante','pino':'pino radiata','pino radiata':'pino'}
+    b_eq, e_eq = b_norm, e_norm
+    for orig, rep in equiv.items():
         b_eq = b_eq.replace(orig, rep)
         e_eq = e_eq.replace(orig, rep)
     seq_eq = SequenceMatcher(None, b_eq, e_eq).ratio()
     medidas_b = extraer_medidas(buscado)
     medidas_e = extraer_medidas(encontrado)
-    medida_score = comparar_medidas(medidas_b, medidas_e)
-    bono_medidas = 0
+    med_score = comparar_medidas(medidas_b, medidas_e)
+    bono = 0
     if medidas_b and medidas_e:
-        if medida_score >= 0.95:
-            bono_medidas = 15
-        elif medida_score >= 0.7:
-            bono_medidas = 8
+        bono = 15 if med_score >= 0.95 else (8 if med_score >= 0.7 else 0)
     specs_b = extraer_especificaciones(buscado)
     specs_e = extraer_especificaciones(encontrado)
     spec_match = len(specs_b & specs_e) / len(specs_b) if specs_b else 0.5
-    score_base = (seq_ratio * 0.15 + jaccard * 0.30 + seq_eq * 0.15 + medida_score * 0.25 + spec_match * 0.15) * 100
-    score_final = score_base + bono_medidas
-    palabras_importantes = {p for p in palabras_b if p in ['pino', 'madera', 'acero', 'fierro', 'cemento', 'pintura']}
-    if palabras_importantes:
-        score_final -= len(palabras_importantes - palabras_e) * 8
-    if medidas_b and not medidas_e:
-        score_final -= 15
-    if len(palabras_b_filtradas - palabras_e) > 3:
-        score_final -= 10
-    return round(min(100, max(0, score_final)))
+    score = (seq_ratio*0.15 + jaccard*0.30 + seq_eq*0.15 + med_score*0.25 + spec_match*0.15) * 100 + bono
+    imp = {p for p in palabras_b_f if p in ['pino','madera','acero','fierro','cemento','pintura']}
+    if imp: score -= len(imp - palabras_e) * 8
+    if medidas_b and not medidas_e: score -= 15
+    if len(palabras_b_f - palabras_e) > 3: score -= 10
+    return round(min(100, max(0, score)))
 
 
 def clasificar_concordancia(score: int):
-    if score >= 90:
-        return "exacta", "✅ Coincidencia exacta"
-    elif score >= 75:
-        return "alta", "🟢 Alta coincidencia"
-    elif score >= 60:
-        return "parcial", "🟡 Coincidencia parcial"
-    elif score >= 40:
-        return "baja", "🟠 Baja coincidencia"
-    else:
-        return "nula", "🔴 Sin coincidencia"
+    if score >= 90: return "exacta", "✅ Coincidencia exacta"
+    if score >= 75: return "alta", "🟢 Alta coincidencia"
+    if score >= 60: return "parcial", "🟡 Coincidencia parcial"
+    if score >= 40: return "baja", "🟠 Baja coincidencia"
+    return "nula", "🔴 Sin coincidencia"
 
 
 def inferir_tipo_producto(nombre: str) -> dict:
-    nombre_lower = nombre.lower()
+    n = nombre.lower()
     return {
-        "maquinaria_pesada": any(p in nombre_lower for p in ["retroexcavadora", "minicargador", "grúa", "compactador"]),
-        "herramienta_electrica": any(p in nombre_lower for p in ["taladro", "amoladora", "sierra", "esmeril", "compresor"]),
-        "material_construccion": any(p in nombre_lower for p in ["cemento", "hormigón", "arena", "madera", "fierro", "acero", "tubo", "tabla"]),
-        "articulo_pequeno": any(p in nombre_lower for p in ["clavo", "tornillo", "perno", "tuerca", "remache"]),
-        "pintura_quimico": any(p in nombre_lower for p in ["pintura", "anticorrosivo", "barniz", "esmalte", "sellador"]),
-        "senaletica_vial": any(p in nombre_lower for p in ["letrero", "señal", "tránsito", "paso cebra", "tachas"]),
+        "maquinaria_pesada": any(p in n for p in ["retroexcavadora","minicargador","grúa","compactador","pavimentadora"]),
+        "herramienta_electrica": any(p in n for p in ["taladro","amoladora","sierra","esmeril","compresor","soldadora"]),
+        "material_construccion": any(p in n for p in ["cemento","hormigón","arena","grava","madera","fierro","acero","tubo","placa","tabla","barra"]),
+        "articulo_pequeno": any(p in n for p in ["clavo","tornillo","perno","tuerca","remache","tarugos"]),
+        "pintura_quimico": any(p in n for p in ["pintura","anticorrosivo","barniz","esmalte","sellador","impermeabilizante"]),
+        "senaletica_vial": any(p in n for p in ["letrero","señal","tránsito","paso cebra","tachas","delineador"]),
     }
 
 
@@ -320,6 +278,7 @@ def analizar_producto_buscado(nombre: str) -> dict:
     specs = list(extraer_especificaciones(nombre))
     nombre_norm = normalizar(nombre)
     palabras = [p for p in nombre_norm.split() if len(p) > 2]
+    marcas = ["sherwin","sipa","gerdau","cintac","arauco","masisa","melon","stanley","bosch","dewalt","makita","hilti","sika"]
     return {
         "nombre_original": nombre,
         "nombre_normalizado": nombre_norm,
@@ -328,32 +287,28 @@ def analizar_producto_buscado(nombre: str) -> dict:
         "medidas": {"tiene_medidas": bool(medidas), "detalle": medidas, "texto_legible": medidas_a_texto(medidas)},
         "especificaciones_tecnicas": specs,
         "unidades_relevantes": CATEGORIAS_PRODUCTOS.get(categoria, {}).get("unidades_relevantes", []),
-        "es_accesorio": any(p in nombre.lower() for p in ["repuesto", "accesorio", "disco", "carbón", "funda"]),
-        "marca_detectada": next((m for m in ["sherwin", "sipa", "gerdau", "cintac", "stanley", "bosch", "dewalt", "makita", "sika"] if m in nombre.lower()), None),
+        "es_accesorio": any(p in nombre.lower() for p in ["repuesto","accesorio","disco","carbón","estuche","funda"]),
+        "marca_detectada": next((m for m in marcas if m in nombre.lower()), None),
         "tipo_producto": inferir_tipo_producto(nombre),
     }
 
 
 def analizar_resultado_encontrado(resultado: dict, analisis_buscado: dict) -> dict:
     nombre = resultado.get("nombre", "")
-    medidas_encontradas = extraer_medidas(nombre)
-    specs_encontradas = list(extraer_especificaciones(nombre))
+    medidas_e = extraer_medidas(nombre)
     score = calcular_concordancia(analisis_buscado["nombre_original"], nombre)
-    nivel, etiqueta = clasificar_concordancia(score)
-    medidas_buscado = analisis_buscado["medidas"]["detalle"]
-    conflicto_medidas = False
-    if medidas_buscado and medidas_encontradas:
-        conflicto_medidas = comparar_medidas(medidas_buscado, medidas_encontradas) < 0.5
+    medidas_b = analisis_buscado["medidas"]["detalle"]
+    conflicto = bool(medidas_b and medidas_e and comparar_medidas(medidas_b, medidas_e) < 0.5)
     palabras_b = set(analisis_buscado["palabras_clave"])
     palabras_e = set(normalizar(nombre).split())
     return {
-        "medidas_encontradas": medidas_a_texto(medidas_encontradas),
-        "specs_encontradas": specs_encontradas,
+        "medidas_encontradas": medidas_a_texto(medidas_e),
+        "specs_encontradas": list(extraer_especificaciones(nombre)),
         "score_python": score,
-        "nivel_python": nivel,
+        "nivel_python": clasificar_concordancia(score)[0],
         "palabras_comunes": list(palabras_b & palabras_e),
         "palabras_faltantes": list(palabras_b - palabras_e),
-        "conflicto_medidas": conflicto_medidas,
+        "conflicto_medidas": conflicto,
     }
 
 
@@ -362,25 +317,34 @@ def limpiar_nombre(nombre: str) -> str:
     nombre = re.sub(r'\s*MercadoLibre.*$', '', nombre, flags=re.IGNORECASE)
     nombre = re.sub(r'\s*Envío\s*(gratis|internacional|express).*$', '', nombre, flags=re.IGNORECASE)
     nombre = re.sub(r'\s*✓.*$', '', nombre)
-    nombre = re.sub(r'\s+', ' ', nombre).strip()
-    return nombre
+    nombre = re.sub(r'\s*\(.*?\)$', '', nombre)
+    return re.sub(r'\s+', ' ', nombre).strip()
 
 
 def limpiar_precio(raw_price) -> int | None:
     precio_str = re.sub(r'[^\d]', '', str(raw_price))
-    if not precio_str:
-        return None
+    if not precio_str: return None
     precio = int(precio_str)
-    if precio < 500 or precio > 500_000_000:
-        return None
-    return precio
+    return precio if 500 <= precio <= 500_000_000 else None
+
+
+def es_resultado_chileno(item: dict) -> bool:
+    url = item.get('url', item.get('link', '')).lower()
+    tienda = item.get('tienda', item.get('source', '')).lower()
+    for ind in INDICADORES_EXTRANJEROS:
+        if ind in url or ind in tienda: return False
+    if MONEDAS_EXTRANJERAS.search(str(item.get('price', item.get('precio_con_iva', '')))):
+        return False
+    if '.cl' in url: return True
+    if any(v['dominio'] in url for v in DOMINIOS_CHILE.values()): return True
+    if 'mercadolibre' in url and '/mlc' in url.lower(): return True
+    return item.get('fuente', '') in ('mercadolibre_cl', 'vtex_direct', 'sodimac_direct')
 
 
 def prioridad_tienda(url: str, tienda: str) -> int:
-    url_lower = url.lower()
-    tienda_lower = tienda.lower()
+    url_l = url.lower(); tienda_l = tienda.lower()
     for nombre, datos in DOMINIOS_CHILE.items():
-        if datos['dominio'] in url_lower or nombre in tienda_lower:
+        if datos['dominio'] in url_l or nombre in tienda_l:
             return datos['prioridad']
     return 3
 
@@ -395,21 +359,20 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         r = requests.get(
             "https://api.mercadolibre.com/sites/MLC/search",
             params={"q": producto, "limit": limite, "condition": "new"},
-            timeout=10
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=8
         )
         if r.status_code != 200:
+            print(f"  [ML] HTTP {r.status_code}")
             return []
         resultados = []
         for item in r.json().get("results", []):
             precio = item.get("price", 0)
-            if precio <= 0:
-                continue
+            if precio <= 0: continue
             nombre = limpiar_nombre(item.get("title", ""))
-            if len(nombre) < 4:
-                continue
+            if len(nombre) < 4: continue
             permalink = item.get("permalink", "")
-            if "mercadolibre.cl" not in permalink and "/MLC" not in permalink:
-                continue
+            if "mercadolibre.cl" not in permalink and "/MLC" not in permalink: continue
             resultados.append({
                 "tienda": "MercadoLibre Chile",
                 "nombre": nombre[:150],
@@ -418,128 +381,80 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
                 "fuente": "mercadolibre_cl",
                 "pais": "CL",
             })
-        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        if resultados:
+            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
         return resultados
     except Exception as e:
         print(f"  [ML] Error: {e}")
         return []
 
 
-# ─── Scrapers VTEX (Easy, Construmart, Imperial, Chilemat) ───────────────────
+# ─── Google Shopping via Serper (fuente principal de la web) ─────────────────
 
-def buscar_vtex(store: dict, query: str, limite: int = 10):
-    cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
-    if cache_key in cache_resultados:
-        return cache_resultados[cache_key]['data']
-    try:
-        url = f"https://{store['dominio']}/api/catalog_system/pub/products/search"
-        r = requests.get(
-            url,
-            params={"ft": query, "_from": 0, "_to": limite - 1},
-            headers=HEADERS_BROWSER,
-            timeout=10
-        )
-        if r.status_code != 200:
-            print(f"  [{store['nombre']}] HTTP {r.status_code}")
-            return []
-
-        products = r.json()
-        resultados = []
-
-        for prod in products:
-            nombre = limpiar_nombre(prod.get("productName", ""))
-            if len(nombre) < 4:
-                continue
-            precio = None
-            link = prod.get("link", "")
-
-            for item in prod.get("items", []):
-                for seller in item.get("sellers", []):
-                    offer = seller.get("commertialOffer", {})
-                    if offer.get("AvailableQuantity", 0) > 0:
-                        precio = offer.get("Price", 0)
-                        break
-                if precio:
-                    break
-
-            if not precio or precio < 500:
-                continue
-
-            if not link.startswith("http"):
-                link = f"https://{store['dominio']}{link}"
-
-            resultados.append({
-                "tienda": store["nombre"],
-                "nombre": nombre[:150],
-                "precio_con_iva": round(precio),
-                "url": link,
-                "fuente": "vtex_direct",
-                "pais": "CL",
-            })
-
-        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
-        print(f"  [{store['nombre']}] {len(resultados)} productos")
-        return resultados
-    except Exception as e:
-        print(f"  [{store['nombre']}] Error: {e}")
-        return []
+SERPER_QUOTA_AGOTADA = False  # Flag global para evitar llamadas inútiles
 
 
-# ─── Sodimac Chile (OCC / Oracle Commerce Cloud) ─────────────────────────────
+def fetch_serper(query: str, search_type: str = "shopping", retries: int = 2) -> dict:
+    global SERPER_QUOTA_AGOTADA
+    if SERPER_QUOTA_AGOTADA:
+        print("  [Serper] ⛔ Cuota agotada — omitiendo llamada")
+        return {}
+    url = f"https://google.serper.dev/{search_type}"
+    payload = json.dumps({"q": query, "gl": "cl", "hl": "es", "num": 20, "location": "Chile"})
+    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+    for intento in range(retries):
+        try:
+            r = requests.post(url, headers=headers, data=payload, timeout=10)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code in (402, 429):
+                SERPER_QUOTA_AGOTADA = True
+                print(f"  [Serper] ⛔ CUOTA AGOTADA (HTTP {r.status_code}) — se desactiva Serper para esta sesión")
+                return {}
+            print(f"  [Serper] HTTP {r.status_code} en intento {intento+1}")
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"  [Serper] Intento {intento+1}: {e}")
+            time.sleep(0.3)
+    return {}
+
+
+# ─── Sodimac Chile (Oracle Commerce Cloud) ───────────────────────────────────
 
 def buscar_sodimac(query: str, limite: int = 12):
     cache_key = get_cache_key(f"sodimac_{query}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
     try:
-        # Sodimac usa Oracle Commerce Cloud - endpoint público de búsqueda
         r = requests.get(
             "https://www.sodimac.cl/s/search/resources/v2/summary",
-            params={
-                "Ntt": query,
-                "Nrpp": limite,
-                "No": 0,
-                "lang": "es-cl",
-                "Ns": "product.sortPrice|0",
-                "country": "CL",
-            },
+            params={"Ntt": query, "Nrpp": limite, "No": 0, "lang": "es-cl",
+                    "Ns": "product.sortPrice|0", "country": "CL"},
             headers=HEADERS_BROWSER,
-            timeout=12
+            timeout=8
         )
         if r.status_code != 200:
             print(f"  [Sodimac] HTTP {r.status_code}")
             return []
-
         data = r.json()
-        # OCC puede devolver en distintas estructuras según versión
         records = (
             data.get("resultList", {}).get("Record", [])
-            or data.get("mainContent", [{}])[0].get("contents", [{}])[0].get("records", [])
+            or (data.get("mainContent") or [{}])[0].get("contents", [{}])[0].get("records", [])
             or []
         )
-
         resultados = []
         for rec in records[:limite]:
             attrs = rec.get("attributes", {})
-            nombre_raw = (
-                attrs.get("product.displayName", [""])[0]
-                if isinstance(attrs.get("product.displayName"), list)
-                else attrs.get("product.displayName", "")
-            )
-            nombre = limpiar_nombre(str(nombre_raw))
-            if len(nombre) < 4:
-                continue
-
+            nombre_raw = attrs.get("product.displayName", [""])
+            nombre = limpiar_nombre(str(nombre_raw[0] if isinstance(nombre_raw, list) else nombre_raw))
+            if len(nombre) < 4: continue
             precio_raw = attrs.get("product.salePrice", attrs.get("product.listPrice", ["0"]))
-            if isinstance(precio_raw, list):
-                precio_raw = precio_raw[0]
+            if isinstance(precio_raw, list): precio_raw = precio_raw[0]
             precio = limpiar_precio(str(precio_raw).replace(".", "").replace(",", ""))
-            if not precio:
-                continue
-
-            url_raw = attrs.get("product.productUrl", [""])[0] if isinstance(attrs.get("product.productUrl"), list) else attrs.get("product.productUrl", "")
+            if not precio: continue
+            url_raw = attrs.get("product.productUrl", [""])
+            url_raw = url_raw[0] if isinstance(url_raw, list) else url_raw
             url_prod = f"https://www.sodimac.cl{url_raw}" if url_raw and not url_raw.startswith("http") else url_raw
-
             resultados.append({
                 "tienda": "Sodimac",
                 "nombre": nombre[:150],
@@ -548,8 +463,8 @@ def buscar_sodimac(query: str, limite: int = 12):
                 "fuente": "sodimac_direct",
                 "pais": "CL",
             })
-
-        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        if resultados:
+            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
         print(f"  [Sodimac] {len(resultados)} productos")
         return resultados
     except Exception as e:
@@ -557,58 +472,123 @@ def buscar_sodimac(query: str, limite: int = 12):
         return []
 
 
-# ─── Fallback Google Serper (solo si scrapers dan < 5 resultados) ─────────────
-
-def fetch_serper(query: str, search_type: str = "shopping") -> dict:
-    try:
-        r = requests.post(
-            f"https://google.serper.dev/{search_type}",
-            headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
-            json={"q": query, "gl": "cl", "hl": "es", "num": 20, "location": "Chile"},
-            timeout=12
-        )
-        return r.json() if r.status_code == 200 else {}
-    except Exception as e:
-        print(f"  [Serper] Error: {e}")
-        return {}
-
-
-def buscar_serper_fallback(producto: str, limite: int = 10):
-    print(f"  ⚠️ Activando Serper fallback para: {producto[:40]}")
-    data = fetch_serper(f"{producto} precio Chile", "shopping")
-    items = data.get("shopping", [])
+def buscar_google_shopping(producto: str, limite: int = 20):
+    cache_key = get_cache_key(f"gs_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    query = f"{producto} precio Chile"
+    data = fetch_serper(query, "shopping")
+    items = data.get('shopping', [])
     resultados = []
     for item in items[:limite * 2]:
-        precio = limpiar_precio(item.get("price", ""))
-        if not precio:
-            continue
-        nombre = limpiar_nombre(item.get("title", ""))
-        if len(nombre) < 4:
-            continue
-        url_item = item.get("link", "")
-        tienda = item.get("source", "Tienda Chile")
+        precio = limpiar_precio(item.get('price', ''))
+        if precio is None: continue
+        nombre = limpiar_nombre(item.get('title', ''))
+        if len(nombre) < 4: continue
+        url_item = item.get('link', '')
+        tienda = item.get('source', 'Tienda Chile')
         r = {"tienda": tienda[:40], "nombre": nombre[:150], "precio_con_iva": precio,
-             "url": url_item, "fuente": "serper_fallback", "pais": "CL"}
-        # Solo incluir resultados chilenos
-        if ".cl" in url_item.lower() or any(d["dominio"] in url_item.lower() for d in DOMINIOS_CHILE.values()):
+             "url": url_item, "fuente": "google_shopping_cl", "pais": "CL"}
+        if es_resultado_chileno(r):
             resultados.append(r)
+    if resultados:  # no cachear resultados vacíos — podría ser error temporal de Serper
+        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
     return resultados
 
 
-# ─── es_resultado_chileno ────────────────────────────────────────────────────
+def buscar_web_organica(producto: str, categoria: str, limite: int = 8):
+    datos_cat = CATEGORIAS_PRODUCTOS.get(categoria, CATEGORIAS_PRODUCTOS["ferreteria_general"])
+    queries_extra = datos_cat.get("queries_extra", [])
+    resultados = []
+    for query_template in queries_extra[:2]:
+        query = query_template.format(producto=producto)
+        data = fetch_serper(query, "search")
+        for item in data.get('organic', [])[:5]:
+            url_item = item.get('link', '')
+            tienda = item.get('displayLink', item.get('source', ''))
+            nombre = item.get('title', '')
+            snippet = item.get('snippet', '')
+            precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
+            if not precio_m: continue
+            precio = limpiar_precio(precio_m.group(1))
+            if precio is None: continue
+            r = {"tienda": tienda[:40], "nombre": limpiar_nombre(nombre)[:150],
+                 "precio_con_iva": precio, "url": url_item, "fuente": "web_organica", "pais": "CL"}
+            if es_resultado_chileno(r):
+                resultados.append(r)
+        time.sleep(random.uniform(0.2, 0.4))
+    return resultados
 
-def es_resultado_chileno(item: dict) -> bool:
-    url = item.get('url', item.get('link', '')).lower()
-    for ind in INDICADORES_EXTRANJEROS:
-        if ind in url:
-            return False
-    if MONEDAS_EXTRANJERAS.search(str(item.get('price', ''))):
-        return False
-    if '.cl' in url:
-        return True
-    if any(d["dominio"] in url for d in DOMINIOS_CHILE.values()):
-        return True
-    return item.get("fuente", "") in ("mercadolibre_cl", "vtex_direct", "sodimac_direct")
+
+# ─── VTEX stores (Easy, Construmart, Imperial, Chilemat) ─────────────────────
+# Fuente ADICIONAL — no reemplaza Google Shopping
+
+def buscar_vtex(store: dict, query: str, limite: int = 8):
+    cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        r = requests.get(
+            f"https://{store['dominio']}/api/catalog_system/pub/products/search",
+            params={"ft": query, "_from": 0, "_to": limite - 1},
+            headers=HEADERS_BROWSER,
+            timeout=8
+        )
+        if r.status_code != 200: return []
+        resultados = []
+        for prod in r.json():
+            nombre = limpiar_nombre(prod.get("productName", ""))
+            if len(nombre) < 4: continue
+            precio = None
+            link = prod.get("link", "")
+            for item in prod.get("items", []):
+                for seller in item.get("sellers", []):
+                    offer = seller.get("commertialOffer", {})
+                    if offer.get("AvailableQuantity", 0) > 0:
+                        precio = offer.get("Price", 0)
+                        break
+                if precio: break
+            if not precio or precio < 500: continue
+            if not link.startswith("http"):
+                link = f"https://{store['dominio']}{link}"
+            resultados.append({
+                "tienda": store["nombre"],
+                "nombre": nombre[:150],
+                "precio_con_iva": round(precio),
+                "url": link,
+                "fuente": "vtex_direct",
+                "pais": "CL",
+            })
+        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
+        print(f"  [{store['nombre']} VTEX] {len(resultados)} productos")
+        return resultados
+    except Exception as e:
+        print(f"  [{store['nombre']} VTEX] Error: {e}")
+        return []
+
+
+# ─── Generador de queries ─────────────────────────────────────────────────────
+
+def generar_queries(producto: str, categoria: str) -> list:
+    queries = [f"{producto} Chile precio"]
+    prod_norm = re.sub(r'(\d+)\s*"', r'\1 pulgadas', producto)
+    prod_norm = re.sub(r'(\d+)\s*\'', r'\1 pies', prod_norm)
+    if prod_norm != producto: queries.append(f"{prod_norm} precio Chile")
+    def expandir(txt):
+        return re.sub(r'(\d+)\s+(\d+)\/(\d+)',
+            lambda m: str(float(m.group(1)) + float(m.group(2))/float(m.group(3))), txt)
+    prod_frac = expandir(producto)
+    if prod_frac != producto: queries.append(f"{prod_frac} Chile")
+    terminos_extra = {
+        "madera": ["maderera Chile", "tablón Chile"],
+        "metal_acero": ["acero Chile CLP", "metalúrgica Chile"],
+        "cemento_hormigon": ["saco Chile CLP"],
+        "senaletica": ["señalética tránsito Chile"],
+        "pintura_recubrimiento": ["galón Chile", "litro Chile CLP"],
+    }
+    for termino in terminos_extra.get(categoria, []):
+        queries.append(f"{producto} {termino}")
+    return list(dict.fromkeys(queries))[:4]
 
 
 # ─── BÚSQUEDA PRINCIPAL ───────────────────────────────────────────────────────
@@ -624,40 +604,51 @@ def realizar_busqueda(producto: str, limite: int = 15):
 
     def agregar(nuevos):
         for r in nuevos:
-            url = r.get("url", "")
-            clave = url or normalizar(r.get("nombre", ""))
+            url = r.get('url', '')
+            clave = url or normalizar(r.get('nombre', ''))
             if clave and clave not in urls_vistas:
                 urls_vistas.add(clave)
                 resultados.append(r)
 
-    # ── Consultas paralelas a todas las tiendas ──────────────────────────────
-    with ThreadPoolExecutor(max_workers=7) as executor:
+    # ── Fase 1: Todas las fuentes libres + Google Shopping en paralelo ──────────
+    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Google Shopping + VTEX...")
+    with ThreadPoolExecutor(max_workers=7) as ex:
         futures = {
-            executor.submit(buscar_mercadolibre, producto, limite): "ML",
-            executor.submit(buscar_sodimac, producto, 12): "Sodimac",
+            ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
+            ex.submit(buscar_sodimac, producto, 10): "Sodimac",
+            ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
         }
         for store in VTEX_STORES:
-            futures[executor.submit(buscar_vtex, store, producto, 8)] = store["nombre"]
+            futures[ex.submit(buscar_vtex, store, producto, 6)] = store["nombre"]
 
-        for future in as_completed(futures, timeout=18):
-            nombre_fuente = futures[future]
+        for future in as_completed(futures, timeout=12):
+            nombre_f = futures[future]
             try:
                 nuevos = future.result()
                 agregar(nuevos)
-                print(f"  ✅ {nombre_fuente}: {len(nuevos)} | Total: {len(resultados)}")
+                print(f"  ✅ {nombre_f}: {len(nuevos)} | Total: {len(resultados)}")
             except Exception as e:
-                print(f"  ❌ {nombre_fuente}: {e}")
+                print(f"  ❌ {nombre_f}: {e}")
 
-    # ── Fallback Serper si hay muy pocos resultados ──────────────────────────
+    # ── Fase 2: Queries adicionales si hay pocos resultados ───────────────────
+    if len(resultados) < 9:
+        queries = generar_queries(producto, categoria)
+        for query in queries[1:3]:
+            if len(resultados) >= 9: break
+            print(f"  📡 Variación Serper: '{query[:50]}'...")
+            time.sleep(random.uniform(0.2, 0.3))
+            agregar(buscar_google_shopping(query, 8))
+
+    # ── Fase 3: Web orgánica si sigue habiendo muy pocos resultados ───────────
     if len(resultados) < 5:
-        agregar(buscar_serper_fallback(producto, 10))
+        print(f"  📡 Búsqueda web orgánica especializada...")
+        agregar(buscar_web_organica(producto, categoria))
 
     if not resultados:
         return [], {}
 
-    # ── Análisis + scoring ───────────────────────────────────────────────────
+    # ── Scoring y ranking ─────────────────────────────────────────────────────
     analisis_buscado = analizar_producto_buscado(producto)
-
     for r in resultados:
         ar = analizar_resultado_encontrado(r, analisis_buscado)
         score = ar["score_python"]
@@ -678,7 +669,7 @@ def realizar_busqueda(producto: str, limite: int = 15):
     return filtrados[:limite], analisis_buscado
 
 
-# ─── ENDPOINTS ───────────────────────────────────────────────────────────────
+# ─── ENDPOINT ─────────────────────────────────────────────────────────────────
 
 @app.route("/python/busqueda-robusta", methods=["GET"])
 def busqueda_robusta():
@@ -691,11 +682,13 @@ def busqueda_robusta():
 
     if not producto:
         return jsonify({"numero_item": numero_item, "producto": producto, "resultados": [],
-                        "total_encontrados": 0, "suficientes": False, "deficit": minimo_requerido})
+                        "total_encontrados": 0, "suficientes": False, "deficit": minimo_requerido,
+                        "categoria": "desconocida", "analisis_producto": {}})
 
     if force_refresh:
         for k in [k for k in cache_resultados if producto.lower() in k.lower()]:
             del cache_resultados[k]
+        print(f"  🔄 Cache limpiado para: {producto}")
 
     resultados, analisis_buscado = realizar_busqueda(producto, minimo_requerido * 2)
 
@@ -727,7 +720,8 @@ def busqueda_robusta():
     tiene_suficientes = len(resultados_formateados) >= minimo_requerido
     mejor = resultados_formateados[0] if resultados_formateados else None
 
-    print(f"\n📊 TOTAL: {len(resultados_formateados)} resultados")
+    print(f"\n📊 TOTAL: {len(resultados_formateados)} resultados chilenos")
+    print(f"✅ Suficientes: {tiene_suficientes}")
     if mejor:
         print(f"🏆 Mejor: {mejor['tienda']} → ${mejor['precio_valor']:,} ({mejor['score']}%)")
     print("=" * 60)
@@ -751,8 +745,84 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "tiendas_directas": ["MercadoLibre", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "serper_fallback": "activo",
+        "serper_activo": not SERPER_QUOTA_AGOTADA,
+        "fuentes": ["Google Shopping (Serper)", "MercadoLibre Chile"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "4.1"
+    })
+
+
+@app.route("/python/diagnostico", methods=["GET"])
+def diagnostico():
+    """Prueba cada fuente y reporta estado detallado. Útil para depurar en producción."""
+    resultado = {}
+
+    # Test MercadoLibre
+    try:
+        r = requests.get(
+            "https://api.mercadolibre.com/sites/MLC/search",
+            params={"q": "tornillo", "limit": 3, "condition": "new"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=8
+        )
+        items = r.json().get("results", []) if r.status_code == 200 else []
+        resultado["mercadolibre"] = {
+            "ok": len(items) > 0, "http": r.status_code,
+            "resultados": len(items),
+            "muestra": items[0].get("title", "") if items else ""
+        }
+    except Exception as e:
+        resultado["mercadolibre"] = {"ok": False, "error": str(e)}
+
+    # Test Serper
+    try:
+        data = fetch_serper("tornillo Chile", "shopping")
+        items = data.get("shopping", [])
+        resultado["serper"] = {
+            "ok": len(items) > 0, "cuota_agotada": SERPER_QUOTA_AGOTADA,
+            "resultados": len(items),
+            "muestra": items[0].get("title", "") if items else ""
+        }
+    except Exception as e:
+        resultado["serper"] = {"ok": False, "error": str(e)}
+
+    # Test Sodimac
+    try:
+        r = requests.get(
+            "https://www.sodimac.cl/s/search/resources/v2/summary",
+            params={"Ntt": "tornillo", "Nrpp": 3, "No": 0, "lang": "es-cl"},
+            headers=HEADERS_BROWSER, timeout=8
+        )
+        resultado["sodimac"] = {"ok": r.status_code == 200, "http": r.status_code,
+                                "bytes": len(r.content) if r.status_code == 200 else 0}
+    except Exception as e:
+        resultado["sodimac"] = {"ok": False, "error": str(e)}
+
+    # Test VTEX Easy
+    try:
+        r = requests.get(
+            "https://www.easy.cl/api/catalog_system/pub/products/search",
+            params={"ft": "tornillo", "_from": 0, "_to": 2},
+            headers=HEADERS_BROWSER, timeout=6
+        )
+        items = r.json() if r.status_code == 200 else []
+        resultado["vtex_easy"] = {"ok": len(items) > 0, "http": r.status_code, "resultados": len(items)}
+    except Exception as e:
+        resultado["vtex_easy"] = {"ok": False, "error": str(e)}
+
+    alguna_ok = any(v.get("ok") for v in resultado.values())
+    recomendacion = []
+    if not resultado.get("mercadolibre", {}).get("ok"):
+        recomendacion.append("⚠️ MercadoLibre no responde desde este servidor")
+    if not resultado.get("serper", {}).get("ok"):
+        recomendacion.append("⚠️ Serper sin resultados — verifica créditos en serper.dev")
+    if not resultado.get("vtex_easy", {}).get("ok"):
+        recomendacion.append("⚠️ VTEX Easy bloqueado desde este servidor (posible restricción geo)")
+
+    return jsonify({
+        "estado_general": "operativo" if alguna_ok else "todas_las_fuentes_fallan",
+        "fuentes": resultado,
+        "recomendaciones": recomendacion,
+        "server_ip_hint": request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr),
     })
 
 
@@ -764,11 +834,14 @@ def clear_cache():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v4.0")
-    print("   • Sodimac (OCC directo)")
-    print("   • Easy, Construmart, Imperial, Chilemat (VTEX directo)")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v4.1")
+    print("   FUENTES PRIMARIAS:")
+    print("   • Google Shopping Chile (Serper) ← principal")
     print("   • MercadoLibre Chile (API oficial)")
-    print("   • Serper como fallback de último recurso")
-    print("   • Búsquedas paralelas con ThreadPoolExecutor")
+    print("   FUENTES ADICIONALES (gratis):")
+    print("   • Easy, Construmart, Imperial, Chilemat (VTEX directo)")
+    print("   FALLBACK:")
+    print("   • Web orgánica Serper (solo si < 5 resultados)")
+    print("   ARQUITECTURA: ThreadPoolExecutor (paralelo)")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=True)
