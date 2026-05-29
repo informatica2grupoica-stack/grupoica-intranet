@@ -527,120 +527,134 @@ export default function MonitorMasivoICA() {
   };
   const cancelarBarrido = () => { abortRef.current = true; notify('Cancelando...', 'warning'); };
 
-  // ─── Export: mismo archivo Excel con precios rellenados ──────────────────────
+  // ─── Export: mismo archivo Excel con precios rellenados (solo VALOR C/IVA + LINK 1) ───
   const exportarMismoExcel = () => {
     if (!workbookOriginal || productosExcel.length === 0) {
       notify('Carga un Excel primero para usar esta función', 'warning');
       return;
     }
+    if (itemsLista.length === 0 || itemsLista.every(i => i.resultados.length === 0)) {
+      notify('Realiza primero una búsqueda de productos', 'warning');
+      return;
+    }
 
-    // Clonar el workbook original
+    // Clonar el workbook completo preservando todas las propiedades
     const wbClone = XLSX.utils.book_new();
     workbookOriginal.SheetNames.forEach(name => {
-      const wsOrig = workbookOriginal.Sheets[name];
-      wbClone.Sheets[name] = JSON.parse(JSON.stringify(wsOrig));
+      wbClone.Sheets[name] = JSON.parse(JSON.stringify(workbookOriginal.Sheets[name]));
       wbClone.SheetNames.push(name);
     });
+    if (workbookOriginal.Props)     wbClone.Props     = { ...workbookOriginal.Props };
+    if (workbookOriginal.Custprops) wbClone.Custprops = { ...workbookOriginal.Custprops };
+    if ((workbookOriginal as any).Workbook) {
+      (wbClone as any).Workbook = JSON.parse(JSON.stringify((workbookOriginal as any).Workbook));
+    }
+    // Forzar que Excel recalcule todas las fórmulas al abrir el archivo
+    if (!(wbClone as any).Workbook) (wbClone as any).Workbook = {};
+    if (!(wbClone as any).Workbook.CalcPr) (wbClone as any).Workbook.CalcPr = {};
+    (wbClone as any).Workbook.CalcPr.fullCalcOnLoad = true;
 
     const ws = wbClone.Sheets[sheetNameActual];
     const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    // Encontrar encabezados — detectar columnas existentes
+    // Detectar fila de encabezados y columnas clave
     let headerRow = -1;
-    let colItem = -1, colValorCIVA = -1, colLink = -1;
-    const maxColExistente = jsonData.reduce((max, row) => Math.max(max, (row as any[]).length), 0);
+    let colItem = -1, colValorCIVA = -1, colLink1 = -1;
+    const maxCol = jsonData.reduce((max, row) => Math.max(max, (row as any[]).length), 0);
 
     for (let i = 0; i < Math.min(20, jsonData.length); i++) {
       const row = jsonData[i] as any[];
       if (!row) continue;
-      if (row.some((c: any) => ['ITEM', 'DETALLE'].includes(String(c || '').toUpperCase().trim()))) {
+      // Buscar fila que tenga exactamente "ITEM" como celda
+      if (row.some((c: any) => String(c || '').toUpperCase().trim() === 'ITEM')) {
         headerRow = i;
         row.forEach((cell: any, j: number) => {
           const h = String(cell || '').toUpperCase().trim();
-          if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
+          if (h === 'ITEM') colItem = j;
           else if (h.includes('VALOR') && h.includes('IVA')) colValorCIVA = j;
-          else if (h.includes('LINK')) colLink = j;
+          else if (h.includes('LINK') && colLink1 < 0) colLink1 = j; // primer LINK encontrado = LINK 1
         });
+        console.log(`📌 Export | header fila ${i+1} | ITEM col${colItem} | VALOR_IVA col${colValorCIVA} | LINK1 col${colLink1}`);
         break;
       }
     }
 
-    if (headerRow === -1) {
-      notify('No se encontraron encabezados en el Excel original', 'error');
+    if (headerRow === -1 || colItem === -1) {
+      notify('No se encontró columna ITEM en el Excel. Verifica la pestaña seleccionada.', 'error');
+      return;
+    }
+    if (colValorCIVA === -1) {
+      notify('No se encontró columna VALOR C/IVA. Verifica el formato del Excel.', 'error');
       return;
     }
 
-    // Columnas de cotización al final (preserva columnas originales intactas)
-    const colPrecioWeb = maxColExistente;
-    const colTienda   = maxColExistente + 1;
-    const colMatch    = maxColExistente + 2;
-    const colAhorro   = maxColExistente + 3;
-
+    // Columnas extra al final (solo referencia — no modifican el COSTEO original)
+    const colTienda = maxCol;
+    const colMatch  = maxCol + 1;
     const toCell = (r: number, c: number) => XLSX.utils.encode_cell({ r, c });
 
-    // Encabezados nuevos
-    ws[toCell(headerRow, colPrecioWeb)] = { v: 'PRECIO WEB C/IVA', t: 's' };
-    ws[toCell(headerRow, colTienda)]    = { v: 'TIENDA COTIZACIÓN', t: 's' };
-    ws[toCell(headerRow, colMatch)]     = { v: '% COINCIDENCIA', t: 's' };
-    ws[toCell(headerRow, colAhorro)]    = { v: 'DIFERENCIA ($)', t: 's' };
+    ws[toCell(headerRow, colTienda)] = { v: 'TIENDA COTIZADA', t: 's' };
+    ws[toCell(headerRow, colMatch)]  = { v: '% COINCIDENCIA', t: 's' };
 
-    // Mapas
+    // Mapas de búsqueda
     const resultadosPorItem = new Map<string, ItemLista>();
     itemsLista.forEach(item => resultadosPorItem.set(item.numero, item));
-    const prodPorNumero = new Map<string, ProductoExcel>();
-    productosExcel.forEach(p => prodPorNumero.set(String(p.numero), p));
 
-    // Rellenar filas
+    let filled = 0;
+
     for (let i = headerRow + 1; i < jsonData.length; i++) {
       const row = jsonData[i] as any[];
       if (!row || row.length === 0) continue;
-      const itemNumRaw = colItem >= 0 ? row[colItem] : null;
-      if (itemNumRaw == null) continue;
+      const itemRaw = colItem >= 0 ? row[colItem] : null;
+      if (itemRaw == null) continue;
+      const itemStr = String(itemRaw).trim();
+      // Saltar filas de totales/no-numéricas
+      if (!itemStr || isNaN(Number(itemStr))) continue;
 
-      const itemNumStr = String(itemNumRaw).trim();
-      const itemResult = resultadosPorItem.get(itemNumStr);
-      if (!itemResult) continue;
+      const itemResult = resultadosPorItem.get(itemStr);
+      if (!itemResult || itemResult.resultados.length === 0) continue;
 
-      const prodOrig = prodPorNumero.get(itemNumStr);
-      const selected = seleccionManual.get(itemNumStr) || itemResult.mejor_match || itemResult.resultados[0];
-      if (!selected) continue;
+      const selected = seleccionManual.get(itemStr) || itemResult.mejor_match || itemResult.resultados[0];
+      if (!selected || !selected.precio_valor) continue;
 
-      const precioWebIVA = selected.precio_valor || 0;
-      const precioRefCIVA = prodOrig?.valor_civa || 0;
-      const diferencia = precioRefCIVA > 0 ? precioRefCIVA - precioWebIVA : 0;
-      const porcentaje = selected.matching?.porcentaje ?? 0;
+      const precioWebIVA = selected.precio_valor;
+      const porcentaje   = selected.matching?.porcentaje ?? 0;
 
-      // Actualizar VALOR C/IVA con precio web encontrado
-      if (colValorCIVA >= 0) {
-        ws[toCell(i, colValorCIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
+      // ✅ Escribir solo en VALOR C/IVA → las fórmulas de Costo unitario/total calculan solos
+      ws[toCell(i, colValorCIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
+
+      // ✅ Escribir LINK 1 si existe la columna
+      if (colLink1 >= 0 && selected.link) {
+        ws[toCell(i, colLink1)] = { v: selected.link, t: 's' };
       }
-      // Actualizar LINK con link del producto encontrado
-      if (colLink >= 0 && selected.link) {
-        ws[toCell(i, colLink)] = { v: selected.link, t: 's' };
-      }
-      // Columnas adicionales de cotización
-      ws[toCell(i, colPrecioWeb)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
-      ws[toCell(i, colTienda)]    = { v: selected.tienda, t: 's' };
-      ws[toCell(i, colMatch)]     = { v: `${porcentaje}%`, t: 's' };
-      ws[toCell(i, colAhorro)]    = { v: diferencia, t: 'n', z: '"$"#,##0' };
+
+      // Columnas extra de referencia
+      ws[toCell(i, colTienda)] = { v: selected.tienda, t: 's' };
+      ws[toCell(i, colMatch)]  = { v: `${porcentaje}%`, t: 's' };
+
+      filled++;
     }
 
-    // Actualizar rango y anchos
+    if (filled === 0) {
+      notify('No se encontraron resultados para exportar. Realiza la búsqueda primero.', 'warning');
+      return;
+    }
+
+    // Actualizar rango del sheet
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    range.e.c = Math.max(range.e.c, colAhorro);
+    range.e.c = Math.max(range.e.c, colMatch);
     ws['!ref'] = XLSX.utils.encode_range(range);
 
-    const colWidths = ws['!cols'] || Array(colPrecioWeb).fill({ wch: 12 });
-    while (colWidths.length <= colAhorro) colWidths.push({ wch: 14 });
-    colWidths[colPrecioWeb] = { wch: 18 };
-    colWidths[colTienda]    = { wch: 22 };
-    colWidths[colMatch]     = { wch: 14 };
-    colWidths[colAhorro]    = { wch: 16 };
+    // Anchos de columnas extra
+    const colWidths = ws['!cols'] ? [...(ws['!cols'] as any[])] : Array(maxCol).fill({ wch: 12 });
+    while (colWidths.length <= colMatch) colWidths.push({ wch: 14 });
+    colWidths[colTienda] = { wch: 22 };
+    colWidths[colMatch]  = { wch: 14 };
     ws['!cols'] = colWidths;
 
     const fecha = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wbClone, `COSTEO_cotizado_${fecha}.xlsx`);
-    notify('✅ Excel exportado — misma estructura con precios web', 'success');
+    notify(`✅ ${filled} ítems exportados — abre el archivo y Excel calculará Costo neto y Total automáticamente`, 'success');
   };
 
   // ─── Export: solo mejor resultado ────────────────────────────────────────────
