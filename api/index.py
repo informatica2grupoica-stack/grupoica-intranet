@@ -711,7 +711,7 @@ def generar_queries(producto: str, categoria: str) -> list:
 
 # ─── BÚSQUEDA PRINCIPAL ───────────────────────────────────────────────────────
 
-def realizar_busqueda(producto: str, limite: int = 15):
+def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad"):
     print(f"\n  🔍 Producto: {producto}")
     categoria = clasificar_producto(producto)
     print(f"  📂 Categoría: {categoria}")
@@ -770,9 +770,16 @@ def realizar_busqueda(producto: str, limite: int = 15):
 
     # ── Scoring y ranking ─────────────────────────────────────────────────────
     analisis_buscado = analizar_producto_buscado(producto)
+    conv_lower = conversion.lower() if conversion else "unidad"
     for r in resultados:
         ar = analizar_resultado_encontrado(r, analisis_buscado)
         score = ar["score_python"]
+        # Bono/penalización por unidad de conversión
+        nombre_r = r.get("nombre", "").lower()
+        if conv_lower not in ("unidad", "und", "un", ""):
+            compatible = detectar_unidad_resultado(nombre_r, conv_lower)
+            if compatible:
+                score = min(100, score + 8)  # Bono por unidad correcta
         nivel, etiqueta = clasificar_concordancia(score)
         r.update({
             "score": score,
@@ -780,6 +787,7 @@ def realizar_busqueda(producto: str, limite: int = 15):
             "etiqueta_concordancia": etiqueta,
             "prioridad_tienda": prioridad_tienda(r.get("url", ""), r.get("tienda", "")),
             "categoria": categoria,
+            "conversion": conv_lower,
             "precio_neto": round(r["precio_con_iva"] / IVA),
             "precio_formateado": f"${r['precio_con_iva']:,.0f}".replace(",", "."),
             "_analisis": ar,
@@ -792,12 +800,41 @@ def realizar_busqueda(producto: str, limite: int = 15):
 
 # ─── ENDPOINT ─────────────────────────────────────────────────────────────────
 
+UNIDADES_VALIDAS = {
+    "kg":      ["kg", "kilo", "kilos", "kilogramo", "/kg", "por kg"],
+    "m3":      ["m3", "m³", "metro cubico", "metro cúbico", "/m3", "por m3"],
+    "m2":      ["m2", "m²", "metro cuadrado", "/m2"],
+    "galon":   ["galón", "galon", "gal", "gl", "/gl", "1 gl", "1 galón"],
+    "litro":   ["litro", "lt", "lts", "/lt", "1 lt", "1 litro"],
+    "tira":    ["tira", "tira 6m", "/tira"],
+    "caja":    ["caja", "por caja", "/caja"],
+    "pack":    ["pack", "paquete", "por pack"],
+    "tineta":  ["tineta", "/tineta"],
+    "metro":   ["metro", "mt", "/mt", "por metro"],
+    "rollo":   ["rollo", "por rollo"],
+    "unidad":  [],  # no restricción
+}
+
+
+def detectar_unidad_resultado(nombre: str, conversion: str) -> bool:
+    """Verifica si el nombre del resultado es compatible con la unidad de conversión."""
+    if not conversion or conversion.lower() in ("unidad", "und", "un", ""):
+        return True
+    nombre_lower = nombre.lower()
+    conv_lower = conversion.lower()
+    for key, indicadores in UNIDADES_VALIDAS.items():
+        if conv_lower in (key, *indicadores):
+            return any(ind in nombre_lower for ind in indicadores) if indicadores else True
+    return True  # unidad desconocida — no filtrar
+
+
 @app.route("/python/busqueda-robusta", methods=["GET"])
 def busqueda_robusta():
     producto = request.args.get("producto", "").strip()
     numero_item = request.args.get("numero", "")
     minimo_requerido = int(request.args.get("minimo", 15))
     force_refresh = request.args.get("force", "").lower() == "true"
+    conversion = request.args.get("conversion", "unidad").strip().lower()
 
     print(f"\n{'='*60}\n🔍 [{numero_item}] {producto}\n{'='*60}")
 
@@ -811,7 +848,7 @@ def busqueda_robusta():
             del cache_resultados[k]
         print(f"  🔄 Cache limpiado para: {producto}")
 
-    resultados, analisis_buscado = realizar_busqueda(producto, minimo_requerido * 2)
+    resultados, analisis_buscado = realizar_busqueda(producto, minimo_requerido * 2, conversion=conversion)
 
     resultados_formateados = []
     for r in resultados:
@@ -836,6 +873,7 @@ def busqueda_robusta():
             "palabras_comunes": ar.get("palabras_comunes", []),
             "palabras_faltantes": ar.get("palabras_faltantes", []),
             "conflicto_medidas": ar.get("conflicto_medidas", False),
+            "conversion": r.get("conversion", "unidad"),
         })
 
     tiene_suficientes = len(resultados_formateados) >= minimo_requerido

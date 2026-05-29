@@ -55,6 +55,7 @@ const ModalPrevisualizacion = ({
                   <tr className="border-b border-slate-200">
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">ITEM</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">DETALLE</th>
+                    <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-center">CONVERSIÓN</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">CANTIDAD</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase text-right">VALOR C/IVA</th>
                     <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase">LINK REFERENCIA</th>
@@ -65,6 +66,12 @@ const ModalPrevisualizacion = ({
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-slate-600">{prod.numero}</td>
                       <td className="px-4 py-3 text-xs text-slate-700 max-w-md truncate">{prod.nombre}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
+                          !prod.conversion || prod.conversion === 'unidad' ? 'bg-slate-100 text-slate-500'
+                          : 'bg-blue-100 text-blue-700 border border-blue-200'
+                        }`}>{prod.conversion || 'unidad'}</span>
+                      </td>
                       <td className="px-4 py-3 text-xs text-right text-slate-600">{prod.cantidad}</td>
                       <td className="px-4 py-3 text-xs text-right font-bold text-emerald-600">
                         {prod.valor_civa > 0 ? `$${prod.valor_civa.toLocaleString('es-CL')}` : '—'}
@@ -114,6 +121,7 @@ interface ProductoResultado {
 interface ItemLista {
   numero: string;
   nombre: string;
+  conversion?: string;
   resultados: ProductoResultado[];
   total_encontrados: number;
   suficientes: boolean;
@@ -129,7 +137,7 @@ interface ProductoExcel {
   cantidad: number;
   valor_civa: number;
   link_referencia: string;
-  // posición en el sheet original para el export
+  conversion: string;
   _fila?: number;
 }
 
@@ -259,7 +267,7 @@ export default function MonitorMasivoICA() {
 
     // Buscar fila de encabezados
     let headerRow = -1;
-    let colItem = -1, colDetalle = -1, colCantidad = -1, colValor = -1, colLink = -1;
+    let colItem = -1, colDetalle = -1, colCantidad = -1, colValor = -1, colLink = -1, colConversion = -1;
 
     for (let i = 0; i < Math.min(20, jsonData.length); i++) {
       const row = jsonData[i];
@@ -275,9 +283,10 @@ export default function MonitorMasivoICA() {
           else if (h === 'DETALLE' || h.includes('DETALLE')) colDetalle = j;
           else if (h === 'CANTIDAD' || h.includes('CANTIDAD')) colCantidad = j;
           else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
+          else if (h === 'CONVERSION' || h.includes('CONVERSION')) colConversion = j;
           else if (h.includes('LINK')) colLink = j;
         });
-        console.log(`📌 Headers fila ${i + 1} | ITEM:${colItem} DETALLE:${colDetalle} CANT:${colCantidad} VALOR:${colValor}`);
+        console.log(`📌 Headers fila ${i + 1} | ITEM:${colItem} DETALLE:${colDetalle} CANT:${colCantidad} VALOR:${colValor} CONV:${colConversion}`);
         break;
       }
     }
@@ -298,6 +307,7 @@ export default function MonitorMasivoICA() {
       const itemNum = colItem >= 0 ? row[colItem] : i - headerRow;
       const cantidad = colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1;
       const link = colLink >= 0 ? String(row[colLink] || '').trim() : '';
+      const conversion = colConversion >= 0 ? String(row[colConversion] || '').trim().toLowerCase() : 'unidad';
 
       let valorCIVA = 0;
       if (colValor >= 0 && row[colValor] != null && row[colValor] !== '') {
@@ -315,6 +325,7 @@ export default function MonitorMasivoICA() {
         cantidad: Number(cantidad) || 1,
         valor_civa: valorCIVA,
         link_referencia: link,
+        conversion: conversion || 'unidad',
         _fila: i,
       });
     }
@@ -336,21 +347,48 @@ export default function MonitorMasivoICA() {
     if (workbookOriginal) procesarPestana(workbookOriginal, sheetName);
   };
 
+  // Normalizar unidad de conversión a término de búsqueda
+  const normalizarConversion = (conv: string): string => {
+    const c = (conv || '').toLowerCase().trim();
+    if (!c || c === 'unidad' || c === 'un' || c === 'und') return '';
+    if (c === 'kg' || c === 'kilo' || c === 'kilos' || c === 'kilogramo') return 'precio kg';
+    if (c === 'm3' || c === 'metro cubico' || c === 'metro cúbico') return 'precio m3';
+    if (c === 'm2' || c === 'metro cuadrado') return 'precio m2';
+    if (c === 'gl' || c === 'galon' || c === 'galón' || c === 'gal') return 'precio galón';
+    if (c === 'lt' || c === 'litro' || c === 'lts') return 'precio litro';
+    if (c === 'tira') return 'precio tira 6m';
+    if (c.includes('caja')) return 'precio caja';
+    if (c === 'pack' || c === 'paquete') return 'precio pack';
+    if (c === 'tineta') return 'precio tineta';
+    if (c === 'm' || c === 'metro' || c === 'mt') return 'precio metro';
+    if (c === 'rollo') return 'precio rollo';
+    return '';
+  };
+
   // ─── Búsqueda robusta de un producto ─────────────────────────────────────────
   const buscarProductoRobusto = async (
     producto: string,
     numero: string,
-    minimo: number = 15
+    minimo: number = 15,
+    conversion?: string
   ): Promise<ItemLista> => {
     try {
       let consultaFinal = producto;
+
+      // Agregar unidad de conversión a la query si no es "unidad"
+      const unidadTermino = normalizarConversion(conversion || '');
+      if (unidadTermino) {
+        consultaFinal = `${producto} ${unidadTermino}`;
+        console.log(`📦 [${numero}] Conversion "${conversion}" → query: "${consultaFinal}"`);
+      }
+
       if (contextoPersonalizado.trim()) {
-        consultaFinal = await enriquecerConsulta(producto, contextoPersonalizado);
+        consultaFinal = await enriquecerConsulta(consultaFinal, contextoPersonalizado);
         if (consultaFinal !== producto) console.log(`✨ [${numero}] "${producto}" → "${consultaFinal}"`);
       }
 
       const res = await fetch(
-        `/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=${minimo}`
+        `/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=${minimo}&conversion=${encodeURIComponent(conversion || 'unidad')}`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -414,6 +452,7 @@ export default function MonitorMasivoICA() {
       return {
         numero: String(data.numero_item || numero),
         nombre: String(data.producto || producto),
+        conversion: conversion || '',
         resultados: resultadosConMatch,
         total_encontrados: resultadosConMatch.length,
         suficientes: resultadosConMatch.length >= minimo,
@@ -446,7 +485,7 @@ export default function MonitorMasivoICA() {
   };
 
   // ─── Barrido con concurrencia x3 ──────────────────────────────────────────────
-  const iniciarBarrido = async (items: { numero: string; nombre: string }[]) => {
+  const iniciarBarrido = async (items: { numero: string; nombre: string; conversion?: string }[]) => {
     if (items.length === 0) { notify('No hay productos para buscar', 'error'); return; }
 
     setProcesando(true);
@@ -457,8 +496,8 @@ export default function MonitorMasivoICA() {
 
     // Inicializar todos como "procesando"
     setItemsLista(items.map(item => ({
-      numero: item.numero, nombre: item.nombre, resultados: [],
-      total_encontrados: 0, suficientes: false, deficit: 15, procesando: true,
+      numero: item.numero, nombre: item.nombre, conversion: item.conversion || '',
+      resultados: [], total_encontrados: 0, suficientes: false, deficit: 15, procesando: true,
     })));
 
     const semaforo = crearSemaforo(3);
@@ -467,7 +506,7 @@ export default function MonitorMasivoICA() {
     const promesas = items.map(item =>
       semaforo(async () => {
         if (abortRef.current) return;
-        const resultado = await buscarProductoRobusto(item.nombre, item.numero);
+        const resultado = await buscarProductoRobusto(item.nombre, item.numero, 15, item.conversion);
         completados++;
         setProgreso({ actual: completados, total: items.length });
         setItemsLista(prev => prev.map(p => p.numero === item.numero ? resultado : p));
@@ -484,7 +523,7 @@ export default function MonitorMasivoICA() {
   const iniciarBarridoTexto = () => iniciarBarrido(parsearLista(inputMasivo));
   const iniciarBarridoExcel = () => {
     setShowModal(false);
-    iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre })));
+    iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion })));
   };
   const cancelarBarrido = () => { abortRef.current = true; notify('Cancelando...', 'warning'); };
 
@@ -890,7 +929,7 @@ export default function MonitorMasivoICA() {
                     className="flex-1 bg-slate-200 text-slate-700 py-1.5 rounded-lg text-[9px] font-black flex items-center justify-center gap-1">
                     <Eye size={11} /> Ver
                   </button>
-                  <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre })))}
+                  <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion })))}
                     disabled={procesando}
                     className="flex-1 bg-orange-600 text-white py-1.5 rounded-lg text-[9px] font-black flex items-center justify-center gap-1 disabled:opacity-50">
                     <Sparkles size={11} /> Buscar
@@ -992,7 +1031,14 @@ export default function MonitorMasivoICA() {
                         {item.numero}
                       </div>
                       <div>
-                        <h3 className="font-black text-sm text-slate-800">{item.nombre}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-black text-sm text-slate-800">{item.nombre}</h3>
+                          {item.conversion && item.conversion !== 'unidad' && item.conversion !== 'und' && item.conversion !== '' && (
+                            <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase border border-blue-200">
+                              📦 {item.conversion}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {item.procesando ? (
                             <span className="text-[9px] font-black text-orange-500 flex items-center gap-1">
