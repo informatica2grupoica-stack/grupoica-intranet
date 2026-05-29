@@ -26,7 +26,6 @@ app = Flask(__name__)
 CORS(app)
 
 IVA = 1.19
-SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "2a1e02a687f2b1e29d461b6d8acce180b707942e")
 
 cache_resultados = {}
 CACHE_TTL = 300  # 5 minutos
@@ -407,7 +406,7 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         return []
 
 
-# ─── Bing Search (reemplazo libre de Serper — funciona desde IPs cloud) ──────
+# ─── Bing Search (gratuito, sin API key — funciona desde IPs cloud) ──────────
 
 def buscar_bing(producto: str, limite: int = 15):
     """Busca en Bing.com y extrae precios de snippets. Gratuito, sin API key."""
@@ -469,32 +468,6 @@ def buscar_bing(producto: str, limite: int = 15):
         return []
 
 
-# ─── Google Shopping via Serper (fallback si Bing no alcanza) ─────────────────
-
-SERPER_QUOTA_AGOTADA = False
-
-
-def fetch_serper(query: str, search_type: str = "shopping", retries: int = 1) -> dict:
-    global SERPER_QUOTA_AGOTADA
-    if SERPER_QUOTA_AGOTADA:
-        return {}
-    url = f"https://google.serper.dev/{search_type}"
-    try:
-        r = requests.post(
-            url,
-            headers={'X-API-KEY': SERPER_API_KEY},
-            json={"q": query, "gl": "cl", "hl": "es", "num": 10},
-            timeout=8
-        )
-        if r.status_code == 200:
-            return r.json()
-        if r.status_code in (400, 401, 402, 429):
-            SERPER_QUOTA_AGOTADA = True
-            print(f"  [Serper] ⛔ Desactivado (HTTP {r.status_code})")
-            return {}
-    except Exception as e:
-        print(f"  [Serper] Error: {e}")
-    return {}
 
 
 # ─── Sodimac Chile (Oracle Commerce Cloud) ───────────────────────────────────
@@ -551,171 +524,7 @@ def buscar_sodimac(query: str, limite: int = 12):
         return []
 
 
-def buscar_google_shopping(producto: str, limite: int = 15):
-    cache_key = get_cache_key(f"gs_{producto}", limite)
-    if cache_key in cache_resultados:
-        return cache_resultados[cache_key]['data']
-    query = f"{producto} precio Chile"
-    data = fetch_serper(query, "shopping")
-    items = data.get('shopping', [])
-    resultados = []
-    for item in items[:limite * 2]:
-        precio_raw = item.get('price', '')
-        precio = limpiar_precio(precio_raw)
-        if precio is None: continue
-        # Filtrar precios USD: X.XX (exactamente 2 decimales, no 3) = formato dólar
-        # $22.99 → filtrar | $1.990 → válido (miles chileno, 3 dígitos tras el punto)
-        if precio < 10000 and re.search(r'\d+\.\d{2}(?!\d)', str(precio_raw)):
-            continue
-        nombre = limpiar_nombre(item.get('title', ''))
-        if len(nombre) < 4: continue
-        url_item = item.get('link', '')
-        tienda = item.get('source', 'Tienda Chile')
-        skip = False
-        for ind in INDICADORES_EXTRANJEROS:
-            if ind in url_item.lower() or ind in tienda.lower():
-                skip = True; break
-        if skip: continue
-        resultados.append({
-            "tienda": tienda[:40],
-            "nombre": nombre[:150],
-            "precio_con_iva": precio,
-            "url": url_item,
-            "fuente": "google_shopping_cl",
-            "pais": "CL",
-        })
-    if resultados:
-        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
-    return resultados
-
-
-def buscar_web_organica(producto: str, categoria: str, limite: int = 8):
-    datos_cat = CATEGORIAS_PRODUCTOS.get(categoria, CATEGORIAS_PRODUCTOS["ferreteria_general"])
-    queries_extra = datos_cat.get("queries_extra", [])
-    resultados = []
-    for query_template in queries_extra[:2]:
-        query = query_template.format(producto=producto)
-        data = fetch_serper(query, "search")
-        for item in data.get('organic', [])[:5]:
-            url_item = item.get('link', '')
-            tienda = item.get('displayLink', item.get('source', ''))
-            nombre = item.get('title', '')
-            snippet = item.get('snippet', '')
-            precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
-            if not precio_m: continue
-            precio = limpiar_precio(precio_m.group(1))
-            if precio is None: continue
-            # Excluir solo dominios claramente extranjeros
-            skip = any(ind in url_item.lower() for ind in INDICADORES_EXTRANJEROS)
-            if skip: continue
-            resultados.append({
-                "tienda": tienda[:40],
-                "nombre": limpiar_nombre(nombre)[:150],
-                "precio_con_iva": precio,
-                "url": url_item,
-                "fuente": "web_organica",
-                "pais": "CL",
-            })
-        time.sleep(random.uniform(0.2, 0.4))
-    return resultados
-
-
-# ─── DuckDuckGo HTML (fuente libre, sin API key) ─────────────────────────────
-
-def buscar_duckduckgo(producto: str, limite: int = 12):
-    """Scraping de DuckDuckGo HTML — gratuito, sin límites de cuota."""
-    cache_key = get_cache_key(f"ddg_{producto}", limite)
-    if cache_key in cache_resultados:
-        return cache_resultados[cache_key]['data']
-    try:
-        query = f"{producto} precio Chile comprar"
-        r = requests.get(
-            "https://html.duckduckgo.com/html/",
-            params={"q": query, "kl": "cl-es"},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept-Language": "es-CL,es;q=0.9",
-                "Accept": "text/html",
-            },
-            timeout=10
-        )
-        if r.status_code != 200:
-            print(f"  [DDG] HTTP {r.status_code}")
-            return []
-
-        html = r.text
-        resultados = []
-
-        if BS4_DISPONIBLE:
-            soup = BeautifulSoup(html, "lxml")
-            for result in soup.select(".result")[:limite * 2]:
-                a_tag = result.select_one(".result__a")
-                snippet_tag = result.select_one(".result__snippet")
-                if not a_tag: continue
-                title = a_tag.get_text(strip=True)
-                url = a_tag.get("href", "")
-                # DDG redirige por /l/?uddg=... — extraer URL real
-                url_m = re.search(r'uddg=([^&]+)', url)
-                if url_m:
-                    from urllib.parse import unquote
-                    url = unquote(url_m.group(1))
-                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-                # Extraer precio del snippet
-                precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
-                if not precio_m: continue
-                precio_str = precio_m.group(1).replace('.', '').replace(',', '')
-                precio = limpiar_precio(precio_str)
-                if not precio: continue
-                skip = any(ind in url.lower() for ind in INDICADORES_EXTRANJEROS)
-                if skip: continue
-                domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url)
-                tienda = domain_m.group(1) if domain_m else "Web"
-                resultados.append({
-                    "tienda": tienda[:40],
-                    "nombre": limpiar_nombre(title)[:150],
-                    "precio_con_iva": precio,
-                    "url": url,
-                    "fuente": "duckduckgo",
-                    "pais": "CL",
-                })
-        else:
-            # Fallback sin BeautifulSoup — regex simple
-            from urllib.parse import unquote
-            links = re.findall(r'result__a[^>]+href="(/l/\?[^"]+)"[^>]*>([^<]+)', html)
-            snippets = re.findall(r'result__snippet[^>]*>([^<]+)', html)
-            for i, (raw_href, title) in enumerate(links[:limite * 2]):
-                url_m = re.search(r'uddg=([^&]+)', raw_href)
-                if not url_m: continue
-                url = unquote(url_m.group(1))
-                snippet = snippets[i] if i < len(snippets) else ""
-                precio_m = re.search(r'\$\s*([\d\.,]+)', snippet)
-                if not precio_m: continue
-                precio = limpiar_precio(precio_m.group(1).replace('.', '').replace(',', ''))
-                if not precio: continue
-                skip = any(ind in url.lower() for ind in INDICADORES_EXTRANJEROS)
-                if skip: continue
-                domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url)
-                tienda = domain_m.group(1) if domain_m else "Web"
-                resultados.append({
-                    "tienda": tienda[:40],
-                    "nombre": limpiar_nombre(title)[:150],
-                    "precio_con_iva": precio,
-                    "url": url,
-                    "fuente": "duckduckgo",
-                    "pais": "CL",
-                })
-
-        if resultados:
-            cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
-        print(f"  [DDG] {len(resultados)} resultados")
-        return resultados
-    except Exception as e:
-        print(f"  [DDG] Error: {e}")
-        return []
-
-
-# ─── VTEX stores (Easy, Construmart, Imperial, Chilemat) ─────────────────────
-# Fuente ADICIONAL — no reemplaza Google Shopping
+# ─── VTEX stores (Easy, Construmart, Imperial) ───────────────────────────────
 
 def buscar_vtex(store: dict, query: str, limite: int = 8):
     cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
@@ -761,50 +570,43 @@ def buscar_vtex(store: dict, query: str, limite: int = 8):
         return []
 
 
-# ─── Falabella Chile ─────────────────────────────────────────────────────────
-def buscar_falabella(query: str, limite: int = 10):
-    cache_key = get_cache_key(f"falabella_{query}", limite)
+# ─── Homecenter Chile (Sodimac VTEX) ─────────────────────────────────────────
+def buscar_homecenter(query: str, limite: int = 8):
+    """Homecenter.cl usa VTEX — complementa a Sodimac"""
+    cache_key = get_cache_key(f"hc_{query}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
     try:
         r = requests.get(
-            "https://www.falabella.com/s/browse/v1/listing/cl",
-            params={"query": query, "currentPage": 1, "sortBy": "Relevance"},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"},
-            timeout=8
+            "https://www.homecenter.cl/homecenter-cl/api/catalog_system/pub/products/search",
+            params={"ft": query, "_from": 0, "_to": limite - 1},
+            headers=HEADERS_BROWSER, timeout=8
         )
         if r.status_code != 200:
-            print(f"  [Falabella] HTTP {r.status_code}")
+            print(f"  [Homecenter] HTTP {r.status_code}")
             return []
-        data = r.json()
         resultados = []
-        skus = (data.get("state") or {}).get("resultList", {}).get("SkuList") or []
-        for sku in skus[:limite]:
-            nombre = limpiar_nombre(sku.get("displayName") or sku.get("name") or "")
+        for prod in r.json():
+            nombre = limpiar_nombre(prod.get("productName", ""))
             if len(nombre) < 4: continue
             precio = None
-            prices = sku.get("prices") or []
-            for p in prices:
-                val = p.get("originalPrice") or p.get("price")
-                if val: precio = limpiar_precio(str(int(float(val)))); break
-            if not precio: continue
-            url_prod = sku.get("url") or ""
-            if url_prod and not url_prod.startswith("http"):
-                url_prod = f"https://www.falabella.com{url_prod}"
-            resultados.append({
-                "tienda": "Falabella",
-                "nombre": nombre[:150],
-                "precio_con_iva": precio,
-                "url": url_prod,
-                "fuente": "falabella_direct",
-                "pais": "CL",
-            })
+            link = prod.get("link", "")
+            for item in prod.get("items", []):
+                for seller in item.get("sellers", []):
+                    offer = seller.get("commertialOffer", {})
+                    if offer.get("AvailableQuantity", 0) > 0:
+                        precio = offer.get("Price", 0); break
+                if precio: break
+            if not precio or precio < 500: continue
+            if not link.startswith("http"):
+                link = f"https://www.homecenter.cl{link}"
+            resultados.append({"tienda": "Homecenter", "nombre": nombre[:150], "precio_con_iva": round(precio), "url": link, "fuente": "vtex_direct", "pais": "CL"})
         if resultados:
             cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
-        print(f"  [Falabella] {len(resultados)} productos")
+        print(f"  [Homecenter] {len(resultados)} productos")
         return resultados
     except Exception as e:
-        print(f"  [Falabella] Error: {e}")
+        print(f"  [Homecenter] Error: {e}")
         return []
 
 
@@ -856,13 +658,13 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
     palabras_clave = [w for w in producto.split() if not re.match(r'^[\d\.,xX×"\']+$', w) and len(w) > 2]
     query_vtex = ' '.join(palabras_clave[:4])
 
-    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Bing + Serper + VTEX... (VTEX query: '{query_vtex}')")
-    with ThreadPoolExecutor(max_workers=7) as ex:
+    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Bing + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
             ex.submit(buscar_bing, producto, limite): "Bing",
-            ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
+            ex.submit(buscar_homecenter, query_vtex, 8): "Homecenter",
         }
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
@@ -876,21 +678,14 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
             except Exception as e:
                 print(f"  ❌ {nombre_f}: {e}")
 
-    # ── Fase 2: Queries adicionales si hay pocos resultados ───────────────────
+    # ── Fase 2: Queries adicionales con Bing si hay pocos resultados ──────────
     if len(resultados) < 9:
         queries = generar_queries(producto, categoria)
         for query in queries[1:2]:
             if len(resultados) >= 9: break
-            print(f"  📡 Variación: '{query[:50]}'...")
+            print(f"  📡 Variación Bing: '{query[:50]}'...")
             time.sleep(random.uniform(0.1, 0.2))
             agregar(buscar_bing(query, 8))
-            if len(resultados) < 9:
-                agregar(buscar_google_shopping(query, 8))
-
-    # ── Fase 3: Web orgánica si sigue habiendo muy pocos resultados ───────────
-    if len(resultados) < 5:
-        print(f"  📡 Búsqueda web orgánica especializada...")
-        agregar(buscar_web_organica(producto, categoria))
 
     if not resultados:
         return [], {}
@@ -1031,9 +826,8 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "serper_activo": not SERPER_QUOTA_AGOTADA,
-        "fuentes": ["DuckDuckGo (libre)", "Google Shopping (Serper)", "MercadoLibre Chile"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "4.2"
+        "fuentes": ["MercadoLibre Chile", "Sodimac", "Bing", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "5.0"
     })
 
 
@@ -1059,17 +853,20 @@ def diagnostico():
     except Exception as e:
         resultado["mercadolibre"] = {"ok": False, "error": str(e)}
 
-    # Test Serper
+    # Test Bing
     try:
-        data = fetch_serper("tornillo Chile", "shopping")
-        items = data.get("shopping", [])
-        resultado["serper"] = {
-            "ok": len(items) > 0, "cuota_agotada": SERPER_QUOTA_AGOTADA,
-            "resultados": len(items),
-            "muestra": items[0].get("title", "") if items else ""
-        }
+        items = buscar_bing("tornillo", 3)
+        resultado["bing"] = {"ok": len(items) > 0, "resultados": len(items),
+                             "muestra": items[0].get("nombre", "") if items else ""}
     except Exception as e:
-        resultado["serper"] = {"ok": False, "error": str(e)}
+        resultado["bing"] = {"ok": False, "error": str(e)}
+
+    # Test Homecenter
+    try:
+        items = buscar_homecenter("tornillo", 3)
+        resultado["homecenter"] = {"ok": len(items) > 0, "resultados": len(items)}
+    except Exception as e:
+        resultado["homecenter"] = {"ok": False, "error": str(e)}
 
     # Test Sodimac
     try:
@@ -1098,9 +895,9 @@ def diagnostico():
     alguna_ok = any(v.get("ok") for v in resultado.values())
     recomendacion = []
     if not resultado.get("mercadolibre", {}).get("ok"):
-        recomendacion.append("⚠️ MercadoLibre no responde desde este servidor")
-    if not resultado.get("serper", {}).get("ok"):
-        recomendacion.append("⚠️ Serper sin resultados — verifica créditos en serper.dev")
+        recomendacion.append("⚠️ MercadoLibre no responde desde este servidor (posible bloqueo IP)")
+    if not resultado.get("bing", {}).get("ok"):
+        recomendacion.append("⚠️ Bing sin resultados — verificar conectividad o cambio de HTML")
     if not resultado.get("vtex_easy", {}).get("ok"):
         recomendacion.append("⚠️ VTEX Easy bloqueado desde este servidor (posible restricción geo)")
 
@@ -1241,14 +1038,13 @@ def exportar_costeo():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v4.1")
-    print("   FUENTES PRIMARIAS:")
-    print("   • Google Shopping Chile (Serper) ← principal")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v5.0")
+    print("   FUENTES (sin Serper, solo tiendas reales):")
     print("   • MercadoLibre Chile (API oficial)")
-    print("   FUENTES ADICIONALES (gratis):")
-    print("   • Easy, Construmart, Imperial, Chilemat (VTEX directo)")
-    print("   FALLBACK:")
-    print("   • Web orgánica Serper (solo si < 5 resultados)")
+    print("   • Sodimac Chile (scraper directo)")
+    print("   • Homecenter Chile (VTEX directo)")
+    print("   • Easy, Construmart, Imperial (VTEX directo)")
+    print("   • Bing Chile (búsqueda web, sin API key)")
     print("   ARQUITECTURA: ThreadPoolExecutor (paralelo)")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=True)
