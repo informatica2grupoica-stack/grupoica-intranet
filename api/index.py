@@ -437,7 +437,10 @@ def buscar_google(producto: str, limite: int = 15):
         resultados = []
 
         # Resultados orgánicos: cada bloque .g
-        for bloque in soup.select("div.g, div[data-hveid]"):
+        # Selectores múltiples para distintas versiones del HTML de Google
+        bloques = soup.select("div.g") or soup.select("div[data-hveid]") or soup.select("div.tF2Cxc")
+        for bloque in bloques:
+            # Buscar link principal
             a_tag = bloque.select_one("a[href]")
             if not a_tag:
                 continue
@@ -456,16 +459,21 @@ def buscar_google(producto: str, limite: int = 15):
             if len(title) < 5:
                 continue
 
-            # Snippet (descripción)
-            snippet_tag = bloque.select_one("div[data-sncf], .VwiC3b, span.aCOpRe, div.IsZvec")
-            snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+            # Snippet — probar varios selectores
+            snippet = ""
+            for sel in ["div[data-sncf]", ".VwiC3b", "span.aCOpRe", "div.IsZvec", ".s3v9rd", "[data-content-feature]"]:
+                tag = bloque.select_one(sel)
+                if tag:
+                    snippet = tag.get_text(strip=True)
+                    break
 
             # Buscar precio en título + snippet
             texto_completo = title + " " + snippet
-            precio_m = re.search(r'\$\s*(\d[\d\.]{2,})', texto_completo)
+            precio_m = re.search(r'\$\s*(\d[\d\.,]{2,})', texto_completo)
             if not precio_m:
                 continue
-            precio = limpiar_precio(precio_m.group(1).replace(".", ""))
+            precio_str = re.sub(r'[^\d]', '', precio_m.group(1))
+            precio = limpiar_precio(precio_str)
             if not precio:
                 continue
 
@@ -620,7 +628,7 @@ def buscar_vtex(store: dict, query: str, limite: int = 8):
         r = requests.get(
             f"https://{store['dominio']}/api/catalog_system/pub/products/search",
             params={"ft": query, "_from": 0, "_to": limite - 1},
-            headers=HEADERS_BROWSER,
+            headers={**HEADERS_BROWSER, "Accept": "application/json"},
             timeout=8
         )
         if r.status_code != 200: return []
@@ -656,6 +664,83 @@ def buscar_vtex(store: dict, query: str, limite: int = 8):
         return []
 
 
+# ─── DuckDuckGo HTML (sin API key, sin CAPTCHA desde cualquier IP) ────────────
+
+def buscar_duckduckgo(producto: str, limite: int = 15):
+    """Scraper DuckDuckGo HTML — no bloquea bots, funciona desde cualquier IP."""
+    cache_key = get_cache_key(f"ddg_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    if not BS4_DISPONIBLE:
+        return []
+    try:
+        query = f"{producto} precio Chile site:.cl OR site:mercadolibre.cl"
+        r = requests.post(
+            "https://html.duckduckgo.com/html/",
+            data={"q": query, "kl": "cl-es"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "es-CL,es;q=0.9",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=8,
+            allow_redirects=True,
+        )
+        if r.status_code != 200:
+            print(f"  [DDG] HTTP {r.status_code}")
+            return []
+        soup = BeautifulSoup(r.text, "lxml")
+        resultados = []
+        for result in soup.select(".result"):
+            a_tag = result.select_one(".result__a")
+            snippet_tag = result.select_one(".result__snippet")
+            if not a_tag:
+                continue
+            url_res = a_tag.get("href", "")
+            # DDG usa URLs redirigidas — extraer URL real del parámetro uddg
+            if "uddg=" in url_res:
+                import urllib.parse
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(url_res).query)
+                url_res = qs.get("uddg", [url_res])[0]
+            if not url_res.startswith("http"):
+                continue
+            if not any(x in url_res.lower() for x in [".cl", "mercadolibre"]):
+                continue
+            if any(ind in url_res.lower() for ind in INDICADORES_EXTRANJEROS):
+                continue
+            title = a_tag.get_text(strip=True)
+            snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+            if len(title) < 5:
+                continue
+            texto = title + " " + snippet
+            precio_m = re.search(r'\$\s*(\d[\d\.]{2,})', texto)
+            if not precio_m:
+                continue
+            precio = limpiar_precio(precio_m.group(1).replace(".", ""))
+            if not precio:
+                continue
+            domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url_res)
+            tienda = domain_m.group(1) if domain_m else "Web"
+            resultados.append({
+                "tienda": tienda[:40],
+                "nombre": limpiar_nombre(title)[:150],
+                "precio_con_iva": precio,
+                "url": url_res,
+                "fuente": "duckduckgo_cl",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite:
+                break
+        if resultados:
+            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [DDG] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [DDG] Error: {e}")
+        return []
+
+
 # ─── Homecenter Chile (Sodimac VTEX) ─────────────────────────────────────────
 def buscar_homecenter(query: str, limite: int = 8):
     """Homecenter.cl usa VTEX — complementa a Sodimac"""
@@ -664,9 +749,10 @@ def buscar_homecenter(query: str, limite: int = 8):
         return cache_resultados[cache_key]['data']
     try:
         r = requests.get(
-            "https://www.homecenter.cl/homecenter-cl/api/catalog_system/pub/products/search",
+            "https://www.homecenter.cl/api/catalog_system/pub/products/search",
             params={"ft": query, "_from": 0, "_to": limite - 1},
-            headers=HEADERS_BROWSER, timeout=6
+            headers={**HEADERS_BROWSER, "Accept": "application/json"},
+            timeout=6
         )
         if r.status_code != 200:
             print(f"  [Homecenter] HTTP {r.status_code}")
@@ -739,15 +825,23 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 urls_vistas.add(clave)
                 resultados.append(r)
 
-    # ── Fase 1: Fuentes libres + Google Shopping en paralelo ─────────────────
-    # Query VTEX: solo palabras clave sin números ni dimensiones (mejora resultados)
-    palabras_clave = [w for w in producto.split() if not re.match(r'^[\d\.,xX×"\']+$', w) and len(w) > 2]
-    query_vtex = ' '.join(palabras_clave[:4])
+    # ── Fase 1: Fuentes libres en paralelo ───────────────────────────────────
+    # Query VTEX: filtrar solo números puros, medidas y palabras genéricas
+    PALABRAS_IGNORAR = {'con', 'para', 'por', 'los', 'las', 'del', 'una', 'uno',
+                        'marca', 'similar', 'unidades', 'unidad', 'medidas', 'varias'}
+    palabras_clave = [
+        w for w in producto.split()
+        if not re.match(r'^[\d\.,xX×"\'\/\-]+$', w)
+        and len(w) > 2
+        and w.lower() not in PALABRAS_IGNORAR
+    ]
+    query_vtex = ' '.join(palabras_clave[:5])
 
-    print(f"  📡 Fase 1: Google + Bing + MercadoLibre + Sodimac + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    print(f"  📡 Fase 1: Google + DDG + Bing + ML + Sodimac + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
+    with ThreadPoolExecutor(max_workers=12) as ex:
         futures = {
             ex.submit(buscar_google, producto, limite): "Google",
+            ex.submit(buscar_duckduckgo, producto, limite): "DuckDuckGo",
             ex.submit(buscar_bing, producto, limite): "Bing",
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
@@ -913,8 +1007,8 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["Google Chile", "Bing Chile", "MercadoLibre Chile", "Sodimac", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "5.1"
+        "fuentes": ["Google Chile", "DuckDuckGo", "Bing Chile", "MercadoLibre Chile", "Sodimac", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "5.2"
     })
 
 
