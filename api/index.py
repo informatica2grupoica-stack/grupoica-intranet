@@ -1124,6 +1124,8 @@ def exportar_costeo():
 
 
 if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
     print("🚀 BUSCADOR CHILE — GRUPO ICA v5.1")
     print("   FUENTES (toda la web chilena):")
