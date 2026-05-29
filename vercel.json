@@ -4,5 +4,10 @@
       "source": "/python/:path*",
       "destination": "/api/python/:path*"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/python/[...path]/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

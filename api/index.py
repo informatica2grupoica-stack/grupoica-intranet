@@ -377,7 +377,7 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
                 "Accept-Language": "es-CL,es;q=0.9",
                 "Referer": "https://www.mercadolibre.cl/",
             },
-            timeout=8
+            timeout=6
         )
         if r.status_code != 200:
             print(f"  [ML] HTTP {r.status_code}")
@@ -427,7 +427,7 @@ def buscar_google(producto: str, limite: int = 15):
                 "Accept-Encoding": "gzip, deflate, br",
                 "Referer": "https://www.google.cl/",
             },
-            timeout=12
+            timeout=7
         )
         if r.status_code != 200:
             print(f"  [Google] HTTP {r.status_code}")
@@ -509,7 +509,7 @@ def buscar_bing(producto: str, limite: int = 15):
                 "Accept": "text/html",
                 "Accept-Language": "es-CL,es;q=0.9",
             },
-            timeout=10
+            timeout=7
         )
         if r.status_code != 200:
             print(f"  [Bing] HTTP {r.status_code}")
@@ -666,7 +666,7 @@ def buscar_homecenter(query: str, limite: int = 8):
         r = requests.get(
             "https://www.homecenter.cl/homecenter-cl/api/catalog_system/pub/products/search",
             params={"ft": query, "_from": 0, "_to": limite - 1},
-            headers=HEADERS_BROWSER, timeout=8
+            headers=HEADERS_BROWSER, timeout=6
         )
         if r.status_code != 200:
             print(f"  [Homecenter] HTTP {r.status_code}")
@@ -756,7 +756,7 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
 
-        for future in as_completed(futures, timeout=30):
+        for future in as_completed(futures, timeout=20):
             nombre_f = futures[future]
             try:
                 nuevos = future.result()
@@ -960,7 +960,7 @@ def diagnostico():
         r = requests.get(
             "https://www.sodimac.cl/s/search/resources/v2/summary",
             params={"Ntt": "tornillo", "Nrpp": 3, "No": 0, "lang": "es-cl"},
-            headers=HEADERS_BROWSER, timeout=8
+            headers=HEADERS_BROWSER, timeout=6
         )
         resultado["sodimac"] = {"ok": r.status_code == 200, "http": r.status_code,
                                 "bytes": len(r.content) if r.status_code == 200 else 0}
