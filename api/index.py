@@ -406,6 +406,92 @@ def buscar_mercadolibre(producto: str, limite: int = 15):
         return []
 
 
+# ─── Google Search (scraper HTML — funciona desde IP real de oficina) ────────
+
+def buscar_google(producto: str, limite: int = 15):
+    """Scraper Google.cl — funciona desde IP real (notebook). Extrae precios de cualquier tienda chilena."""
+    cache_key = get_cache_key(f"google_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    if not BS4_DISPONIBLE:
+        return []
+    try:
+        query = f"{producto} precio Chile"
+        r = requests.get(
+            "https://www.google.cl/search",
+            params={"q": query, "num": 20, "hl": "es", "gl": "cl"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+                "Accept-Language": "es-CL,es;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Referer": "https://www.google.cl/",
+            },
+            timeout=12
+        )
+        if r.status_code != 200:
+            print(f"  [Google] HTTP {r.status_code}")
+            return []
+
+        soup = BeautifulSoup(r.text, "lxml")
+        resultados = []
+
+        # Resultados orgánicos: cada bloque .g
+        for bloque in soup.select("div.g, div[data-hveid]"):
+            a_tag = bloque.select_one("a[href]")
+            if not a_tag:
+                continue
+            url_res = a_tag.get("href", "")
+            if not url_res.startswith("http"):
+                continue
+            # Solo dominios chilenos
+            if not any(x in url_res.lower() for x in [".cl", "mercadolibre"]):
+                continue
+            if any(ind in url_res.lower() for ind in INDICADORES_EXTRANJEROS):
+                continue
+
+            # Título
+            h3 = bloque.select_one("h3")
+            title = h3.get_text(strip=True) if h3 else a_tag.get_text(strip=True)
+            if len(title) < 5:
+                continue
+
+            # Snippet (descripción)
+            snippet_tag = bloque.select_one("div[data-sncf], .VwiC3b, span.aCOpRe, div.IsZvec")
+            snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+
+            # Buscar precio en título + snippet
+            texto_completo = title + " " + snippet
+            precio_m = re.search(r'\$\s*(\d[\d\.]{2,})', texto_completo)
+            if not precio_m:
+                continue
+            precio = limpiar_precio(precio_m.group(1).replace(".", ""))
+            if not precio:
+                continue
+
+            domain_m = re.search(r'https?://(?:www\.)?([^/]+)', url_res)
+            tienda = domain_m.group(1) if domain_m else "Web"
+
+            resultados.append({
+                "tienda": tienda[:40],
+                "nombre": limpiar_nombre(title)[:150],
+                "precio_con_iva": precio,
+                "url": url_res,
+                "fuente": "google_cl",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite:
+                break
+
+        if resultados:
+            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [Google] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [Google] Error: {e}")
+        return []
+
+
 # ─── Bing Search (gratuito, sin API key — funciona desde IPs cloud) ──────────
 
 def buscar_bing(producto: str, limite: int = 15):
@@ -658,12 +744,13 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
     palabras_clave = [w for w in producto.split() if not re.match(r'^[\d\.,xX×"\']+$', w) and len(w) > 2]
     query_vtex = ' '.join(palabras_clave[:4])
 
-    print(f"  📡 Fase 1: MercadoLibre + Sodimac + Bing + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    print(f"  📡 Fase 1: Google + Bing + MercadoLibre + Sodimac + Homecenter + VTEX... (VTEX query: '{query_vtex}')")
+    with ThreadPoolExecutor(max_workers=10) as ex:
         futures = {
+            ex.submit(buscar_google, producto, limite): "Google",
+            ex.submit(buscar_bing, producto, limite): "Bing",
             ex.submit(buscar_mercadolibre, producto, limite): "MercadoLibre",
             ex.submit(buscar_sodimac, producto, 10): "Sodimac",
-            ex.submit(buscar_bing, producto, limite): "Bing",
             ex.submit(buscar_homecenter, query_vtex, 8): "Homecenter",
         }
         for store in VTEX_STORES:
@@ -826,8 +913,8 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["MercadoLibre Chile", "Sodimac", "Bing", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "5.0"
+        "fuentes": ["Google Chile", "Bing Chile", "MercadoLibre Chile", "Sodimac", "Homecenter"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "5.1"
     })
 
 
@@ -1038,13 +1125,14 @@ def exportar_costeo():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v5.0")
-    print("   FUENTES (sin Serper, solo tiendas reales):")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v5.1")
+    print("   FUENTES (toda la web chilena):")
+    print("   • Google Chile (scraper — IP real de oficina)")
+    print("   • Bing Chile (scraper — sin API key)")
     print("   • MercadoLibre Chile (API oficial)")
     print("   • Sodimac Chile (scraper directo)")
     print("   • Homecenter Chile (VTEX directo)")
     print("   • Easy, Construmart, Imperial (VTEX directo)")
-    print("   • Bing Chile (búsqueda web, sin API key)")
     print("   ARQUITECTURA: ThreadPoolExecutor (paralelo)")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=True)
