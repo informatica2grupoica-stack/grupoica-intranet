@@ -1,64 +1,48 @@
 // app/(dashboard)/buscador-productos/page.tsx
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X, Sparkles,
   Download, FileSpreadsheet, AlertTriangle, ShoppingBag,
-  Upload, Eye, EyeOff, Settings, ChevronDown, ChevronUp
+  Upload, Eye, EyeOff, Settings, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 
-// --- COMPONENTE DE ALERTA MODERNA (TOAST) ---
+// ─── Toast ────────────────────────────────────────────────────────────────────
 const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) => (
-  <div className={`fixed top-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${type === 'success'
-      ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
-      : type === 'warning'
-        ? 'bg-amber-50/90 border-amber-200 text-amber-800'
-        : 'bg-orange-50/90 border-orange-200 text-orange-800'
-    }`}>
+  <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-right-8 duration-300 ${
+    type === 'success' ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800'
+    : type === 'warning' ? 'bg-amber-50/90 border-amber-200 text-amber-800'
+    : 'bg-orange-50/90 border-orange-200 text-orange-800'
+  }`}>
     {type === 'success' ? <CheckCircle2 size={18} /> : type === 'warning' ? <AlertTriangle size={18} /> : <AlertCircle size={18} />}
     <p className="text-[11px] font-black uppercase tracking-wider leading-none">{message}</p>
-    <button onClick={onClose} className="ml-2 hover:opacity-50 transition-opacity">
-      <X size={14} />
-    </button>
+    <button onClick={onClose} className="ml-2 hover:opacity-50 transition-opacity"><X size={14} /></button>
   </div>
 );
 
-// --- MODAL DE PREVISUALIZACIÓN EXCEL ---
-const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: ProductoExcel[]; onClose: () => void; onConfirm: () => void }) => {
+// ─── Modal Previsualización ────────────────────────────────────────────────────
+const ModalPrevisualizacion = ({
+  productos, onClose, onConfirm
+}: { productos: ProductoExcel[]; onClose: () => void; onConfirm: () => void }) => {
   const [mostrarJson, setMostrarJson] = useState(false);
-
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
         <div className="sticky top-0 bg-white border-b border-slate-100 p-5 flex justify-between items-center">
           <div>
-            <h2 className="text-lg font-black text-slate-800 uppercase italic">
-              📊 Previsualización Excel - Pestaña COSTEO
-            </h2>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-              {productos.length} productos cargados
-            </p>
+            <h2 className="text-lg font-black text-slate-800 uppercase italic">📊 Previsualización Excel — Pestaña COSTEO</h2>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{productos.length} productos cargados</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setMostrarJson(!mostrarJson)}
-              className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"
-              title="Ver JSON"
-            >
+            <button onClick={() => setMostrarJson(!mostrarJson)} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all">
               {mostrarJson ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"
-            >
-              <X size={18} />
-            </button>
+            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-2xl transition-all"><X size={18} /></button>
           </div>
         </div>
-
         <div className="p-6 overflow-y-auto max-h-[70vh]">
           {mostrarJson ? (
             <pre className="bg-slate-900 text-slate-200 p-4 rounded-xl text-[10px] font-mono overflow-x-auto whitespace-pre-wrap">
@@ -77,47 +61,33 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: P
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {productos.slice(0, 50).map((prod: ProductoExcel, idx: number) => (
+                  {productos.slice(0, 50).map((prod, idx) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-slate-600">{prod.numero}</td>
                       <td className="px-4 py-3 text-xs text-slate-700 max-w-md truncate">{prod.nombre}</td>
                       <td className="px-4 py-3 text-xs text-right text-slate-600">{prod.cantidad}</td>
                       <td className="px-4 py-3 text-xs text-right font-bold text-emerald-600">
-                        ${prod.valor_civa?.toLocaleString('es-CL') || 0}
+                        {prod.valor_civa > 0 ? `$${prod.valor_civa.toLocaleString('es-CL')}` : '—'}
                       </td>
                       <td className="px-4 py-3 text-[9px] text-blue-500 truncate max-w-[150px]">
-                        {prod.link_referencia ? (
-                          <a href={prod.link_referencia} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                            Ver link
-                          </a>
-                        ) : '—'}
+                        {prod.link_referencia
+                          ? <a href={prod.link_referencia} target="_blank" rel="noopener noreferrer" className="hover:underline">Ver link</a>
+                          : '—'}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {productos.length > 50 && (
-                <p className="text-center text-[9px] text-slate-400 mt-4">
-                  + {productos.length - 50} productos adicionales
-                </p>
+                <p className="text-center text-[9px] text-slate-400 mt-4">+ {productos.length - 50} productos adicionales</p>
               )}
             </div>
           )}
         </div>
-
         <div className="sticky bottom-0 bg-white border-t border-slate-100 p-5 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-100 transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-8 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
-          >
-            <Sparkles size={14} />
-            Iniciar Búsqueda
+          <button onClick={onClose} className="px-6 py-2.5 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-100 transition-all">Cancelar</button>
+          <button onClick={onConfirm} className="px-8 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2">
+            <Sparkles size={14} /> Iniciar Búsqueda ({productos.length} productos)
           </button>
         </div>
       </div>
@@ -125,32 +95,7 @@ const ModalPrevisualizacion = ({ productos, onClose, onConfirm }: { productos: P
   );
 };
 
-// --- MODAL DE EXPORTACIÓN ---
-const ModalExportacion = ({ onConfirm, onCancel, totalItems }: { onConfirm: () => void; onCancel: () => void; totalItems: number }) => (
-  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
-      <div className="p-6 text-center">
-        <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <FileSpreadsheet size={32} className="text-blue-600" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-800">Exportar Todos los Resultados</h3>
-        <p className="text-sm text-slate-500 mt-2">
-          Se exportarán <strong className="text-blue-600">{totalItems}</strong> productos con TODOS sus resultados encontrados.
-        </p>
-        <p className="text-[10px] text-slate-400 mt-1">
-          Cada producto puede tener múltiples opciones de precios.
-        </p>
-        <div className="flex gap-3 mt-6">
-          <button onClick={onCancel} className="flex-1 px-4 py-2 bg-slate-100 rounded-xl text-sm font-bold">Cancelar</button>
-          <button onClick={onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-            <Download size={16} /> Exportar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 type NivelMatching = 'exacto' | 'parcial' | 'bajo';
 
 interface ProductoResultado {
@@ -161,11 +106,7 @@ interface ProductoResultado {
   link: string;
   canal: string;
   busqueda_original: string;
-  matching?: {
-    porcentaje: number;
-    nivel: NivelMatching;
-    razon: string;
-  };
+  matching?: { porcentaje: number; nivel: NivelMatching; razon: string };
 }
 
 interface ItemLista {
@@ -186,233 +127,184 @@ interface ProductoExcel {
   cantidad: number;
   valor_civa: number;
   link_referencia: string;
+  // posición en el sheet original para el export
+  _fila?: number;
 }
 
-export default function MonitorMasivoICA() {
-  const [inputManual, setInputManual] = useState<string>("");
-  const [inputMasivo, setInputMasivo] = useState<string>("");
-  const [itemsLista, setItemsLista] = useState<ItemLista[]>([]);
-  const [procesando, setProcesando] = useState<boolean>(false);
-  const [buscandoUno, setBuscandoUno] = useState<boolean>(false);
-  const [progreso, setProgreso] = useState<{ actual: number; total: number }>({ actual: 0, total: 0 });
-  const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: 'success' | 'error' | 'warning' }>>([]);
-  const abortControllerRef = useRef<AbortController | null>(null);
+// ─── Semáforo de concurrencia ─────────────────────────────────────────────────
+function crearSemaforo(limite: number) {
+  let activos = 0;
+  const cola: Array<() => void> = [];
+  return async function<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const ejecutar = async () => {
+        activos++;
+        try { resolve(await fn()); }
+        catch (e) { reject(e); }
+        finally {
+          activos--;
+          if (cola.length > 0) cola.shift()!();
+        }
+      };
+      if (activos < limite) ejecutar();
+      else cola.push(ejecutar);
+    });
+  };
+}
 
-  // Estados para Excel
+const IVA = 1.19;
+
+export default function MonitorMasivoICA() {
+  const [inputManual, setInputManual] = useState('');
+  const [inputMasivo, setInputMasivo] = useState('');
+  const [itemsLista, setItemsLista] = useState<ItemLista[]>([]);
+  const [procesando, setProcesando] = useState(false);
+  const [buscandoUno, setBuscandoUno] = useState(false);
+  const [progreso, setProgreso] = useState({ actual: 0, total: 0 });
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: 'success' | 'error' | 'warning' }>>([]);
+  const abortRef = useRef(false);
+
+  // Excel state
   const [productosExcel, setProductosExcel] = useState<ProductoExcel[]>([]);
-  const [mostrarPrevisualizacion, setMostrarPrevisualizacion] = useState<boolean>(false);
-  const [showModal, setShowModal] = useState<boolean>(false);
-  const [showExportModal, setShowExportModal] = useState<boolean>(false);
-  const [pestanaSeleccionada, setPestanaSeleccionada] = useState<string>('COSTEO');
+  const [workbookOriginal, setWorkbookOriginal] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNameActual, setSheetNameActual] = useState('COSTEO');
+  const [showModal, setShowModal] = useState(false);
   const [pestanasDisponibles, setPestanasDisponibles] = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
+  const [mostrarPrevisualizacion, setMostrarPrevisualizacion] = useState(false);
 
-  // Estados para contexto personalizado
-  const [contextoPersonalizado, setContextoPersonalizado] = useState<string>("");
-  const [mostrarContexto, setMostrarContexto] = useState<boolean>(false);
-  const [usarIAContexto, setUsarIAContexto] = useState<boolean>(true);
-  const [enriqueciendo, setEnriqueciendo] = useState<boolean>(false);
+  // Contexto IA
+  const [contextoPersonalizado, setContextoPersonalizado] = useState('');
+  const [mostrarContexto, setMostrarContexto] = useState(false);
+  const [usarIAContexto, setUsarIAContexto] = useState(true);
 
-  // Estado para selección manual de resultados
+  // Selección manual
   const [seleccionManual, setSeleccionManual] = useState<Map<string, ProductoResultado>>(new Map());
 
-  // 🔥 CONSTANTE IVA
-  const IVA = 1.19;
-
-  const notify = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+  // ─── Notify ──────────────────────────────────────────────────────────────────
+  const notify = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  };
+  }, []);
 
+  // ─── Parsear lista de texto ───────────────────────────────────────────────────
   const parsearLista = (texto: string): { numero: string; nombre: string }[] => {
-    const lineas = texto.split('\n').filter(line => line.trim().length > 0);
-    const items: { numero: string; nombre: string }[] = [];
-
-    for (const linea of lineas) {
-      const match = linea.match(/^(\d+)[\s\t]+(.+)/);
-      if (match) {
-        items.push({ numero: match[1], nombre: match[2].trim() });
-      } else if (!linea.trim().match(/^\d+$/)) {
-        items.push({ numero: String(items.length + 1), nombre: linea.trim() });
-      }
-    }
-    return items;
+    return texto.split('\n')
+      .filter(l => l.trim().length > 0)
+      .reduce<{ numero: string; nombre: string }[]>((acc, linea) => {
+        const match = linea.match(/^(\d+)[\s\t]+(.+)/);
+        if (match) acc.push({ numero: match[1], nombre: match[2].trim() });
+        else if (!linea.trim().match(/^\d+$/)) acc.push({ numero: String(acc.length + 1), nombre: linea.trim() });
+        return acc;
+      }, []);
   };
 
-  // Función para enriquecer consulta con IA
+  // ─── Enriquecer consulta con IA ───────────────────────────────────────────────
   const enriquecerConsulta = async (producto: string, contexto: string): Promise<string> => {
-    if (!contexto.trim() || !usarIAContexto) {
-      return producto;
-    }
-
+    if (!contexto.trim() || !usarIAContexto) return producto;
     try {
-      setEnriqueciendo(true);
-      const response = await fetch('/api/enriquecer-consulta', {
+      const res = await fetch('/api/enriquecer-consulta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ producto, contexto })
+        body: JSON.stringify({ producto, contexto }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.usado_ia && data.consulta_optimizada) {
-          console.log(`🤖 IA optimizó: "${producto}" → "${data.consulta_optimizada}"`);
-          return data.consulta_optimizada;
-        }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.usado_ia && data.consulta_optimizada) return data.consulta_optimizada;
       }
-    } catch (error) {
-      console.warn("Error enriqueciendo consulta:", error);
-    } finally {
-      setEnriqueciendo(false);
-    }
+    } catch { /* usar producto original */ }
     return producto;
   };
 
-  // Alternar selección manual de resultado
+  // ─── Selección manual ─────────────────────────────────────────────────────────
   const toggleSeleccionManual = (itemNumero: string, resultado: ProductoResultado) => {
     setSeleccionManual(prev => {
-      const newMap = new Map(prev);
-      const actual = newMap.get(itemNumero);
-      
-      if (actual === resultado) {
-        newMap.delete(itemNumero);
-      } else {
-        newMap.set(itemNumero, resultado);
-      }
-      return newMap;
+      const m = new Map(prev);
+      m.get(itemNumero) === resultado ? m.delete(itemNumero) : m.set(itemNumero, resultado);
+      return m;
     });
   };
 
-  // Cargar Excel desde archivo
+  // ─── Cargar Excel ─────────────────────────────────────────────────────────────
   const cargarExcel = (file: File) => {
-    console.log("=".repeat(60));
-    console.log("📁 CARGANDO EXCEL");
-    console.log("=".repeat(60));
-    console.log("📄 Nombre del archivo:", file.name);
-    console.log("📏 Tamaño:", file.size, "bytes");
-
     setArchivoExcel(file);
     const reader = new FileReader();
-
     reader.onload = (e) => {
-      console.log("✅ Archivo leído correctamente");
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: 'array' });
+      const wb = XLSX.read(data, { type: 'array' });
+      setWorkbookOriginal(wb);
+      setPestanasDisponibles(wb.SheetNames);
+      console.log('📑 Pestañas:', wb.SheetNames);
 
-      console.log("📑 Pestañas encontradas:", workbook.SheetNames);
-      setPestanasDisponibles(workbook.SheetNames);
-
-      let sheetName = pestanaSeleccionada;
-      if (!workbook.SheetNames.includes(sheetName)) {
-        console.warn(`⚠️ Pestaña "${sheetName}" no encontrada, usando primera disponible`);
-        sheetName = workbook.SheetNames[0];
-        setPestanaSeleccionada(sheetName);
-      }
-
-      console.log(`📌 Leyendo pestaña: "${sheetName}"`);
-      procesarPestanaExcel(workbook, sheetName);
+      let sheet = wb.SheetNames.includes('COSTEO') ? 'COSTEO' : wb.SheetNames[0];
+      setSheetNameActual(sheet);
+      procesarPestana(wb, sheet);
     };
-
-    reader.onerror = (error) => {
-      console.error("❌ Error leyendo archivo:", error);
-      notify("Error al leer el archivo Excel", "error");
-    };
-
+    reader.onerror = () => notify('Error al leer el archivo Excel', 'error');
     reader.readAsArrayBuffer(file);
   };
 
-  // Procesar pestaña específica del Excel
-  const procesarPestanaExcel = (workbook: XLSX.WorkBook, sheetName: string) => {
-    console.log("\n📊 PROCESANDO PESTAÑA:", sheetName);
-
-    const worksheet = workbook.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-    console.log(`📋 Filas encontradas: ${jsonData.length}`);
+  // ─── Procesar pestaña del Excel ───────────────────────────────────────────────
+  const procesarPestana = (wb: XLSX.WorkBook, sheetName: string) => {
+    const ws = wb.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
     if (jsonData.length === 0) {
-      console.warn("⚠️ No hay datos en esta pestaña");
-      notify(`La pestaña "${sheetName}" está vacía`, "warning");
+      notify(`La pestaña "${sheetName}" está vacía`, 'warning');
       return;
     }
 
-    // Buscar la fila de encabezados
-    const headers: string[] = [];
-    let headerRowIndex = -1;
+    // Buscar fila de encabezados
+    let headerRow = -1;
+    let colItem = -1, colDetalle = -1, colCantidad = -1, colValor = -1, colLink = -1;
 
-    for (let i = 0; i < Math.min(15, jsonData.length); i++) {
-      const row = jsonData[i] as any[];
-      if (row && row.length > 0) {
-        const hasHeaders = row.some(cell =>
-          String(cell || "").toUpperCase().includes("ITEM") ||
-          String(cell || "").toUpperCase().includes("DETALLE") ||
-          String(cell || "").toUpperCase().includes("CANTIDAD")
-        );
-        if (hasHeaders) {
-          headerRowIndex = i;
-          for (let j = 0; j < row.length; j++) {
-            headers[j] = String(row[j] || "").trim();
-          }
-          console.log("📌 Encabezados encontrados en fila", i + 1, ":", headers);
-          break;
-        }
+    for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+      const row = jsonData[i];
+      if (!row) continue;
+      const hasHeader = row.some((c: any) =>
+        ['ITEM', 'DETALLE', 'CANTIDAD'].includes(String(c || '').toUpperCase().trim())
+      );
+      if (hasHeader) {
+        headerRow = i;
+        row.forEach((cell: any, j: number) => {
+          const h = String(cell || '').toUpperCase().trim();
+          if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
+          else if (h === 'DETALLE' || h.includes('DETALLE')) colDetalle = j;
+          else if (h === 'CANTIDAD' || h.includes('CANTIDAD')) colCantidad = j;
+          else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
+          else if (h.includes('LINK')) colLink = j;
+        });
+        console.log(`📌 Headers fila ${i + 1} | ITEM:${colItem} DETALLE:${colDetalle} CANT:${colCantidad} VALOR:${colValor}`);
+        break;
       }
     }
 
-    if (headerRowIndex === -1) {
-      console.error("❌ No se encontraron encabezados en el Excel");
-      notify("No se encontraron encabezados válidos en el Excel", "error");
+    if (headerRow === -1) {
+      notify('No se encontraron encabezados válidos en el Excel', 'error');
       return;
     }
-
-    // Mapear índices de columnas
-    let colItem = -1, colDetalle = -1, colCantidad = -1, colValorCIVA = -1, colLink = -1;
-
-    for (let i = 0; i < headers.length; i++) {
-      const header = headers[i].toUpperCase();
-      if (header === "ITEM" || header.includes("ITEM")) colItem = i;
-      else if (header === "DETALLE" || header.includes("DETALLE")) colDetalle = i;
-      else if (header === "CANTIDAD" || header.includes("CANTIDAD")) colCantidad = i;
-      else if (header === "VALOR C/IVA" || header.includes("VALOR C/IVA") || header === "VALOR C IVA" || header === "VALOR C/ IVA") colValorCIVA = i;
-      else if (header === "LINK 1" || header.includes("LINK")) colLink = i;
-    }
-
-    console.log(`📌 Mapeo de columnas:`);
-    console.log(`   - ITEM: columna ${colItem}`);
-    console.log(`   - DETALLE: columna ${colDetalle}`);
-    console.log(`   - CANTIDAD: columna ${colCantidad}`);
-    console.log(`   - VALOR C/IVA: columna ${colValorCIVA}`);
 
     const items: ProductoExcel[] = [];
-
-    for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
-      const row = jsonData[i] as any[];
+    for (let i = headerRow + 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
       if (!row || row.length === 0) continue;
 
-      const detalle = colDetalle >= 0 ? (row[colDetalle] || "").toString().trim() : "";
-      const itemNum = colItem >= 0 ? (row[colItem] || i) : i;
+      const detalle = colDetalle >= 0 ? String(row[colDetalle] || '').trim() : '';
+      if (!detalle || ['TOTAL', 'VERDADERO', 'COSTEADO', 'SUBTOTAL'].some(s => detalle.toUpperCase().includes(s))) continue;
+
+      const itemNum = colItem >= 0 ? row[colItem] : i - headerRow;
       const cantidad = colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1;
-      const linkRef = colLink >= 0 ? (row[colLink] || "").toString().trim() : "";
+      const link = colLink >= 0 ? String(row[colLink] || '').trim() : '';
 
       let valorCIVA = 0;
-      if (colValorCIVA >= 0) {
-        const rawValue = row[colValorCIVA];
-        if (rawValue !== undefined && rawValue !== null && rawValue !== "") {
-          if (typeof rawValue === 'number') {
-            valorCIVA = rawValue;
-          } else if (typeof rawValue === 'string') {
-            let cleaned = rawValue.replace(/[$.]/g, '').trim();
-            cleaned = cleaned.replace(',', '.');
-            valorCIVA = parseFloat(cleaned) || 0;
-          } else {
-            valorCIVA = Number(rawValue) || 0;
-          }
+      if (colValor >= 0 && row[colValor] != null && row[colValor] !== '') {
+        const raw = row[colValor];
+        if (typeof raw === 'number') valorCIVA = raw;
+        else {
+          const cleaned = String(raw).replace(/[$\.]/g, '').replace(',', '.').trim();
+          valorCIVA = parseFloat(cleaned) || 0;
         }
-      }
-
-      if (!detalle || detalle === "" || detalle === "TOTAL" || detalle.includes("VERDADERO") || detalle.includes("COSTEADO")) {
-        continue;
       }
 
       items.push({
@@ -420,649 +312,438 @@ export default function MonitorMasivoICA() {
         nombre: detalle,
         cantidad: Number(cantidad) || 1,
         valor_civa: valorCIVA,
-        link_referencia: linkRef
+        link_referencia: link,
+        _fila: i,
       });
     }
 
-    console.log(`\n✅ TOTAL PRODUCTOS CARGADOS: ${items.length}`);
-
     if (items.length === 0) {
-      console.error("❌ No se encontraron productos válidos en el Excel");
-      notify(`No se encontraron productos válidos en la pestaña "${sheetName}"`, "error");
+      notify(`No se encontraron productos en "${sheetName}"`, 'error');
       return;
     }
 
-    console.log("\n📋 RESUMEN DE PRODUCTOS CARGADOS:");
-    items.slice(0, 10).forEach((item: ProductoExcel, idx: number) => {
-      console.log(`  ${idx + 1}. [${item.numero}] ${item.nombre.substring(0, 60)}... - Cant: ${item.cantidad} - $${item.valor_civa.toLocaleString('es-CL')}`);
-    });
-    if (items.length > 10) {
-      console.log(`  ... y ${items.length - 10} productos más`);
-    }
-
+    console.log(`✅ ${items.length} productos cargados`);
     setProductosExcel(items);
     setMostrarPrevisualizacion(true);
     setShowModal(true);
-    notify(`✅ Cargados ${items.length} productos desde pestaña "${sheetName}"`, 'success');
+    notify(`✅ ${items.length} productos desde "${sheetName}"`, 'success');
   };
 
   const cambiarPestana = (sheetName: string) => {
-    console.log(`🔄 Cambiando a pestaña: "${sheetName}"`);
-    setPestanaSeleccionada(sheetName);
-    if (archivoExcel) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        procesarPestanaExcel(workbook, sheetName);
-      };
-      reader.readAsArrayBuffer(archivoExcel);
-    }
+    setSheetNameActual(sheetName);
+    if (workbookOriginal) procesarPestana(workbookOriginal, sheetName);
   };
 
-  const confirmarBusquedaExcel = () => {
-    setShowModal(false);
-    iniciarBarridoExcel();
-  };
-
-  // FUNCIÓN PRINCIPAL - Con enriquecimiento de contexto y mínimo 15 resultados
-  const buscarProductoRobusto = async (producto: string, numero: string, minimo: number = 15): Promise<ItemLista> => {
+  // ─── Búsqueda robusta de un producto ─────────────────────────────────────────
+  const buscarProductoRobusto = async (
+    producto: string,
+    numero: string,
+    minimo: number = 15
+  ): Promise<ItemLista> => {
     try {
       let consultaFinal = producto;
       if (contextoPersonalizado.trim()) {
         consultaFinal = await enriquecerConsulta(producto, contextoPersonalizado);
+        if (consultaFinal !== producto) console.log(`✨ [${numero}] "${producto}" → "${consultaFinal}"`);
       }
-      
-      console.log(`🔍 [${numero}] Buscando: ${consultaFinal}`);
-      if (contextoPersonalizado && consultaFinal !== producto) {
-        console.log(`📝 Contexto aplicado: "${contextoPersonalizado}"`);
-        console.log(`✨ Consulta optimizada: "${consultaFinal}"`);
-      }
-      
-      const res = await fetch(`/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${numero}&minimo=${minimo}`);
-      
-      if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-      
+
+      const res = await fetch(
+        `/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=${minimo}`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
       const resultadosRaw = data.resultados || [];
       const analisisProducto = data.analisis_producto || null;
-      
-      console.log(`📊 Python devolvió: ${resultadosRaw.length} resultados`);
-      if (analisisProducto) {
-        console.log(`📋 Categoría detectada: ${analisisProducto.categoria}`);
-        console.log(`📏 Medidas: ${analisisProducto.medidas?.texto_legible || 'ninguna'}`);
-      }
-      
+
+      console.log(`📊 [${numero}] Python: ${resultadosRaw.length} resultados`);
+
       let resultadosFinales = resultadosRaw;
-      let mejorMatch = null;
-      let calidadResultados = 'media';
-      let observacionIA = '';
-      
+
+      // Reranking con IA si hay suficientes candidatos
       if (resultadosRaw.length > 3 && process.env.NEXT_PUBLIC_USE_IA !== 'false') {
         try {
-          console.log(`🤖 Llamando a analizar-con-ia para: ${producto}`);
-          
           const iaRes = await fetch('/api/analizar-con-ia', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              producto: producto,
+              producto,
               numero_item: numero,
               minimo_requerido: minimo,
               resultados_raw: resultadosRaw,
-              analisis_producto: analisisProducto
-            })
+              analisis_producto: analisisProducto,
+            }),
           });
-          
           if (iaRes.ok) {
             const iaData = await iaRes.json();
-            if (iaData.success && iaData.resultados) {
+            if (iaData.success && iaData.resultados?.length > 0) {
               resultadosFinales = iaData.resultados;
-              mejorMatch = iaData.resultados[0];
-              calidadResultados = iaData.calidad_resultados || 'media';
-              observacionIA = iaData.observacion_ia || '';
-              console.log(`✅ IA aplicada: ${resultadosFinales.length} resultados ordenados`);
-              console.log(`📊 Calidad: ${calidadResultados}, Observación: ${observacionIA}`);
+              console.log(`🤖 [${numero}] IA reranked: ${resultadosFinales.length} | calidad: ${iaData.calidad_resultados}`);
             }
-          } else {
-            console.warn(`⚠️ analizar-con-ia respondió con error: ${iaRes.status}`);
           }
-        } catch (iaError) {
-          console.warn(`⚠️ Error llamando a analizar-con-ia:`, iaError);
+        } catch (e) {
+          console.warn(`⚠️ [${numero}] Reranking falló, usando orden Python`);
         }
       }
-      
+
+      // Mapear con matching real — SIEMPRE usar el score real del backend
       const resultadosConMatch: ProductoResultado[] = resultadosFinales.map((r: any) => {
-        let nivel: NivelMatching = 'bajo';
-        let porcentaje = r.score || r.porcentaje || 0;
-        
-        if (porcentaje >= 85) nivel = 'exacto';
-        else if (porcentaje >= 60) nivel = 'parcial';
-        
+        const porcentaje = r.score ?? r.porcentaje ?? r.matching?.porcentaje ?? 0;
+        const nivel: NivelMatching = porcentaje >= 85 ? 'exacto' : porcentaje >= 60 ? 'parcial' : 'bajo';
         return {
-          tienda: r.tienda,
-          nombre: r.nombre,
-          precio_valor: r.precio_valor || r.precio_con_iva || 0,
-          precio_formateado: r.precio_formateado || `$${(r.precio_valor || r.precio_con_iva || 0).toLocaleString('es-CL')}`,
-          link: r.link || r.url,
+          tienda: r.tienda || '',
+          nombre: r.nombre || '',
+          precio_valor: r.precio_valor ?? r.precio_con_iva ?? 0,
+          precio_formateado: r.precio_formateado || `$${(r.precio_valor ?? 0).toLocaleString('es-CL')}`,
+          link: r.link || r.url || '',
           canal: r.canal || r.fuente || 'web',
           busqueda_original: producto,
-          matching: r.matching || {
-            porcentaje: porcentaje,
-            nivel: nivel,
-            razon: r.etiqueta_concordancia || r.razon || (porcentaje >= 85 ? 'Alta coincidencia' : porcentaje >= 60 ? 'Coincidencia parcial' : 'Baja coincidencia')
-          }
+          matching: {
+            porcentaje,
+            nivel,
+            razon: r.etiqueta_concordancia || r.razon || (nivel === 'exacto' ? 'Alta coincidencia' : nivel === 'parcial' ? 'Coincidencia parcial' : 'Baja coincidencia'),
+          },
         };
       });
-      
-      resultadosConMatch.sort((a, b) => (b.matching?.porcentaje || 0) - (a.matching?.porcentaje || 0));
-      
+
+      // Ordenar por porcentaje descendente
+      resultadosConMatch.sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
+
       return {
-        numero: data.numero_item || numero,
-        nombre: data.producto || producto,
+        numero: String(data.numero_item || numero),
+        nombre: String(data.producto || producto),
         resultados: resultadosConMatch,
         total_encontrados: resultadosConMatch.length,
         suficientes: resultadosConMatch.length >= minimo,
         deficit: Math.max(0, minimo - resultadosConMatch.length),
         procesando: false,
-        mejor_match: mejorMatch ? {
-          tienda: mejorMatch.tienda,
-          nombre: mejorMatch.nombre,
-          precio_valor: mejorMatch.precio_valor || mejorMatch.precio_con_iva || 0,
-          precio_formateado: mejorMatch.precio_formateado,
-          link: mejorMatch.link || mejorMatch.url,
-          canal: mejorMatch.canal || mejorMatch.fuente || 'web',
-          busqueda_original: producto,
-          matching: {
-            porcentaje: mejorMatch.score || mejorMatch.porcentaje || 0,
-            nivel: (mejorMatch.score || mejorMatch.porcentaje || 0) >= 85 ? 'exacto' : (mejorMatch.score || mejorMatch.porcentaje || 0) >= 60 ? 'parcial' : 'bajo',
-            razon: mejorMatch.etiqueta_concordancia || ''
-          }
-        } : (resultadosConMatch[0] || undefined)
+        mejor_match: resultadosConMatch[0],
       };
-      
-    } catch (error: any) {
-      console.error(`Error buscando ${producto}:`, error);
-      return {
-        numero, nombre: producto, resultados: [], total_encontrados: 0,
-        suficientes: false, deficit: 15, procesando: false, error: error.message
-      };
+    } catch (err: any) {
+      console.error(`❌ [${numero}] ${producto}:`, err.message);
+      return { numero, nombre: producto, resultados: [], total_encontrados: 0, suficientes: false, deficit: minimo, procesando: false, error: err.message };
     }
   };
 
-  // Búsqueda individual
+  // ─── Búsqueda individual ──────────────────────────────────────────────────────
   const buscarUno = async () => {
     if (!inputManual.trim() || buscandoUno) return;
     setBuscandoUno(true);
-    notify(`Buscando: ${inputManual.trim()}`, 'success');
-
     const match = inputManual.trim().match(/^(\d+)\s+(.+)/);
     const numero = match ? match[1] : String(itemsLista.length + 1);
     const nombre = match ? match[2] : inputManual.trim();
-
-    const resultado = await buscarProductoRobusto(nombre, numero, 15);
-    const existe = itemsLista.some(item => item.numero === resultado.numero);
-
-    if (!existe) setItemsLista(prev => [...prev, resultado]);
-    else setItemsLista(prev => prev.map(item => item.numero === resultado.numero ? resultado : item));
-
-    if (resultado.suficientes) {
-      notify(`✅ ${nombre}: ${resultado.total_encontrados} resultados`, 'success');
-      setInputManual("");
-    } else {
-      notify(`⚠️ ${nombre}: Solo ${resultado.total_encontrados}/15 resultados`, 'warning');
-    }
+    notify(`Buscando: ${nombre}`, 'success');
+    const resultado = await buscarProductoRobusto(nombre, numero);
+    setItemsLista(prev => {
+      const existe = prev.some(i => i.numero === resultado.numero);
+      return existe ? prev.map(i => i.numero === resultado.numero ? resultado : i) : [...prev, resultado];
+    });
+    if (resultado.suficientes) { notify(`✅ ${nombre}: ${resultado.total_encontrados} resultados`, 'success'); setInputManual(''); }
+    else notify(`⚠️ ${nombre}: ${resultado.total_encontrados}/15 resultados`, 'warning');
     setBuscandoUno(false);
   };
 
-  // Barrido desde Excel
-  const iniciarBarridoExcel = async () => {
-    if (productosExcel.length === 0) {
-      notify("No hay productos cargados desde Excel", 'error');
-      return;
-    }
-
-    console.log("\n🚀 INICIANDO BARRIDO DESDE EXCEL");
-    console.log(`📊 Total productos: ${productosExcel.length}`);
-    if (contextoPersonalizado) {
-      console.log(`📝 Contexto activo: "${contextoPersonalizado}"`);
-    }
+  // ─── Barrido con concurrencia x3 ──────────────────────────────────────────────
+  const iniciarBarrido = async (items: { numero: string; nombre: string }[]) => {
+    if (items.length === 0) { notify('No hay productos para buscar', 'error'); return; }
 
     setProcesando(true);
-    setItemsLista([]);
-    setProgreso({ actual: 0, total: productosExcel.length });
-    notify(`Iniciando barrido de ${productosExcel.length} productos desde Excel`, 'success');
-
-    abortControllerRef.current = new AbortController();
-
-    for (let i = 0; i < productosExcel.length; i++) {
-      if (abortControllerRef.current?.signal.aborted) break;
-
-      const prod = productosExcel[i];
-      setProgreso({ actual: i + 1, total: productosExcel.length });
-
-      console.log(`🔍 Buscando [${prod.numero}] ${prod.nombre.substring(0, 50)}...`);
-
-      setItemsLista(prev => [...prev, {
-        numero: String(prod.numero), nombre: prod.nombre, resultados: [],
-        total_encontrados: 0, suficientes: false, deficit: 15, procesando: true
-      }]);
-
-      const resultado = await buscarProductoRobusto(prod.nombre, String(prod.numero), 15);
-
-      console.log(`   ✅ ${resultado.resultados.length} resultados encontrados`);
-
-      setItemsLista(prev => prev.map(p => p.numero === String(prod.numero) ? resultado : p));
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
-    setProcesando(false);
-    abortControllerRef.current = null;
-    notify("Barrido desde Excel completado", 'success');
-    console.log("✅ BARRIDO COMPLETADO");
-  };
-
-  // Barrido masivo desde texto
-  const iniciarBarrido = async () => {
-    const items = parsearLista(inputMasivo);
-    if (items.length === 0) {
-      notify("No se encontraron productos en la lista", 'error');
-      return;
-    }
-
-    console.log("\n🚀 INICIANDO BARRIDO DESDE TEXTO");
-    if (contextoPersonalizado) {
-      console.log(`📝 Contexto activo: "${contextoPersonalizado}"`);
-    }
-
-    setProcesando(true);
+    abortRef.current = false;
     setItemsLista([]);
     setProgreso({ actual: 0, total: items.length });
-    notify(`Iniciando barrido de ${items.length} productos`, 'success');
+    notify(`Iniciando barrido de ${items.length} productos (x3 paralelo)`, 'success');
 
-    abortControllerRef.current = new AbortController();
+    // Inicializar todos como "procesando"
+    setItemsLista(items.map(item => ({
+      numero: item.numero, nombre: item.nombre, resultados: [],
+      total_encontrados: 0, suficientes: false, deficit: 15, procesando: true,
+    })));
 
-    for (let i = 0; i < items.length; i++) {
-      if (abortControllerRef.current?.signal.aborted) break;
+    const semaforo = crearSemaforo(3);
+    let completados = 0;
 
-      const item = items[i];
-      setProgreso({ actual: i + 1, total: items.length });
+    const promesas = items.map(item =>
+      semaforo(async () => {
+        if (abortRef.current) return;
+        const resultado = await buscarProductoRobusto(item.nombre, item.numero);
+        completados++;
+        setProgreso({ actual: completados, total: items.length });
+        setItemsLista(prev => prev.map(p => p.numero === item.numero ? resultado : p));
+        console.log(`[${completados}/${items.length}] ${item.nombre.substring(0, 40)} — ${resultado.total_encontrados} resultados`);
+      })
+    );
 
-      setItemsLista(prev => [...prev, {
-        numero: item.numero, nombre: item.nombre, resultados: [],
-        total_encontrados: 0, suficientes: false, deficit: 15, procesando: true
-      }]);
-
-      const resultado = await buscarProductoRobusto(item.nombre, item.numero, 15);
-      setItemsLista(prev => prev.map(p => p.numero === item.numero ? resultado : p));
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
+    await Promise.all(promesas);
     setProcesando(false);
-    abortControllerRef.current = null;
-    notify("Barrido completado", 'success');
+    notify(`Barrido completado: ${completados} productos`, 'success');
+    console.log('✅ BARRIDO COMPLETADO');
   };
 
-  const cancelarBarrido = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      notify("Cancelando barrido...", 'warning');
-    }
+  const iniciarBarridoTexto = () => iniciarBarrido(parsearLista(inputMasivo));
+  const iniciarBarridoExcel = () => {
+    setShowModal(false);
+    iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre })));
   };
+  const cancelarBarrido = () => { abortRef.current = true; notify('Cancelando...', 'warning'); };
 
-  // Exportar a CSV (SOLO mejor match)
-  const exportarACSV = () => {
-    const csvRows = ['ITEM;Producto Buscado;Mejor Match;Tienda;Precio;Link;% Coincidencia'];
-
-    itemsLista.forEach(item => {
-      const mejorMatch = item.mejor_match || item.resultados[0];
-      if (mejorMatch) {
-        csvRows.push(`${item.numero};${item.nombre};${mejorMatch.nombre};${mejorMatch.tienda};${mejorMatch.precio_formateado};${mejorMatch.link};${mejorMatch.matching?.porcentaje || 100}%`);
-      } else {
-        csvRows.push(`${item.numero};${item.nombre};SIN RESULTADOS;;;;0%`);
-      }
-    });
-
-    const blob = new Blob(["\uFEFF" + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `mejor_match_${new Date().toISOString().split('T')[0]}.csv`);
-    link.click();
-    URL.revokeObjectURL(link.href);
-
-    notify("✅ Exportación CSV completada - Solo mejor match por producto", 'success');
-  };
-
-  // Exportar Excel con TODOS los resultados
-  const exportarTodosResultados = () => {
-    const exportData: any[] = [];
-
-    itemsLista.forEach(item => {
-      if (item.resultados.length === 0) {
-        exportData.push({
-          ITEM_ORIGINAL: item.numero,
-          PRODUCTO_BUSCADO: item.nombre,
-          'N°_RESULTADO': 0,
-          TIENDA: 'SIN RESULTADOS',
-          PRODUCTO_ENCONTRADO: 'No se encontraron resultados',
-          PRECIO: '-',
-          LINK: '-',
-          COINCIDENCIA: '0%',
-          NIVEL: 'sin_coincidencia'
-        });
-      } else {
-        item.resultados.forEach((resultado, idx) => {
-          exportData.push({
-            ITEM_ORIGINAL: item.numero,
-            PRODUCTO_BUSCADO: item.nombre,
-            'N°_RESULTADO': idx + 1,
-            TIENDA: resultado.tienda,
-            PRODUCTO_ENCONTRADO: resultado.nombre,
-            PRECIO: resultado.precio_formateado,
-            LINK: resultado.link,
-            COINCIDENCIA: `${resultado.matching?.porcentaje || 0}%`,
-            NIVEL: resultado.matching?.nivel || 'bajo'
-          });
-        });
-      }
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Todos_los_resultados');
-    XLSX.writeFile(wb, `todos_resultados_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-    setShowExportModal(false);
-    notify("✅ Exportación Excel completada - Todos los resultados", 'success');
-  };
-
-  // 🔥 FUNCIÓN MEJORADA: Exportar Excel con selección manual y cálculo de costos netos
-  const exportarConSeleccionManual = () => {
-    if (productosExcel.length === 0) {
-      notify("No hay datos del Excel original para calcular costos", 'warning');
+  // ─── Export: mismo archivo Excel con precios rellenados ──────────────────────
+  const exportarMismoExcel = () => {
+    if (!workbookOriginal || productosExcel.length === 0) {
+      notify('Carga un Excel primero para usar esta función', 'warning');
       return;
     }
 
-    const exportData: any[] = [];
-
-    itemsLista.forEach(item => {
-      // Buscar el producto original en productosExcel para obtener cantidad y valor_civa
-      const productoOriginal = productosExcel.find(p => String(p.numero) === item.numero);
-      const cantidad = productoOriginal?.cantidad || 1;
-      const valorCIVAOriginal = productoOriginal?.valor_civa || 0;
-      
-      // Obtener el resultado seleccionado (manual > mejor_match > primer resultado)
-      let resultadoSeleccionado = seleccionManual.get(item.numero);
-      if (!resultadoSeleccionado && item.mejor_match) {
-        resultadoSeleccionado = item.mejor_match;
-      }
-      if (!resultadoSeleccionado && item.resultados.length > 0) {
-        resultadoSeleccionado = item.resultados[0];
-      }
-
-      let precioWebConIVA = 0;
-      let costoUnitarioNeto = 0;
-      let costoTotalNeto = 0;
-      let linkEncontrado = '';
-      let tiendaEncontrada = '';
-      let coincidenciaPorcentaje = 0;
-
-      if (resultadoSeleccionado) {
-        precioWebConIVA = resultadoSeleccionado.precio_valor || 0;
-        costoUnitarioNeto = precioWebConIVA / IVA;
-        costoTotalNeto = costoUnitarioNeto * cantidad;
-        linkEncontrado = resultadoSeleccionado.link || '';
-        tiendaEncontrada = resultadoSeleccionado.tienda || '';
-        coincidenciaPorcentaje = resultadoSeleccionado.matching?.porcentaje || 0;
-      }
-
-      let origen = '';
-      if (seleccionManual.has(item.numero)) {
-        origen = '✓ Manual';
-      } else if (item.mejor_match) {
-        origen = '✓ Automático (mejor match)';
-      } else if (item.resultados.length > 0) {
-        origen = '✓ Automático (primer resultado)';
-      } else {
-        origen = '✗ Sin resultados';
-      }
-
-      exportData.push({
-        'ITEM': item.numero,
-        'DETALLE': item.nombre,
-        'CANTIDAD': cantidad,
-        'VALOR C/IVA': valorCIVAOriginal > 0 ? `$${valorCIVAOriginal.toLocaleString('es-CL')}` : '-',
-        'PRECIO WEB C/IVA': precioWebConIVA > 0 ? `$${precioWebConIVA.toLocaleString('es-CL')}` : '-',
-        'COSTO UNITARIO NETO': costoUnitarioNeto > 0 ? `$${costoUnitarioNeto.toLocaleString('es-CL')}` : '-',
-        'COSTO TOTAL NETO': costoTotalNeto > 0 ? `$${costoTotalNeto.toLocaleString('es-CL')}` : '-',
-        'LINK 1': linkEncontrado,
-        'ORIGEN': origen,
-        'TIENDA': tiendaEncontrada,
-        'COINCIDENCIA %': `${coincidenciaPorcentaje}%`,
-        'AHORRO': (valorCIVAOriginal > 0 && costoTotalNeto > 0) 
-          ? `$${Math.max(0, valorCIVAOriginal - costoTotalNeto).toLocaleString('es-CL')}`
-          : '-',
-      });
+    // Clonar el workbook original
+    const wbClone = XLSX.utils.book_new();
+    workbookOriginal.SheetNames.forEach(name => {
+      const wsOrig = workbookOriginal.Sheets[name];
+      wbClone.Sheets[name] = JSON.parse(JSON.stringify(wsOrig));
+      wbClone.SheetNames.push(name);
     });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [
-      { wch: 8 }, { wch: 45 }, { wch: 12 }, { wch: 18 },
-      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 55 },
-      { wch: 28 }, { wch: 25 }, { wch: 15 }, { wch: 18 }
-    ];
+    const ws = wbClone.Sheets[sheetNameActual];
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Costeo_Actualizado');
-    XLSX.writeFile(wb, `costeo_actualizado_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    notify("✅ Exportación completada con cálculo de costos netos", 'success');
+    // Encontrar encabezados y última columna
+    let headerRow = -1;
+    let colItem = -1, colDetalle = -1;
+    const maxColExistente = jsonData.reduce((max, row) => Math.max(max, (row as any[]).length), 0);
+
+    for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+      const row = jsonData[i] as any[];
+      if (!row) continue;
+      if (row.some((c: any) => String(c || '').toUpperCase().trim() === 'ITEM')) {
+        headerRow = i;
+        row.forEach((cell: any, j: number) => {
+          const h = String(cell || '').toUpperCase().trim();
+          if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
+          else if (h === 'DETALLE' || h.includes('DETALLE')) colDetalle = j;
+        });
+        break;
+      }
+    }
+
+    if (headerRow === -1) {
+      notify('No se encontraron encabezados en el Excel original', 'error');
+      return;
+    }
+
+    // Columnas nuevas al final
+    const colWebIVA = maxColExistente;
+    const colCostoNeto = maxColExistente + 1;
+    const colCostoTotal = maxColExistente + 2;
+    const colTienda = maxColExistente + 3;
+    const colCoincidencia = maxColExistente + 4;
+
+    // Escribir encabezados nuevos
+    const toCell = (r: number, c: number) => XLSX.utils.encode_cell({ r, c });
+    ws[toCell(headerRow, colWebIVA)] = { v: 'PRECIO WEB C/IVA', t: 's' };
+    ws[toCell(headerRow, colCostoNeto)] = { v: 'COSTO UNIT. NETO', t: 's' };
+    ws[toCell(headerRow, colCostoTotal)] = { v: 'COSTO TOTAL NETO', t: 's' };
+    ws[toCell(headerRow, colTienda)] = { v: 'TIENDA ENCONTRADA', t: 's' };
+    ws[toCell(headerRow, colCoincidencia)] = { v: '% COINCIDENCIA', t: 's' };
+
+    // Mapa de resultados por item número
+    const resultadosPorItem = new Map<string, ItemLista>();
+    itemsLista.forEach(item => resultadosPorItem.set(item.numero, item));
+
+    const productosExcelPorNumero = new Map<string, ProductoExcel>();
+    productosExcel.forEach(p => productosExcelPorNumero.set(String(p.numero), p));
+
+    // Rellenar cada fila del Excel original
+    for (let i = headerRow + 1; i < jsonData.length; i++) {
+      const row = jsonData[i] as any[];
+      if (!row || row.length === 0) continue;
+      const itemNumRaw = colItem >= 0 ? row[colItem] : null;
+      if (itemNumRaw == null) continue;
+
+      const itemNumStr = String(itemNumRaw).trim();
+      const itemResult = resultadosPorItem.get(itemNumStr);
+      if (!itemResult) continue;
+
+      const prodOriginal = productosExcelPorNumero.get(itemNumStr);
+      const cantidad = prodOriginal?.cantidad || 1;
+
+      // Resultado seleccionado (manual > mejor_match > primer resultado)
+      const selected = seleccionManual.get(itemNumStr) || itemResult.mejor_match || itemResult.resultados[0];
+      if (!selected) continue;
+
+      const precioWebIVA = selected.precio_valor || 0;
+      const costoNeto = Math.round(precioWebIVA / IVA);
+      const costoTotal = Math.round(costoNeto * cantidad);
+      const porcentaje = selected.matching?.porcentaje ?? 0;
+
+      ws[toCell(i, colWebIVA)] = { v: precioWebIVA, t: 'n', z: '"$"#,##0' };
+      ws[toCell(i, colCostoNeto)] = { v: costoNeto, t: 'n', z: '"$"#,##0' };
+      ws[toCell(i, colCostoTotal)] = { v: costoTotal, t: 'n', z: '"$"#,##0' };
+      ws[toCell(i, colTienda)] = { v: selected.tienda, t: 's' };
+      ws[toCell(i, colCoincidencia)] = { v: `${porcentaje}%`, t: 's' };
+    }
+
+    // Actualizar rango del sheet
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    range.e.c = Math.max(range.e.c, colCoincidencia);
+    ws['!ref'] = XLSX.utils.encode_range(range);
+
+    // Ajustar anchos de columnas nuevas
+    const colWidths = ws['!cols'] || Array(colWebIVA).fill({ wch: 12 });
+    while (colWidths.length <= colCoincidencia) colWidths.push({ wch: 12 });
+    colWidths[colWebIVA] = { wch: 18 };
+    colWidths[colCostoNeto] = { wch: 18 };
+    colWidths[colCostoTotal] = { wch: 18 };
+    colWidths[colTienda] = { wch: 22 };
+    colWidths[colCoincidencia] = { wch: 14 };
+    ws['!cols'] = colWidths;
+
+    const fecha = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wbClone, `COSTEO_actualizado_${fecha}.xlsx`);
+    notify('✅ Excel exportado con estructura original + precios web', 'success');
   };
 
-  // 🔥 NUEVA FUNCIÓN: Exportar solo mejor resultado con cálculos de costos
+  // ─── Export: solo mejor resultado ────────────────────────────────────────────
   const exportarMejorResultado = () => {
-    if (productosExcel.length === 0) {
-      notify("No hay datos del Excel original para calcular costos", 'warning');
-      return;
-    }
-
-    const exportData: any[] = [];
-
-    itemsLista.forEach(item => {
-      const productoOriginal = productosExcel.find(p => String(p.numero) === item.numero);
-      const cantidad = productoOriginal?.cantidad || 1;
-      const valorCIVAOriginal = productoOriginal?.valor_civa || 0;
-      
-      const mejorResultado = item.mejor_match || item.resultados[0];
-      
-      let precioWebConIVA = 0;
-      let costoUnitarioNeto = 0;
-      let costoTotalNeto = 0;
-      let linkEncontrado = '';
-      let tiendaEncontrada = '';
-      let coincidenciaPorcentaje = 0;
-
-      if (mejorResultado) {
-        precioWebConIVA = mejorResultado.precio_valor || 0;
-        costoUnitarioNeto = precioWebConIVA / IVA;
-        costoTotalNeto = costoUnitarioNeto * cantidad;
-        linkEncontrado = mejorResultado.link || '';
-        tiendaEncontrada = mejorResultado.tienda || '';
-        coincidenciaPorcentaje = mejorResultado.matching?.porcentaje || 0;
-      }
-
-      exportData.push({
+    const rows = itemsLista.map(item => {
+      const orig = productosExcel.find(p => String(p.numero) === item.numero);
+      const mejor = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+      const precioWeb = mejor?.precio_valor || 0;
+      const costoNeto = Math.round(precioWeb / IVA);
+      return {
         'ITEM': item.numero,
         'DETALLE': item.nombre,
-        'CANTIDAD': cantidad,
-        'VALOR C/IVA': valorCIVAOriginal > 0 ? `$${valorCIVAOriginal.toLocaleString('es-CL')}` : '-',
-        'PRECIO WEB C/IVA': precioWebConIVA > 0 ? `$${precioWebConIVA.toLocaleString('es-CL')}` : '-',
-        'COSTO UNITARIO NETO': costoUnitarioNeto > 0 ? `$${costoUnitarioNeto.toLocaleString('es-CL')}` : '-',
-        'COSTO TOTAL NETO': costoTotalNeto > 0 ? `$${costoTotalNeto.toLocaleString('es-CL')}` : '-',
-        'LINK 1': linkEncontrado,
-        'TIENDA': tiendaEncontrada,
-        'COINCIDENCIA %': `${coincidenciaPorcentaje}%`,
-      });
+        'CANTIDAD': orig?.cantidad || 1,
+        'VALOR C/IVA REF': orig?.valor_civa || 0,
+        'PRECIO WEB C/IVA': precioWeb,
+        'COSTO UNIT. NETO': costoNeto,
+        'COSTO TOTAL NETO': Math.round(costoNeto * (orig?.cantidad || 1)),
+        'TIENDA': mejor?.tienda || 'Sin resultados',
+        '% COINCIDENCIA': `${mejor?.matching?.porcentaje ?? 0}%`,
+        'LINK': mejor?.link || '',
+      };
     });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [
-      { wch: 8 }, { wch: 45 }, { wch: 12 }, { wch: 18 },
-      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 55 },
-      { wch: 25 }, { wch: 15 }
-    ];
-
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 8 }, { wch: 45 }, { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 55 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Mejor_Resultado');
     XLSX.writeFile(wb, `mejor_resultado_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    notify("✅ Exportación del mejor resultado completada", 'success');
+    notify('✅ Exportado mejor resultado por producto', 'success');
+  };
+
+  // ─── Export: todos los resultados ────────────────────────────────────────────
+  const exportarTodos = () => {
+    const rows: any[] = [];
+    itemsLista.forEach(item => {
+      if (item.resultados.length === 0) {
+        rows.push({ ITEM: item.numero, PRODUCTO_BUSCADO: item.nombre, N_RESULTADO: 0, TIENDA: 'SIN RESULTADOS', PRODUCTO_ENCONTRADO: '', PRECIO: '', LINK: '', 'COINCIDENCIA_%': '0%' });
+      } else {
+        item.resultados.forEach((r, idx) => {
+          rows.push({ ITEM: item.numero, PRODUCTO_BUSCADO: item.nombre, N_RESULTADO: idx + 1, TIENDA: r.tienda, PRODUCTO_ENCONTRADO: r.nombre, PRECIO: r.precio_formateado, LINK: r.link, 'COINCIDENCIA_%': `${r.matching?.porcentaje ?? 0}%` });
+        });
+      }
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Todos_Resultados');
+    XLSX.writeFile(wb, `todos_resultados_${new Date().toISOString().split('T')[0]}.xlsx`);
+    notify('✅ Exportados todos los resultados', 'success');
   };
 
   const limpiarLista = () => {
     if (itemsLista.length > 0 && confirm('¿Eliminar todos los resultados?')) {
       setItemsLista([]);
       setProductosExcel([]);
+      setWorkbookOriginal(null);
       setMostrarPrevisualizacion(false);
       setShowModal(false);
       setArchivoExcel(null);
       setPestanasDisponibles([]);
       setSeleccionManual(new Map());
-      notify("Lista limpiada", 'error');
+      notify('Lista limpiada', 'error');
     }
   };
 
-  const getMatchingColor = (porcentaje: number = 0): string => {
-    if (porcentaje >= 85) return 'bg-emerald-100 text-emerald-700';
-    if (porcentaje >= 60) return 'bg-amber-100 text-amber-700';
-    return 'bg-red-100 text-red-700';
-  };
-
-  const getMatchingIcon = (porcentaje: number = 0): string => {
-    if (porcentaje >= 85) return '🟢';
-    if (porcentaje >= 60) return '🟡';
-    return '🔴';
-  };
+  const getMatchingColor = (p = 0) => p >= 85 ? 'bg-emerald-100 text-emerald-700' : p >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+  const getMatchingIcon = (p = 0) => p >= 85 ? '🟢' : p >= 60 ? '🟡' : '🔴';
 
   const estadisticas = useMemo(() => {
-    const totalItems = itemsLista.length;
-    const itemsCompletos = itemsLista.filter(i => i.suficientes).length;
-    const itemsIncompletos = itemsLista.filter(i => !i.suficientes && i.resultados.length > 0).length;
-    const totalResultados = itemsLista.reduce((sum, i) => sum + i.resultados.length, 0);
-    const promedioMatching = itemsLista.filter(i => i.mejor_match?.matching?.porcentaje)
-      .reduce((sum, i) => sum + (i.mejor_match?.matching?.porcentaje || 0), 0) / (itemsLista.filter(i => i.mejor_match?.matching?.porcentaje).length || 1);
-
-    return { totalItems, itemsCompletos, itemsIncompletos, totalResultados, promedioMatching: Math.round(promedioMatching) };
+    const total = itemsLista.length;
+    const completos = itemsLista.filter(i => i.suficientes).length;
+    const totalResultados = itemsLista.reduce((s, i) => s + i.resultados.length, 0);
+    const conMatch = itemsLista.filter(i => (i.mejor_match?.matching?.porcentaje ?? 0) > 0);
+    const promedioMatching = conMatch.length > 0
+      ? Math.round(conMatch.reduce((s, i) => s + (i.mejor_match?.matching?.porcentaje ?? 0), 0) / conMatch.length)
+      : 0;
+    const sinResultados = itemsLista.filter(i => !i.procesando && i.resultados.length === 0).length;
+    return { total, completos, totalResultados, promedioMatching, sinResultados };
   }, [itemsLista]);
 
+  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans">
 
-      {/* Modal de previsualización Excel */}
       {showModal && productosExcel.length > 0 && (
-        <ModalPrevisualizacion
-          productos={productosExcel}
-          onClose={() => setShowModal(false)}
-          onConfirm={confirmarBusquedaExcel}
-        />
+        <ModalPrevisualizacion productos={productosExcel} onClose={() => setShowModal(false)} onConfirm={iniciarBarridoExcel} />
       )}
 
-      {/* Modal de confirmación exportación */}
-      {showExportModal && (
-        <ModalExportacion
-          totalItems={itemsLista.length}
-          onConfirm={exportarTodosResultados}
-          onCancel={() => setShowExportModal(false)}
-        />
-      )}
-
-      {/* Toasts */}
       <div className="fixed top-24 right-6 z-50 flex flex-col gap-3">
-        {toasts.map(t => (
-          <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />
-        ))}
+        {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(prev => prev.filter(x => x.id !== t.id))} />)}
       </div>
 
+      {/* Header */}
       <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 sticky top-0 z-40 shadow-sm">
         <div className="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
-            <div className="bg-slate-900 text-white p-2.5 rounded-2xl shadow-xl">
-              <BarChart3 size={22} />
-            </div>
+            <div className="bg-slate-900 text-white p-2.5 rounded-2xl shadow-xl"><BarChart3 size={22} /></div>
             <div>
-              <h1 className="font-black text-xl tracking-tight text-slate-900">MONITOR <span className="text-orange-600">ICA</span>
-                <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">Analizador IA</span>
+              <h1 className="font-black text-xl tracking-tight text-slate-900">
+                MONITOR <span className="text-orange-600">ICA</span>
+                <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2">IA + Scrapers</span>
               </h1>
-              <p className="text-[9px] text-slate-400">Mínimo 15 resultados • Contexto IA • Colores por coincidencia</p>
+              <p className="text-[9px] text-slate-400">
+                Sodimac · Easy · Construmart · Imperial · MercadoLibre · x3 paralelo
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex-1 md:w-96 flex items-center bg-slate-100/50 border border-slate-200 rounded-2xl px-4 focus-within:ring-2 focus-within:ring-orange-500/20">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Búsqueda individual */}
+            <div className="flex items-center bg-slate-100/50 border border-slate-200 rounded-2xl px-4 focus-within:ring-2 focus-within:ring-orange-500/20">
               <Search size={16} className="text-slate-400" />
               <input
-                className="bg-transparent py-3 px-3 text-xs outline-none w-full font-bold text-slate-700 placeholder:text-slate-400"
+                className="bg-transparent py-3 px-3 text-xs outline-none w-72 font-bold text-slate-700 placeholder:text-slate-400"
                 placeholder="Ej: 25 Anticorrosivo o nombre directo..."
                 value={inputManual}
                 onChange={e => setInputManual(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
               />
-              <button
-                onClick={buscarUno}
-                disabled={buscandoUno || !inputManual.trim()}
-                className="bg-slate-900 text-white p-1.5 rounded-xl hover:bg-orange-600 transition-all disabled:bg-slate-200"
-              >
+              <button onClick={buscarUno} disabled={buscandoUno || !inputManual.trim()}
+                className="bg-slate-900 text-white p-1.5 rounded-xl hover:bg-orange-600 transition-all disabled:bg-slate-200">
                 {buscandoUno ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
               </button>
             </div>
 
-            {/* 🔥 BOTÓN - Exportar mejor resultado (Excel) */}
-            <button
-              onClick={exportarMejorResultado}
-              disabled={itemsLista.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar Excel con el mejor resultado de cada producto"
-            >
-              <FileSpreadsheet size={18} />
-              <span className="hidden md:inline ml-1 text-[10px]">Mejor</span>
+            {/* Export: mismo Excel */}
+            <button onClick={exportarMismoExcel} disabled={itemsLista.length === 0 || !workbookOriginal}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-3 rounded-2xl transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5 text-[10px] font-black"
+              title="Exportar en la misma estructura del Excel original">
+              <FileSpreadsheet size={16} /> MISMO EXCEL
             </button>
 
-            {/* 🔥 BOTÓN - Exportar con selección manual y costos */}
-            <button
-              onClick={exportarConSeleccionManual}
-              disabled={itemsLista.length === 0}
-              className="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar Excel con selección manual y cálculo de costos netos"
-            >
-              <CheckCircle2 size={18} />
-              <span className="hidden md:inline ml-1 text-[10px]">Costeo</span>
+            {/* Export: mejor resultado */}
+            <button onClick={exportarMejorResultado} disabled={itemsLista.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-3 rounded-2xl transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5 text-[10px] font-black"
+              title="Exportar mejor resultado por producto">
+              <CheckCircle2 size={16} /> MEJOR
             </button>
 
-            {/* Botón Excel - todos los resultados */}
-            <button
-              onClick={() => setShowExportModal(true)}
-              disabled={itemsLista.length === 0}
-              className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar Excel (todos los resultados)"
-            >
-              <FileSpreadsheet size={18} />
+            {/* Export: todos */}
+            <button onClick={exportarTodos} disabled={itemsLista.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-3 rounded-2xl transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5 text-[10px] font-black"
+              title="Exportar todos los resultados">
+              <Download size={16} /> TODOS
             </button>
 
-            {/* Botón CSV - solo mejor match */}
-            <button
-              onClick={exportarACSV}
-              disabled={itemsLista.length === 0}
-              className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-2xl transition-all shadow-sm disabled:opacity-50"
-              title="Exportar CSV (solo mejor match por producto)"
-            >
-              <Download size={18} />
-            </button>
-
-            <button
-              onClick={limpiarLista}
-              disabled={itemsLista.length === 0}
-              className="bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 hover:text-rose-500 transition-all shadow-sm"
-            >
+            <button onClick={limpiarLista} disabled={itemsLista.length === 0}
+              className="bg-white border border-slate-200 p-3 rounded-2xl text-slate-400 hover:text-rose-500 transition-all shadow-sm disabled:opacity-50">
               <Trash2 size={18} />
             </button>
           </div>
@@ -1072,326 +753,327 @@ export default function MonitorMasivoICA() {
       <main className="max-w-[1500px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Sidebar */}
         <div className="lg:col-span-3">
-          <div className="bg-white p-6 rounded-3xl border shadow-xl sticky top-32">
-            <div className="flex justify-between items-center mb-5">
+          <div className="bg-white p-6 rounded-3xl border shadow-xl sticky top-32 space-y-4">
+            <div className="flex justify-between items-center">
               <label className="flex items-center gap-3 font-black text-[10px] uppercase text-slate-400">
                 <div className={`w-2 h-2 rounded-full ${procesando ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                Barrido de Precios
+                {procesando ? `Buscando ${progreso.actual}/${progreso.total}` : 'Barrido de Precios'}
               </label>
-              {procesando && <button onClick={cancelarBarrido} className="text-[9px] font-black text-red-500">Cancelar</button>}
+              {procesando && (
+                <button onClick={cancelarBarrido} className="text-[9px] font-black text-red-500 hover:text-red-700">Cancelar</button>
+              )}
             </div>
 
-            {/* Contexto personalizado */}
-            <div className="mb-4">
+            {/* Barra de progreso */}
+            {procesando && progreso.total > 0 && (
+              <div className="w-full bg-slate-100 rounded-full h-2">
+                <div
+                  className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(progreso.actual / progreso.total) * 100}%` }}
+                />
+              </div>
+            )}
+
+            {/* Contexto IA */}
+            <div>
               <button
                 onClick={() => setMostrarContexto(!mostrarContexto)}
                 className="w-full flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all"
               >
                 <div className="flex items-center gap-2">
                   <Settings size={14} className="text-slate-500" />
-                  <span className="text-[9px] font-black uppercase text-slate-600">Contexto personalizado</span>
+                  <span className="text-[9px] font-black uppercase text-slate-600">Contexto de búsqueda</span>
+                  {contextoPersonalizado && <span className="w-2 h-2 rounded-full bg-blue-500" />}
                 </div>
                 {mostrarContexto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
-              
+
               {mostrarContexto && (
-                <div className="mt-3 p-3 bg-slate-50 rounded-xl space-y-3 animate-in slide-in-from-top duration-200">
+                <div className="mt-2 p-3 bg-slate-50 rounded-xl space-y-3 animate-in slide-in-from-top duration-200">
                   <label className="text-[8px] font-black text-slate-400 uppercase block">
-                    📝 Describe el contexto de tu búsqueda:
+                    📝 Describe el tipo de productos que buscas:
                   </label>
+
+                  {/* Templates rápidos */}
+                  <div className="flex flex-wrap gap-1">
+                    {['ferretería construcción', 'materiales eléctricos', 'señalética vial', 'pinturas y quimicos', 'maderas y tableros'].map(tmpl => (
+                      <button key={tmpl} onClick={() => setContextoPersonalizado(tmpl)}
+                        className={`text-[8px] px-2 py-1 rounded-full border transition-all ${contextoPersonalizado === tmpl ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-400'}`}>
+                        {tmpl}
+                      </button>
+                    ))}
+                  </div>
+
                   <textarea
                     value={contextoPersonalizado}
-                    onChange={(e) => setContextoPersonalizado(e.target.value)}
-                    placeholder="Ej: solo productos de fierro y madera, materiales de construcción, maquinaria pesada, artículos de ferretería..."
-                    className="w-full h-20 p-2 bg-white border border-slate-200 rounded-lg text-[10px] resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                    onChange={e => setContextoPersonalizado(e.target.value)}
+                    placeholder="Ej: materiales de construcción ferretería Chile..."
+                    className="w-full h-16 p-2 bg-white border border-slate-200 rounded-lg text-[10px] resize-none focus:ring-2 focus:ring-blue-500 outline-none"
                   />
-                  
+
                   <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-[9px] text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={usarIAContexto}
-                        onChange={(e) => setUsarIAContexto(e.target.checked)}
-                        className="rounded border-slate-300"
-                      />
-                      Usar IA para optimizar la consulta
+                    <label className="flex items-center gap-2 text-[9px] text-slate-600 cursor-pointer">
+                      <input type="checkbox" checked={usarIAContexto} onChange={e => setUsarIAContexto(e.target.checked)} className="rounded border-slate-300" />
+                      Optimizar con IA
                     </label>
                     {contextoPersonalizado && (
-                      <button
-                        onClick={() => setContextoPersonalizado("")}
-                        className="text-[9px] text-red-500 hover:text-red-700"
-                      >
-                        Limpiar
-                      </button>
+                      <button onClick={() => setContextoPersonalizado('')} className="text-[9px] text-red-500 hover:text-red-700">Limpiar</button>
                     )}
                   </div>
-                  
-                  {contextoPersonalizado && (
-                    <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
-                      <p className="text-[8px] text-blue-600 font-black uppercase">Contexto activo</p>
-                      <p className="text-[9px] text-blue-700 mt-0.5 line-clamp-2">{contextoPersonalizado}</p>
-                    </div>
-                  )}
-                  
-                  {enriqueciendo && (
-                    <div className="flex items-center justify-center gap-2 text-[9px] text-blue-600">
-                      <Loader2 size={12} className="animate-spin" />
-                      Optimizando consulta con IA...
-                    </div>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* Carga de Excel */}
-            <div className="mb-4">
-              <button onClick={() => document.getElementById('excel-input')?.click()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                <Upload size={14} /> Cargar Excel
+            {/* Carga Excel */}
+            <div>
+              <button
+                onClick={() => document.getElementById('excel-input')?.click()}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"
+              >
+                <Upload size={14} /> Cargar Excel COSTEO
               </button>
-              <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
+              <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={e => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
             </div>
 
-            {/* Selector de pestañas */}
+            {/* Selector pestañas */}
             {pestanasDisponibles.length > 1 && (
-              <div className="mb-4 p-3 bg-slate-50 rounded-xl">
+              <div className="p-3 bg-slate-50 rounded-xl">
                 <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">📑 Pestaña del Excel:</label>
-                <select value={pestanaSeleccionada} onChange={(e) => cambiarPestana(e.target.value)} className="w-full p-2 bg-white rounded-xl text-[10px] font-medium border">
+                <select value={sheetNameActual} onChange={e => cambiarPestana(e.target.value)}
+                  className="w-full p-2 bg-white rounded-xl text-[10px] font-medium border">
                   {pestanasDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <p className="text-[7px] text-slate-400 mt-1">Selecciona "COSTEO" para tu archivo</p>
               </div>
             )}
 
-            {/* Previsualización Excel resumida */}
+            {/* Mini preview Excel */}
             {mostrarPrevisualizacion && productosExcel.length > 0 && !showModal && (
-              <div className="mb-4 p-3 bg-slate-50 rounded-xl">
+              <div className="p-3 bg-slate-50 rounded-xl">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-[9px] font-black text-slate-500">📊 Excel cargado</span>
                   <span className="text-[8px] text-emerald-600">{productosExcel.length} productos</span>
                 </div>
-                <div className="max-h-32 overflow-y-auto text-[9px] space-y-1">
-                  {productosExcel.slice(0, 5).map((p: ProductoExcel) => <div key={p.numero} className="truncate">{p.numero}. {p.nombre.substring(0, 40)}</div>)}
-                  {productosExcel.length > 5 && <div className="text-slate-400">+ {productosExcel.length - 5} más</div>}
+                <div className="max-h-28 overflow-y-auto text-[9px] space-y-0.5">
+                  {productosExcel.slice(0, 6).map(p => (
+                    <div key={p.numero} className="truncate text-slate-500">{p.numero}. {p.nombre.substring(0, 38)}</div>
+                  ))}
+                  {productosExcel.length > 6 && <div className="text-slate-400">+ {productosExcel.length - 6} más</div>}
                 </div>
-                <button onClick={() => setShowModal(true)} className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
-                  <Eye size={12} /> Ver detalles
-                </button>
-                <button onClick={iniciarBarridoExcel} disabled={procesando} className="w-full mt-2 bg-orange-600 text-white py-2 rounded-lg text-[9px] font-black flex items-center justify-center gap-2">
-                  <Sparkles size={12} /> Buscar desde Excel
-                </button>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setShowModal(true)}
+                    className="flex-1 bg-slate-200 text-slate-700 py-1.5 rounded-lg text-[9px] font-black flex items-center justify-center gap-1">
+                    <Eye size={11} /> Ver
+                  </button>
+                  <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre })))}
+                    disabled={procesando}
+                    className="flex-1 bg-orange-600 text-white py-1.5 rounded-lg text-[9px] font-black flex items-center justify-center gap-1 disabled:opacity-50">
+                    <Sparkles size={11} /> Buscar
+                  </button>
+                </div>
               </div>
             )}
 
+            {/* Lista de texto */}
             <textarea
-              className="w-full h-[250px] bg-slate-50 border rounded-3xl p-5 text-[11px] font-mono text-slate-600 outline-none focus:ring-2 focus:ring-orange-500/20 resize-none"
-              placeholder="Pega aquí tu lista con formato:&#10;1	Letrero de obra&#10;2	Madera Pino 2&quot;x3&quot;&#10;3	Anticorrosivo"
+              className="w-full h-52 bg-slate-50 border rounded-2xl p-4 text-[11px] font-mono text-slate-600 outline-none focus:ring-2 focus:ring-orange-500/20 resize-none"
+              placeholder={`1\tLetrero de obra\n2\tMadera Pino 2"x3"\n3\tAnticorrosivo`}
               value={inputMasivo}
               onChange={e => setInputMasivo(e.target.value)}
               disabled={procesando}
             />
 
             <button
-              onClick={iniciarBarrido}
+              onClick={iniciarBarridoTexto}
               disabled={procesando || !inputMasivo.trim()}
-              className="w-full mt-4 bg-slate-900 hover:bg-orange-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-3 shadow-lg transition-all disabled:bg-slate-200"
+              className="w-full bg-slate-900 hover:bg-orange-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase flex items-center justify-center gap-3 shadow-lg transition-all disabled:bg-slate-200"
             >
               {procesando ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  <span>PROCESANDO {progreso.actual}/{progreso.total}</span>
-                </>
+                <><Loader2 className="animate-spin" size={18} /> PROCESANDO {progreso.actual}/{progreso.total}</>
               ) : (
-                <>
-                  <Sparkles size={16} />
-                  <span>Iniciar Barrido</span>
-                </>
+                <><Sparkles size={16} /> Iniciar Barrido</>
               )}
             </button>
 
             {/* Estadísticas */}
             {itemsLista.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="bg-slate-50 rounded-2xl p-3">
-                    <p className="text-[9px] text-slate-400">Items</p>
-                    <p className="font-black text-xl">{estadisticas.totalItems}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl p-3">
-                    <p className="text-[9px] text-slate-400">Resultados</p>
-                    <p className="font-black text-xl">{estadisticas.totalResultados}</p>
-                  </div>
-                  <div className="bg-emerald-50 rounded-2xl p-3">
-                    <p className="text-[9px] text-emerald-500">Matching promedio</p>
-                    <p className="font-black text-xl text-emerald-700">{estadisticas.promedioMatching}%</p>
-                  </div>
-                  <div className="bg-amber-50 rounded-2xl p-3">
-                    <p className="text-[9px] text-amber-500">Parciales</p>
-                    <p className="font-black text-xl text-amber-700">{estadisticas.itemsIncompletos}</p>
-                  </div>
+              <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-2 text-center">
+                <div className="bg-slate-50 rounded-2xl p-3">
+                  <p className="text-[8px] text-slate-400">Items</p>
+                  <p className="font-black text-lg">{estadisticas.total}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-3">
+                  <p className="text-[8px] text-slate-400">Resultados</p>
+                  <p className="font-black text-lg">{estadisticas.totalResultados}</p>
+                </div>
+                <div className="bg-emerald-50 rounded-2xl p-3">
+                  <p className="text-[8px] text-emerald-500">Match promedio</p>
+                  <p className="font-black text-lg text-emerald-700">{estadisticas.promedioMatching}%</p>
+                </div>
+                <div className={`rounded-2xl p-3 ${estadisticas.sinResultados > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                  <p className={`text-[8px] ${estadisticas.sinResultados > 0 ? 'text-red-500' : 'text-slate-400'}`}>Sin resultados</p>
+                  <p className={`font-black text-lg ${estadisticas.sinResultados > 0 ? 'text-red-700' : 'text-slate-700'}`}>{estadisticas.sinResultados}</p>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Resultados con selección manual */}
-        <div className="lg:col-span-9 space-y-6 pb-20">
+        {/* Resultados */}
+        <div className="lg:col-span-9 space-y-4 pb-20">
           {itemsLista.length === 0 ? (
             <div className="h-[50vh] flex flex-col items-center justify-center text-center">
               <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-100 mb-8">
                 <ShoppingBag size={64} strokeWidth={1} className="text-orange-500 opacity-20" />
               </div>
               <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em] mb-2">Lista vacía</p>
-              <p className="text-slate-300 text-xs">Carga un Excel o pega una lista con formato "1	Nombre del producto"</p>
+              <p className="text-slate-300 text-xs">Carga un Excel COSTEO o pega una lista con "1{'\t'}Nombre del producto"</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {itemsLista.map((item, idx) => {
-                const mejorMatch = item.mejor_match || item.resultados[0];
-                const matchPorcentaje = mejorMatch?.matching?.porcentaje || 0;
-                const matchNivel = mejorMatch?.matching?.nivel || 'bajo';
+            itemsLista.map((item, idx) => {
+              const mejor = seleccionManual.get(item.numero) || item.mejor_match || item.resultados[0];
+              const pct = mejor?.matching?.porcentaje ?? 0;
+              const nivel = mejor?.matching?.nivel ?? 'bajo';
 
-                return (
-                  <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
-                    <div className={`px-6 py-4 border-b flex flex-wrap justify-between items-center gap-3 ${item.procesando ? 'bg-orange-50/30' :
-                      matchPorcentaje >= 85 ? 'bg-emerald-50/50' :
-                        matchPorcentaje >= 60 ? 'bg-amber-50/50' :
-                          item.resultados.length > 0 ? 'bg-red-50/50' : 'bg-slate-50/50'
+              return (
+                <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-all">
+                  {/* Header del item */}
+                  <div className={`px-6 py-4 border-b flex flex-wrap justify-between items-center gap-3 ${
+                    item.procesando ? 'bg-orange-50/30'
+                    : pct >= 85 ? 'bg-emerald-50/50'
+                    : pct >= 60 ? 'bg-amber-50/50'
+                    : item.resultados.length > 0 ? 'bg-red-50/30'
+                    : 'bg-slate-50/50'
+                  }`}>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${
+                        pct >= 85 ? 'bg-emerald-100 text-emerald-700'
+                        : pct >= 60 ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
                       }`}>
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${matchPorcentaje >= 85 ? 'bg-emerald-100 text-emerald-700' :
-                          matchPorcentaje >= 60 ? 'bg-amber-100 text-amber-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                          {item.numero}
-                        </div>
-                        <div>
-                          <h3 className="font-black text-sm text-slate-800">{item.nombre}</h3>
-                          <div className="flex items-center gap-2 mt-1">
-                            {item.procesando ? (
-                              <span className="text-[9px] font-black text-orange-500 flex items-center gap-1">
-                                <Loader2 size={10} className="animate-spin" />
-                                BUSCANDO...
+                        {item.numero}
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-slate-800">{item.nombre}</h3>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {item.procesando ? (
+                            <span className="text-[9px] font-black text-orange-500 flex items-center gap-1">
+                              <Loader2 size={10} className="animate-spin" /> BUSCANDO...
+                            </span>
+                          ) : (
+                            <>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${getMatchingColor(pct)}`}>
+                                {getMatchingIcon(pct)} {pct}% — {nivel === 'exacto' ? 'EXACTO' : nivel === 'parcial' ? 'PARCIAL' : 'BAJO'}
                               </span>
-                            ) : (
-                              <>
-                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${getMatchingColor(matchPorcentaje)}`}>
-                                  {getMatchingIcon(matchPorcentaje)} {matchPorcentaje}% - {matchNivel === 'exacto' ? 'EXACTO' : matchNivel === 'parcial' ? 'PARCIAL' : 'BAJO'}
+                              {mejor && (
+                                <span className="text-[9px] font-bold text-slate-400">
+                                  {mejor.tienda} · {mejor.precio_formateado}
                                 </span>
-                                {mejorMatch && (
-                                  <span className="text-[9px] font-black text-slate-400">
-                                    Mejor: {mejorMatch.tienda} - {mejorMatch.precio_formateado}
-                                  </span>
-                                )}
-                                {seleccionManual.has(item.numero) && (
-                                  <span className="text-[9px] font-black text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
-                                    ✓ Seleccionado manualmente
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </div>
+                              )}
+                              {seleccionManual.has(item.numero) && (
+                                <span className="text-[9px] font-black text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                                  ✓ Selección manual
+                                </span>
+                              )}
+                              {item.error && (
+                                <span className="text-[9px] font-black text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                                  Error: {item.error}
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
-
-                      {item.resultados.length > 0 && !item.procesando && (
-                        <div className="text-[9px] text-slate-400 bg-white/50 px-2 py-1 rounded-full">
-                          💰 Mejor precio: {Math.min(...item.resultados.map(r => r.precio_valor || Infinity)) !== Infinity ?
-                            `$${Math.min(...item.resultados.map(r => r.precio_valor || Infinity)).toLocaleString('es-CL')}` : 'N/A'}
-                        </div>
-                      )}
                     </div>
 
-                    {!item.procesando && item.resultados.length > 0 && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                          <thead className="bg-slate-50/50">
-                            <tr className="text-[9px] uppercase text-slate-400 font-black tracking-widest">
-                              <th className="px-3 py-3 w-10 text-center">Sel.</th>
-                              <th className="px-6 py-3">#</th>
-                              <th className="px-6 py-3">Tienda</th>
-                              <th className="px-6 py-3">Producto</th>
-                              <th className="px-6 py-3 text-right">Precio</th>
-                              <th className="px-6 py-3 text-center">Match</th>
-                              <th className="px-6 py-3 text-center">Link</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {item.resultados.slice(0, 15).map((result, ridx) => {
-                              const isSelected = seleccionManual.get(item.numero) === result;
-                              const matchPct = result.matching?.porcentaje || (ridx === 0 ? 85 : ridx < 3 ? 70 : 50);
-                              return (
-                                <tr key={ridx} className="hover:bg-slate-50/80 transition-all">
-                                  <td className="px-3 py-4 text-center">
-                                    <button
-                                      onClick={() => toggleSeleccionManual(item.numero, result)}
-                                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                                        isSelected 
-                                          ? 'bg-purple-600 border-purple-600 text-white' 
-                                          : 'border-slate-300 hover:border-purple-400'
-                                      }`}
-                                    >
-                                      {isSelected && <CheckCircle2 size={12} />}
-                                    </button>
-                                  </td>
-                                  <td className="px-6 py-4 text-[10px] font-black text-slate-300">
-                                    {String(ridx + 1).padStart(2, '0')}
-                                  </td>
-                                  <td className="px-6 py-4">
-                                    <span className="font-black text-slate-800 text-xs block">{result.tienda}</span>
-                                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase italic">
-                                      {result.canal || 'WEB'}
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4">
-                                    <p className="text-xs font-medium text-slate-600 leading-tight max-w-md line-clamp-2">
-                                      {result.nombre}
-                                    </p>
-                                  </td>
-                                  <td className="px-6 py-4 text-right">
-                                    <span className="text-sm font-black text-slate-900">
-                                      {result.precio_formateado}
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <span className={`text-[9px] font-black px-2 py-1 rounded-full ${getMatchingColor(matchPct)}`}>
-                                      {getMatchingIcon(matchPct)} {matchPct}%
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <a
-                                      href={result.link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all"
-                                    >
-                                      <ExternalLink size={12} />
-                                    </a>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                        {item.resultados.length > 15 && (
-                          <div className="px-6 py-3 text-center text-[9px] text-slate-400 border-t">
-                            + {item.resultados.length - 15} resultados adicionales
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!item.procesando && item.resultados.length === 0 && (
-                      <div className="px-6 py-8 text-center">
-                        <AlertCircle size={24} className="mx-auto text-red-300 mb-2" />
-                        <p className="text-xs text-slate-400">No se encontraron resultados para este producto</p>
-                        <p className="text-[9px] text-slate-300 mt-1">Verifica el nombre o intenta con términos más generales</p>
+                    {item.resultados.length > 0 && !item.procesando && (
+                      <div className="text-[9px] text-slate-400 bg-white/60 px-3 py-1.5 rounded-full border border-slate-100">
+                        💰 Mín: ${Math.min(...item.resultados.map(r => r.precio_valor || Infinity)).toLocaleString('es-CL')}
+                        &nbsp;·&nbsp;
+                        💰 Máx: ${Math.max(...item.resultados.map(r => r.precio_valor || 0)).toLocaleString('es-CL')}
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* Tabla de resultados */}
+                  {!item.procesando && item.resultados.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50/50">
+                          <tr className="text-[9px] uppercase text-slate-400 font-black tracking-widest">
+                            <th className="px-3 py-3 w-10 text-center">Sel.</th>
+                            <th className="px-4 py-3">#</th>
+                            <th className="px-4 py-3">Tienda</th>
+                            <th className="px-4 py-3">Producto encontrado</th>
+                            <th className="px-4 py-3 text-right">Precio c/IVA</th>
+                            <th className="px-4 py-3 text-right">Precio neto</th>
+                            <th className="px-4 py-3 text-center">Match</th>
+                            <th className="px-4 py-3 text-center">Link</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {item.resultados.slice(0, 15).map((r, ridx) => {
+                            const isSelected = seleccionManual.get(item.numero) === r || (!seleccionManual.has(item.numero) && ridx === 0 && r === item.mejor_match);
+                            const pctR = r.matching?.porcentaje ?? 0;
+                            const precioNeto = Math.round((r.precio_valor || 0) / IVA);
+                            return (
+                              <tr key={ridx} className={`hover:bg-slate-50/80 transition-all ${isSelected ? 'bg-blue-50/30' : ''}`}>
+                                <td className="px-3 py-3 text-center">
+                                  <button
+                                    onClick={() => toggleSeleccionManual(item.numero, r)}
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300 hover:border-purple-400'}`}
+                                  >
+                                    {isSelected && <CheckCircle2 size={12} />}
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3 text-[10px] font-black text-slate-300">{String(ridx + 1).padStart(2, '0')}</td>
+                                <td className="px-4 py-3">
+                                  <span className="font-black text-slate-800 text-xs block">{r.tienda}</span>
+                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase">{r.canal}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="text-xs font-medium text-slate-600 leading-tight max-w-sm line-clamp-2">{r.nombre}</p>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className="text-sm font-black text-slate-900">{r.precio_formateado}</span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className="text-xs text-slate-500">${precioNeto.toLocaleString('es-CL')}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`text-[9px] font-black px-2 py-1 rounded-full ${getMatchingColor(pctR)}`}>
+                                    {getMatchingIcon(pctR)} {pctR}%
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <a href={r.link} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all">
+                                    <ExternalLink size={12} />
+                                  </a>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {item.resultados.length > 15 && (
+                        <div className="px-6 py-3 text-center text-[9px] text-slate-400 border-t">
+                          + {item.resultados.length - 15} resultados adicionales
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!item.procesando && item.resultados.length === 0 && (
+                    <div className="px-6 py-8 text-center">
+                      <AlertCircle size={24} className="mx-auto text-red-300 mb-2" />
+                      <p className="text-xs text-slate-400">No se encontraron resultados para este producto</p>
+                      <p className="text-[9px] text-slate-300 mt-1">Intenta con términos más generales o agrega contexto</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </main>
