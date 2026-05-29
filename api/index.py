@@ -692,43 +692,106 @@ def buscar_sodimac(query: str, limite: int = 8):
 
 # ─── VTEX stores (Easy, Construmart, Imperial) ────────────────────────────────
 
+def _vtex_catalog(store: dict, query: str, limite: int):
+    """Endpoint clásico VTEX — funciona en tiendas sin migrar a IO."""
+    r = requests.get(
+        f"https://{store['dominio']}/api/catalog_system/pub/products/search",
+        params={"ft": query, "_from": 0, "_to": limite - 1},
+        headers={**HEADERS_BROWSER, "Accept": "application/json"},
+        timeout=(4, 7),
+    )
+    if r.status_code != 200:
+        return None, r.status_code
+    resultados = []
+    for prod in r.json():
+        nombre = limpiar_nombre(prod.get("productName", ""))
+        if len(nombre) < 4:
+            continue
+        precio = None
+        link = prod.get("link", "")
+        for item in prod.get("items", []):
+            for seller in item.get("sellers", []):
+                offer = seller.get("commertialOffer", {})
+                if offer.get("AvailableQuantity", 0) > 0:
+                    precio = offer.get("Price", 0)
+                    break
+            if precio:
+                break
+        if not precio or precio < 500:
+            continue
+        if not link.startswith("http"):
+            link = f"https://{store['dominio']}{link}"
+        resultados.append({
+            "tienda": store["nombre"],
+            "nombre": nombre[:150],
+            "precio_con_iva": round(precio),
+            "url": link,
+            "fuente": "vtex_direct",
+            "pais": "CL",
+        })
+    return resultados, 200
+
+
+def _vtex_io(store: dict, query: str, limite: int):
+    """Endpoint VTEX IO Intelligent Search — tiendas migradas (Easy, Construmart, Imperial)."""
+    r = requests.get(
+        f"https://{store['dominio']}/api/io/_v/api/intelligent-search/product_search",
+        params={"query": query, "count": limite, "locale": "es-CL"},
+        headers={**HEADERS_BROWSER, "Accept": "application/json"},
+        timeout=(4, 8),
+    )
+    if r.status_code != 200:
+        return None, r.status_code
+    data = r.json()
+    productos = data.get("products", [])
+    resultados = []
+    for prod in productos:
+        nombre = limpiar_nombre(prod.get("productName", prod.get("name", "")))
+        if len(nombre) < 4:
+            continue
+        precio = None
+        link = prod.get("link", prod.get("linkText", ""))
+        items = prod.get("items", [prod]) if "items" in prod else [prod]
+        for item in items:
+            sellers = item.get("sellers", [])
+            for seller in sellers:
+                offer = seller.get("commertialOffer", {})
+                if offer.get("AvailableQuantity", 0) > 0:
+                    precio = offer.get("Price", 0)
+                    break
+            if precio:
+                break
+        # Fallback: precio directo en el producto (algunos VTEX IO lo exponen así)
+        if not precio:
+            precio = prod.get("price", prod.get("priceRange", {}).get("sellingPrice", {}).get("lowPrice"))
+        if not precio or precio < 500:
+            continue
+        if link and not link.startswith("http"):
+            link = f"https://{store['dominio']}/{link}/p"
+        resultados.append({
+            "tienda": store["nombre"],
+            "nombre": nombre[:150],
+            "precio_con_iva": round(float(precio)),
+            "url": link,
+            "fuente": "vtex_direct",
+            "pais": "CL",
+        })
+    return resultados, 200
+
+
 def buscar_vtex(store: dict, query: str, limite: int = 8):
     cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
     try:
-        r = requests.get(
-            f"https://{store['dominio']}/api/catalog_system/pub/products/search",
-            params={"ft": query, "_from": 0, "_to": limite - 1},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"},
-            timeout=(4, 7)
-        )
-        if r.status_code != 200:
+        # Intentar primero VTEX IO (tiendas migradas como Easy, Construmart, Imperial)
+        resultados, status = _vtex_io(store, query, limite)
+        if status == 404 or resultados is None:
+            # Fallback al endpoint clásico
+            resultados, status = _vtex_catalog(store, query, limite)
+        if resultados is None:
+            print(f"  [{store['nombre']}] HTTP {status} en ambos endpoints")
             return []
-        resultados = []
-        for prod in r.json():
-            nombre = limpiar_nombre(prod.get("productName", ""))
-            if len(nombre) < 4: continue
-            precio = None
-            link = prod.get("link", "")
-            for item in prod.get("items", []):
-                for seller in item.get("sellers", []):
-                    offer = seller.get("commertialOffer", {})
-                    if offer.get("AvailableQuantity", 0) > 0:
-                        precio = offer.get("Price", 0)
-                        break
-                if precio: break
-            if not precio or precio < 500: continue
-            if not link.startswith("http"):
-                link = f"https://{store['dominio']}{link}"
-            resultados.append({
-                "tienda": store["nombre"],
-                "nombre": nombre[:150],
-                "precio_con_iva": round(precio),
-                "url": link,
-                "fuente": "vtex_direct",
-                "pais": "CL",
-            })
         cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
         print(f"  [{store['nombre']}] {len(resultados)} productos")
         return resultados
@@ -983,7 +1046,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["Google Shopping (scraper)", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.1"
+        "version": "6.2"
     })
 
 
@@ -1023,29 +1086,20 @@ def diagnostico():
 
     # Test VTEX Easy
     try:
-        r = requests.get(
-            "https://www.easy.cl/api/catalog_system/pub/products/search",
-            params={"ft": "tornillo", "_from": 0, "_to": 2},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=6
-        )
-        items = r.json() if r.status_code == 200 else []
+        items = buscar_vtex({"dominio": "www.easy.cl", "nombre": "Easy", "prioridad": 10}, "tornillo", 3)
         resultado["vtex_easy"] = {
-            "ok": len(items) > 0, "http": r.status_code, "resultados": len(items),
-            "muestra": items[0].get("productName", "") if items else ""
+            "ok": len(items) > 0, "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else ""
         }
     except Exception as e:
         resultado["vtex_easy"] = {"ok": False, "error": str(e)}
 
     # Test VTEX Construmart
     try:
-        r = requests.get(
-            "https://www.construmart.cl/api/catalog_system/pub/products/search",
-            params={"ft": "tornillo", "_from": 0, "_to": 2},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=6
-        )
-        items = r.json() if r.status_code == 200 else []
+        items = buscar_vtex({"dominio": "www.construmart.cl", "nombre": "Construmart", "prioridad": 10}, "tornillo", 3)
         resultado["vtex_construmart"] = {
-            "ok": len(items) > 0, "http": r.status_code, "resultados": len(items)
+            "ok": len(items) > 0, "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else ""
         }
     except Exception as e:
         resultado["vtex_construmart"] = {"ok": False, "error": str(e)}
@@ -1167,7 +1221,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.1")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.2")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
