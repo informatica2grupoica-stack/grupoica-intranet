@@ -1054,59 +1054,91 @@ def health():
 def diagnostico():
     resultado = {}
 
-    # Test Google Shopping
+    # Test Google Shopping — captura HTTP status real
     try:
+        r = requests.get(
+            "https://www.google.cl/search",
+            params={"q": "tornillo precio Chile", "tbm": "shop", "hl": "es", "gl": "cl"},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
+            timeout=8,
+        )
         items = buscar_google_shopping("tornillo", 3)
         resultado["google_shopping"] = {
-            "ok": len(items) > 0, "resultados": len(items),
-            "muestra": items[0].get("nombre", "") if items else ""
+            "ok": len(items) > 0, "http": r.status_code,
+            "html_len": len(r.text), "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else "",
         }
     except Exception as e:
         resultado["google_shopping"] = {"ok": False, "error": str(e)}
 
-    # Test DuckDuckGo
+    # Test DuckDuckGo — captura HTTP status real
     try:
+        r = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": "tornillo precio Chile", "kl": "cl-es"},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
+            timeout=8,
+        )
         items = buscar_duckduckgo("tornillo", 3)
         resultado["duckduckgo"] = {
-            "ok": len(items) > 0, "resultados": len(items),
-            "muestra": items[0].get("nombre", "") if items else ""
+            "ok": len(items) > 0, "http": r.status_code,
+            "html_len": len(r.text), "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else "",
         }
     except Exception as e:
         resultado["duckduckgo"] = {"ok": False, "error": str(e)}
 
-    # Test Sodimac
+    # Test Sodimac — captura HTTP status real
     try:
+        r = requests.get(
+            "https://www.sodimac.cl/sodimac-cl/search",
+            params={"Ntt": "tornillo", "jsonContent": "true"},
+            headers={**HEADERS_BROWSER, "Accept": "application/json"},
+            timeout=8,
+        )
         items = buscar_sodimac("tornillo", 3)
         resultado["sodimac"] = {
-            "ok": len(items) > 0, "resultados": len(items),
-            "muestra": items[0].get("nombre", "") if items else ""
+            "ok": len(items) > 0, "http": r.status_code,
+            "body_preview": r.text[:200],
+            "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else "",
         }
     except Exception as e:
         resultado["sodimac"] = {"ok": False, "error": str(e)}
 
-    # Test VTEX Easy
-    try:
-        items = buscar_vtex({"dominio": "www.easy.cl", "nombre": "Easy", "prioridad": 10}, "tornillo", 3)
-        resultado["vtex_easy"] = {
-            "ok": len(items) > 0, "resultados": len(items),
-            "muestra": items[0].get("nombre", "") if items else ""
-        }
-    except Exception as e:
-        resultado["vtex_easy"] = {"ok": False, "error": str(e)}
+    # Test VTEX Easy — prueba ambos endpoints
+    for endpoint, label in [
+        ("https://www.easy.cl/api/io/_v/api/intelligent-search/product_search", "vtex_easy_io"),
+        ("https://www.easy.cl/api/catalog_system/pub/products/search", "vtex_easy_catalog"),
+    ]:
+        try:
+            params = {"query": "tornillo", "count": 3} if "intelligent" in endpoint else {"ft": "tornillo", "_from": 0, "_to": 2}
+            r = requests.get(endpoint, params=params,
+                             headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=7)
+            try:
+                body = r.json()
+                n = len(body) if isinstance(body, list) else len(body.get("products", body.get("items", [])))
+            except Exception:
+                body = {}
+                n = 0
+            resultado[label] = {"http": r.status_code, "resultados": n, "body_preview": r.text[:200]}
+        except Exception as e:
+            resultado[label] = {"error": str(e)}
 
-    # Test VTEX Construmart
+    # Test VTEX Construmart — igual
     try:
-        items = buscar_vtex({"dominio": "www.construmart.cl", "nombre": "Construmart", "prioridad": 10}, "tornillo", 3)
-        resultado["vtex_construmart"] = {
-            "ok": len(items) > 0, "resultados": len(items),
-            "muestra": items[0].get("nombre", "") if items else ""
-        }
+        r = requests.get(
+            "https://www.construmart.cl/api/io/_v/api/intelligent-search/product_search",
+            params={"query": "tornillo", "count": 3},
+            headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=7,
+        )
+        resultado["construmart_io"] = {"http": r.status_code, "body_preview": r.text[:200]}
     except Exception as e:
-        resultado["vtex_construmart"] = {"ok": False, "error": str(e)}
+        resultado["construmart_io"] = {"error": str(e)}
 
     alguna_ok = any(v.get("ok") for v in resultado.values())
     return jsonify({
-        "estado_general": "operativo" if alguna_ok else "todas_las_fuentes_fallan",
+        "estado_general": "operativo" if alguna_ok else "diagnostico_detallado",
         "fuentes": resultado,
         "server_ip": request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr),
     })
