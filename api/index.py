@@ -1133,6 +1133,14 @@ if __name__ == "__main__":
     print("   • Sodimac Chile (scraper directo)")
     print("   • Homecenter Chile (VTEX directo)")
     print("   • Easy, Construmart, Imperial (VTEX directo)")
-    print("   ARQUITECTURA: ThreadPoolExecutor (paralelo)")
+    print("   SERVIDOR: Waitress (16 threads — soporta concurrencia)")
     print("=" * 60)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    try:
+        from waitress import serve
+        print("   ✅ Waitress activo en http://0.0.0.0:5000")
+        print("=" * 60)
+        serve(app, host="0.0.0.0", port=5000, threads=16)
+    except ImportError:
+        print("   ⚠️  Waitress no instalado, usando Flask dev server con threads")
+        print("=" * 60)
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
