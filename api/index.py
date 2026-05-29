@@ -494,14 +494,17 @@ def buscar_google_shopping(producto: str, limite: int = 20):
     items = data.get('shopping', [])
     resultados = []
     for item in items[:limite * 2]:
-        precio = limpiar_precio(item.get('price', ''))
+        precio_raw = item.get('price', '')
+        precio = limpiar_precio(precio_raw)
         if precio is None: continue
+        # Filtrar precios USD: X.XX (exactamente 2 decimales, no 3) = formato dólar
+        # $22.99 → filtrar | $1.990 → válido (miles chileno, 3 dígitos tras el punto)
+        if precio < 10000 and re.search(r'\d+\.\d{2}(?!\d)', str(precio_raw)):
+            continue
         nombre = limpiar_nombre(item.get('title', ''))
         if len(nombre) < 4: continue
         url_item = item.get('link', '')
         tienda = item.get('source', 'Tienda Chile')
-        # Serper ya filtra por Chile (gl=cl, location=Chile) — no aplicamos filtro extra
-        # Solo excluimos dominios claramente extranjeros
         skip = False
         for ind in INDICADORES_EXTRANJEROS:
             if ind in url_item.lower() or ind in tienda.lower():
@@ -747,7 +750,7 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, producto, 6)] = store["nombre"]
 
-        for future in as_completed(futures, timeout=14):
+        for future in as_completed(futures, timeout=30):
             nombre_f = futures[future]
             try:
                 nuevos = future.result()
