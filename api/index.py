@@ -487,11 +487,22 @@ def buscar_google_shopping(producto: str, limite: int = 20):
         if len(nombre) < 4: continue
         url_item = item.get('link', '')
         tienda = item.get('source', 'Tienda Chile')
-        r = {"tienda": tienda[:40], "nombre": nombre[:150], "precio_con_iva": precio,
-             "url": url_item, "fuente": "google_shopping_cl", "pais": "CL"}
-        if es_resultado_chileno(r):
-            resultados.append(r)
-    if resultados:  # no cachear resultados vacíos — podría ser error temporal de Serper
+        # Serper ya filtra por Chile (gl=cl, location=Chile) — no aplicamos filtro extra
+        # Solo excluimos dominios claramente extranjeros
+        skip = False
+        for ind in INDICADORES_EXTRANJEROS:
+            if ind in url_item.lower() or ind in tienda.lower():
+                skip = True; break
+        if skip: continue
+        resultados.append({
+            "tienda": tienda[:40],
+            "nombre": nombre[:150],
+            "precio_con_iva": precio,
+            "url": url_item,
+            "fuente": "google_shopping_cl",
+            "pais": "CL",
+        })
+    if resultados:
         cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
     return resultados
 
@@ -512,10 +523,17 @@ def buscar_web_organica(producto: str, categoria: str, limite: int = 8):
             if not precio_m: continue
             precio = limpiar_precio(precio_m.group(1))
             if precio is None: continue
-            r = {"tienda": tienda[:40], "nombre": limpiar_nombre(nombre)[:150],
-                 "precio_con_iva": precio, "url": url_item, "fuente": "web_organica", "pais": "CL"}
-            if es_resultado_chileno(r):
-                resultados.append(r)
+            # Excluir solo dominios claramente extranjeros
+            skip = any(ind in url_item.lower() for ind in INDICADORES_EXTRANJEROS)
+            if skip: continue
+            resultados.append({
+                "tienda": tienda[:40],
+                "nombre": limpiar_nombre(nombre)[:150],
+                "precio_con_iva": precio,
+                "url": url_item,
+                "fuente": "web_organica",
+                "pais": "CL",
+            })
         time.sleep(random.uniform(0.2, 0.4))
     return resultados
 
