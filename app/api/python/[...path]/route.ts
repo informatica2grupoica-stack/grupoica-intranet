@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -42,8 +41,9 @@ async function proxy(req: NextRequest, segments: string[]) {
       headers: { 'Content-Type': resCt || 'application/json' },
     })
 
-  } catch (err: any) {
-    console.error(`[Proxy] ${url} →`, err.message)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[Proxy] ${url} →`, msg)
     return NextResponse.json(
       { error: 'Servidor local no disponible. Enciende el notebook servidor y ejecuta iniciar.bat' },
       { status: 503 }
@@ -51,10 +51,19 @@ async function proxy(req: NextRequest, segments: string[]) {
   }
 }
 
-export function GET(req: NextRequest, ctx: any) {
-  return proxy(req, ctx.params.path)
+// Next.js 15+ requiere que params sea awaited
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await context.params
+  return proxy(req, path ?? [])
 }
 
-export function POST(req: NextRequest, ctx: any) {
-  return proxy(req, ctx.params.path)
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await context.params
+  return proxy(req, path ?? [])
 }
