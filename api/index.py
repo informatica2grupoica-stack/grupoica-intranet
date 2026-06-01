@@ -415,6 +415,8 @@ def buscar_google_shopping(producto: str, limite: int = 15):
         driver = _crear_driver_selenium()
         url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
         driver.get(url)
+        # Pausa aleatoria entre búsquedas para evitar rate limiting
+        time.sleep(random.uniform(2, 5))
 
         # Esperar que carguen productos (máx 8s)
         try:
@@ -476,6 +478,18 @@ def buscar_google_shopping(producto: str, limite: int = 15):
         }
         return res;
         """
+        # Detectar página de rate limit / CAPTCHA
+        page_title = driver.title or ""
+        if "429" in page_title or "unusual traffic" in page_title.lower() or "captcha" in page_title.lower():
+            print(f"  [GShop] Google rate limit detectado — esperando 60s")
+            time.sleep(60)
+            return []
+        # Si el título es una URL (página no cargó bien), reintentar una vez
+        if page_title.startswith("http"):
+            time.sleep(3)
+            driver.get(url)
+            time.sleep(3)
+
         items = driver.execute_script(JS) or []
         RUIDO_GSHOP = {'filtro', 'no seleccionado', 'precio actual:', 'ver más', 'patrocinado',
                        'sponsored', 'comprar en', 'oferta', 'envío gratis'}
