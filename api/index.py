@@ -47,7 +47,7 @@ CORS(app)
 IVA = 1.19
 
 cache_resultados = {}
-CACHE_TTL = 300  # 5 minutos
+CACHE_TTL = 86400  # 24 horas — evita re-buscar el mismo producto y previene rate limit
 
 HEADERS_BROWSER = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -491,8 +491,8 @@ def buscar_google_shopping(producto: str, limite: int = 15):
             time.sleep(3)
 
         items = driver.execute_script(JS) or []
-        RUIDO_GSHOP = {'filtro', 'no seleccionado', 'precio actual:', 'ver más', 'patrocinado',
-                       'sponsored', 'comprar en', 'oferta', 'envío gratis'}
+        RUIDO_GSHOP = {'filtro', 'no seleccionado', 'ver más', 'patrocinado',
+                       'sponsored', 'comprar en', 'envío gratis', 'sin resultados'}
 
         resultados = []
         vistos = set()
@@ -632,34 +632,55 @@ def buscar_mercadolibre(producto: str, limite: int = 12):
     if not BS4_DISPONIBLE:
         return []
     try:
-        q = urllib.parse.quote(producto)
-        r = requests.get(
-            f"https://listado.mercadolibre.cl/{urllib.parse.quote(producto.replace(' ', '-'))}",
-            params={"_NoIndex": "True"},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-                "Accept-Language": "es-CL,es;q=0.9",
-                "Referer": "https://www.mercadolibre.cl/",
-            },
-            timeout=(5, 10),
+        # URL correcta: /search?q=... con parámetro explícito
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+            "Accept-Language": "es-CL,es;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://www.mercadolibre.cl/",
+            "sec-ch-ua": '"Chromium";v="124"',
+            "sec-fetch-mode": "navigate",
+        })
+        # Slug URL: palabras separadas por guion, sin caracteres especiales
+        slug = re.sub(r'[^\w\s]', '', producto).strip()
+        slug = re.sub(r'\s+', '-', slug).lower()
+        slug = re.sub(r'-{2,}', '-', slug)
+        r = session.get(
+            f"https://listado.mercadolibre.cl/{slug}",
+            allow_redirects=True,
+            timeout=(5, 12),
         )
-        if r.status_code not in (200, 301, 302):
+        if r.status_code != 200:
             print(f"  [MeLi] HTTP {r.status_code}")
             return []
+        if len(r.text) < 10000:
+            # Respuesta muy corta = bloqueado o redirigido mal
+            # Intentar con URL de búsqueda directa
+            r = session.get(
+                "https://listado.mercadolibre.cl/jm/search",
+                params={"q": producto, "as_word": "true"},
+                allow_redirects=True,
+                timeout=(5, 12),
+            )
+            if r.status_code != 200 or len(r.text) < 10000:
+                print(f"  [MeLi] 0 resultados (respuesta pequeña)")
+                return []
 
         soup = BeautifulSoup(r.text, "lxml")
         resultados = []
 
-        # Selectores actuales MercadoLibre Chile (2024-2025)
+        # Selectores MercadoLibre Chile 2024-2025
         items = (soup.select("li.ui-search-layout__item")
-                 or soup.select("div.ui-search-result__wrapper")
-                 or soup.select(".andes-card"))
+                 or soup.select(".ui-search-result__wrapper")
+                 or soup.select(".poly-card"))
 
         for item in items:
             # Título
             title_el = (item.select_one("h2.ui-search-item__title")
                         or item.select_one(".poly-component__title")
+                        or item.select_one("h2")
                         or item.select_one("[class*='title']"))
             if not title_el:
                 continue
@@ -667,25 +688,20 @@ def buscar_mercadolibre(producto: str, limite: int = 12):
             if len(nombre) < 4:
                 continue
 
-            # Precio — fracción entera
-            precio_el = item.select_one("span.andes-money-amount__fraction")
-            if not precio_el:
-                # fallback: buscar cualquier monto en CLP
-                pm = re.search(r'\$([\d\.]{3,})', item.get_text())
-                if not pm:
-                    continue
-                precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
-            else:
+            # Precio
+            precio_el = (item.select_one("span.andes-money-amount__fraction")
+                         or item.select_one(".poly-price__current .andes-money-amount__fraction"))
+            if precio_el:
                 precio = limpiar_precio(re.sub(r'[^\d]', '', precio_el.get_text(strip=True)))
+            else:
+                pm = re.search(r'\$\s*([\d\.]{3,})', item.get_text())
+                precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1))) if pm else None
             if not precio:
                 continue
 
-            # Link
             link_el = item.select_one("a[href*='mercadolibre.cl']") or item.select_one("a[href]")
             url = link_el.get("href", "").split("?")[0] if link_el else ""
-
-            # Vendedor
-            seller_el = item.select_one(".ui-search-official-store-label, [class*='seller']")
+            seller_el = item.select_one(".ui-search-official-store-label, .poly-component__seller")
             tienda = seller_el.get_text(strip=True)[:40] if seller_el else "MercadoLibre CL"
 
             resultados.append({
@@ -945,22 +961,20 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         return t
     query_vtex = _sin_acentos(' '.join(palabras_clave[:5]))
 
-    print(f"  📡 MeLi + GShop + DDG + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
+    print(f"  📡 MeLi + Sodimac + VTEX × {len(VTEX_STORES)} en paralelo (VTEX: '{query_vtex}')")
 
-    # IMPORTANTE: NO usar "with" — espera todos los threads al salir aunque haya timeout
-    ex = ThreadPoolExecutor(max_workers=12)
+    # ── Fase 1: fuentes rápidas en paralelo (sin Google Shopping) ────────────
+    # Google Shopping va FUERA del ThreadPool para no conflictuar con el semáforo
+    ex = ThreadPoolExecutor(max_workers=6)
     try:
         futures = {
             ex.submit(buscar_mercadolibre, producto, 12): "MercadoLibre",
-            ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
-            ex.submit(buscar_duckduckgo, producto, 12): "DuckDuckGo",
             ex.submit(buscar_sodimac, query_vtex, 8): "Sodimac",
         }
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
-
         try:
-            for future in as_completed(futures, timeout=18):
+            for future in as_completed(futures, timeout=12):
                 nombre_f = futures[future]
                 try:
                     nuevos = future.result()
@@ -969,36 +983,18 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 except Exception as e:
                     print(f"  ❌ {nombre_f}: {e}")
         except Exception:
-            print(f"  ⚠️ Timeout 18s — continuando con {len(resultados)} resultados parciales")
+            print(f"  ⚠️ Timeout 12s fase 1 — continuando")
     finally:
         try:
             ex.shutdown(wait=False, cancel_futures=True)
         except TypeError:
             ex.shutdown(wait=False)
 
-    # ── Fase 2: variación de query VTEX si hay pocos resultados ──────────────
-    if len(resultados) < 5:
-        # Intentar query más corta (solo 3 palabras)
-        query_corta = ' '.join(palabras_clave[:3])
-        if query_corta and query_corta != query_vtex:
-            print(f"  📡 Fase 2: VTEX query corta '{query_corta}'...")
-            ex2 = ThreadPoolExecutor(max_workers=5)
-            try:
-                futures2 = {ex2.submit(buscar_vtex, store, query_corta, 6): store["nombre"]
-                            for store in VTEX_STORES}
-                try:
-                    for future in as_completed(futures2, timeout=12):
-                        try:
-                            agregar(future.result())
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            finally:
-                try:
-                    ex2.shutdown(wait=False, cancel_futures=True)
-                except TypeError:
-                    ex2.shutdown(wait=False)
+    # ── Fase 2: Google Shopping (Selenium, secuencial, sin conflicto de semáforo) ──
+    print(f"  📡 Google Shopping (Selenium)...")
+    gshop = buscar_google_shopping(producto, max(limite, 15))
+    agregar(gshop)
+    print(f"  ✅ Google Shopping: {len(gshop)} | Total: {len(resultados)}")
 
     if not resultados:
         return [], {}
@@ -1027,7 +1023,8 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         })
 
     resultados.sort(key=lambda x: (-x["score"], -x["prioridad_tienda"], x["precio_con_iva"]))
-    filtrados = [r for r in resultados if r["score"] >= 10] or resultados
+    # Umbral bajo (5) para no filtrar resultados válidos de Google Shopping
+    filtrados = [r for r in resultados if r["score"] >= 5] or resultados
     return filtrados[:limite], analisis_buscado
 
 
@@ -1137,7 +1134,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["Google Shopping (Selenium)", "MercadoLibre", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "7.0"
+        "version": "7.1"
     })
 
 
@@ -1471,7 +1468,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v7.0 — Google Shopping con Playwright")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v7.1 — Selenium + Cache 24h")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
