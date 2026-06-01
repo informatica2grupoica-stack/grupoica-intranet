@@ -472,11 +472,20 @@ def buscar_google_shopping(producto: str, limite: int = 15):
         return res;
         """
         items = driver.execute_script(JS) or []
+        RUIDO_GSHOP = {'filtro', 'no seleccionado', 'precio actual:', 'ver más', 'patrocinado',
+                       'sponsored', 'comprar en', 'oferta', 'envío gratis'}
+
         resultados = []
         vistos = set()
         for item in items:
             nombre = limpiar_nombre(item.get("nombre", ""))
-            if len(nombre) < 4 or nombre in vistos:
+            if len(nombre) < 6 or nombre in vistos:
+                continue
+            # Filtrar ruido de UI de Google
+            nombre_lower = nombre.lower()
+            if any(r in nombre_lower for r in RUIDO_GSHOP):
+                continue
+            if nombre_lower.startswith('$') or nombre_lower.startswith('de a $'):
                 continue
             precio = limpiar_precio(re.sub(r'[^\d]', '', item.get("precio", "")))
             if not precio:
