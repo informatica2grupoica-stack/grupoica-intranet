@@ -23,15 +23,18 @@ PLAYWRIGHT_ERROR = "playwright reemplazado por selenium"
 try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options as _ChromeOptions
-    from selenium.webdriver.chrome.service import Service as _ChromeService
     from selenium.webdriver.support.ui import WebDriverWait as _WebDriverWait
     from selenium.webdriver.support import expected_conditions as _EC
     from selenium.webdriver.common.by import By as _By
+    import threading as _threading
     SELENIUM_DISPONIBLE = True
     SELENIUM_ERROR = None
 except Exception as _sel_err:
     SELENIUM_DISPONIBLE = False
     SELENIUM_ERROR = str(_sel_err)
+
+# Solo 1 Chrome a la vez — evita colapso de memoria en el notebook
+_selenium_lock = _threading.Semaphore(1) if SELENIUM_DISPONIBLE else None
 try:
     import openpyxl
     OPENPYXL_DISPONIBLE = True
@@ -406,6 +409,8 @@ def buscar_google_shopping(producto: str, limite: int = 15):
         print(f"  [GShop] Selenium no disponible: {SELENIUM_ERROR}")
         return []
     driver = None
+    # Limitar a 1 Chrome simultáneo para no colapsar el notebook
+    _selenium_lock.acquire()
     try:
         driver = _crear_driver_selenium()
         url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
@@ -518,6 +523,7 @@ def buscar_google_shopping(producto: str, limite: int = 15):
                 driver.quit()
             except Exception:
                 pass
+        _selenium_lock.release()
 
 
 # ─── DuckDuckGo HTML (GET — maneja 200 y 202) ────────────────────────────────
