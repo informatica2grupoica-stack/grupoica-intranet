@@ -20,8 +20,10 @@ except ImportError:
 try:
     from playwright.sync_api import sync_playwright
     PLAYWRIGHT_DISPONIBLE = True
-except ImportError:
+    PLAYWRIGHT_ERROR = None
+except Exception as _pw_err:
     PLAYWRIGHT_DISPONIBLE = False
+    PLAYWRIGHT_ERROR = str(_pw_err)
 
 # Browser persistente — se lanza una sola vez y se reutiliza
 _pw_instance = None
@@ -1259,8 +1261,8 @@ def diagnostico():
         "version": _sys.version[:30],
     }
     try:
-        pip_list = _sub.check_output([_sys.executable, "-m", "pip", "show", "playwright"],
-                                      capture_output=True, text=True, timeout=5)
+        pip_list = _sub.run([_sys.executable, "-m", "pip", "show", "playwright"],
+                             stdout=_sub.PIPE, stderr=_sub.PIPE, text=True, timeout=5)
         resultado["python_info"]["playwright_pip"] = pip_list.stdout[:200] if pip_list.returncode == 0 else "no encontrado"
     except Exception as ep:
         resultado["python_info"]["playwright_pip"] = str(ep)[:100]
@@ -1268,7 +1270,7 @@ def diagnostico():
     # Test Playwright directo
     try:
         if not PLAYWRIGHT_DISPONIBLE:
-            resultado["playwright"] = {"ok": False, "error": "playwright no instalado (pip install playwright)"}
+            resultado["playwright"] = {"ok": False, "error": f"playwright no disponible: {PLAYWRIGHT_ERROR}"}
         else:
             browser = _get_browser()
             ctx = browser.new_context(locale="es-CL",
