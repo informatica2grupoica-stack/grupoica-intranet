@@ -120,10 +120,11 @@ async function buscarProductos(pregunta: string, limit = 15) {
     return [...set];
   };
 
-  // Búsqueda OR por palabra clave (ilike en nombre, insensible a mayúsculas)
+  // Búsqueda OR por palabra clave. OJO: dentro de .or() el comodín de Supabase
+  // es '*', NO '%' (ese era el bug que impedía encontrar productos).
   const orFilter = palabras
     .flatMap(variantes)
-    .map((w) => `nombre.ilike.%${w}%`)
+    .map((w) => `nombre.ilike.*${w}*`)
     .join(',');
   const { data } = await supabase
     .from('productos_obuma')
@@ -141,45 +142,7 @@ async function buscarProductos(pregunta: string, limit = 15) {
     return cb - ca;
   });
 
-  // FALLBACK EN VIVO: si Supabase no tiene el producto (sync desactualizado),
-  // consultar Obuma directo — así el chatbot ve TODO el catálogo, no solo lo sincronizado.
-  if (lista.length === 0) {
-    const termino = palabras.join(' ');
-    const vivos = await buscarProductosObumaVivo(termino, limit);
-    if (vivos.length) return vivos;
-  }
   return lista;
-}
-
-// Consulta el catálogo Obuma en vivo (lo mismo que muestra /obuma-productos)
-async function buscarProductosObumaVivo(termino: string, limit = 15): Promise<any[]> {
-  try {
-    if (!process.env.OBUMA_API_URL || !process.env.OBUMA_API_TOKEN) return [];
-    const url = new URL(`${process.env.OBUMA_API_URL}/productos.list.json`);
-    url.searchParams.append('filter', termino);
-    url.searchParams.append('limit', String(limit));
-    const r = await fetch(url.toString(), {
-      headers: { 'access-token': process.env.OBUMA_API_TOKEN, 'Content-Type': 'application/json' },
-    });
-    if (!r.ok) return [];
-    const data = await r.json();
-    const productos = data.data || data.productos || [];
-    return productos.slice(0, limit).map((p: any) => {
-      const total = Number(p.producto_precio_clp_total) || 0;
-      return {
-        nombre: p.producto_nombre || 'Sin nombre',
-        sku: p.producto_codigo_comercial || `SKU_${p.producto_id}`,
-        precio_costo: Number(p.producto_costo_clp_neto) || 0,
-        precio_neto: Math.round(total / 1.19),
-        precio_total: total,
-        stock_actual: null, // el listado vivo no trae stock; consultar por SKU si se necesita
-        categoria_nombre: p.categoria_nombre || '',
-        _fuente: 'obuma_vivo',
-      };
-    });
-  } catch {
-    return [];
-  }
 }
 
 // Trae datos de una tabla genérica con filtro opcional
@@ -320,7 +283,7 @@ REGLAS ESTRICTAS:
 4. Usa **negritas** para lo importante y viñetas (•) para listas. Emojis con moderación (📦 productos, 👥 clientes, ✅ tareas, 💻 equipos).
 5. Si la pregunta cruza temas (ej: un producto y su proveedor), conecta los datos de las distintas secciones.
 6. Sé conciso: respuestas claras y al grano, sin relleno.
-7. Si un producto tiene "_fuente": "obuma_vivo", es del catálogo Obuma en vivo (recién consultado, válido). Si su stock_actual es null, di "stock no consultado" y ofrece verificarlo por SKU — NO digas que el stock es 0.`;
+7. Si un producto tiene precio en 0, indícalo como "precio no registrado" y ofrece cotizarlo con el Buscador de precios.`;
 
     // 5. Construir mensajes con MEMORIA de conversación
     const mensajes: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
