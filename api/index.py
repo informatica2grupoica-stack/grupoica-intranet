@@ -665,14 +665,11 @@ def buscar_mercadolibre(producto: str, limite: int = 12):
             precio = item.get("price", 0)
             if not precio or precio < 500:
                 continue
-            # Solo Chile — filtrar items con currency CLP
-            if item.get("currency_id", "CLP") != "CLP":
+            # Solo Chile — IDs chilenos empiezan con MLC
+            item_id = item.get("id", "")
+            if not item_id.startswith("MLC"):
                 continue
             permalink = item.get("permalink", "")
-            # Solo MLC (Chile) — no Argentina ni México
-            if "/MLC" not in item.get("id", "") and "articulo.mercadolibre.cl" not in permalink:
-                if not permalink.endswith(".cl") and "mercadolibre.cl" not in permalink:
-                    continue
             tienda_info = item.get("seller", {})
             tienda = tienda_info.get("nickname", "MercadoLibre CL")[:40]
             resultados.append({
@@ -694,53 +691,60 @@ def buscar_mercadolibre(producto: str, limite: int = 12):
         return []
 
 
-# ─── Sodimac Chile (API propia) ───────────────────────────────────────────────
+# ─── Sodimac Chile — API VTEX IO ─────────────────────────────────────────────
 
 def buscar_sodimac(query: str, limite: int = 8):
     cache_key = get_cache_key(f"sodimac_{query}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
+    if not BS4_DISPONIBLE:
+        return []
     try:
-        r = requests.get(
-            "https://www.sodimac.cl/sodimac-cl/search",
-            params={"Ntt": query, "gridView": "grid3", "sortBy": "bestmatch",
-                    "page": 0, "ruleContext": "CL", "jsonContent": "true"},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"},
-            timeout=(4, 8),
-        )
-        if r.status_code != 200:
-            print(f"  [Sodimac] HTTP {r.status_code}")
-            return []
-        data = r.json()
-        productos = (data.get("state", {}).get("resultList", [])
-                     or data.get("resultList", [])
-                     or data.get("products", []))
-        resultados = []
-        for prod in productos[:limite]:
-            nombre = limpiar_nombre(prod.get("displayName", prod.get("name", "")))
-            if len(nombre) < 4:
+        # Sodimac usa VTEX IO — endpoint de búsqueda con _q param
+        urls_intentar = [
+            f"https://www.sodimac.cl/api/catalog_system/pub/products/search?ft={urllib.parse.quote(query)}&_from=0&_to={limite-1}",
+            f"https://www.sodimac.cl/sodimac-cl/search?q={urllib.parse.quote(query)}&map=ft&_from=0&_to={limite-1}",
+        ]
+        for url in urls_intentar:
+            try:
+                r = requests.get(url, headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=(4, 8))
+                if r.status_code == 200:
+                    ct = r.headers.get("content-type", "")
+                    if "json" in ct:
+                        data = r.json()
+                        if isinstance(data, list) and data:
+                            resultados = []
+                            for prod in data[:limite]:
+                                nombre = limpiar_nombre(prod.get("productName", ""))
+                                if len(nombre) < 4: continue
+                                precio = None
+                                link = prod.get("link", "")
+                                for item in prod.get("items", []):
+                                    for seller in item.get("sellers", []):
+                                        offer = seller.get("commertialOffer", {})
+                                        if offer.get("AvailableQuantity", 0) > 0:
+                                            precio = offer.get("Price", 0)
+                                            break
+                                    if precio: break
+                                if not precio or precio < 500: continue
+                                if not link.startswith("http"):
+                                    link = "https://www.sodimac.cl" + link
+                                resultados.append({
+                                    "tienda": "Sodimac",
+                                    "nombre": nombre[:150],
+                                    "precio_con_iva": round(precio),
+                                    "url": link,
+                                    "fuente": "vtex_direct",
+                                    "pais": "CL",
+                                })
+                            if resultados:
+                                cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+                                print(f"  [Sodimac] {len(resultados)} productos")
+                                return resultados
+            except Exception:
                 continue
-            precio_raw = (prod.get("price", {}).get("BasePriceSales")
-                          or prod.get("price", {}).get("BasePriceReference")
-                          or prod.get("priceSales")
-                          or prod.get("price"))
-            precio = limpiar_precio(str(precio_raw or ""))
-            if not precio:
-                continue
-            url_prod = prod.get("url", prod.get("pdpUrl", ""))
-            if url_prod and not url_prod.startswith("http"):
-                url_prod = "https://www.sodimac.cl" + url_prod
-            resultados.append({
-                "tienda": "Sodimac",
-                "nombre": nombre[:150],
-                "precio_con_iva": precio,
-                "url": url_prod,
-                "fuente": "vtex_direct",
-                "pais": "CL",
-            })
-        cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
-        print(f"  [Sodimac] {len(resultados)} productos")
-        return resultados
+        print(f"  [Sodimac] 0 productos")
+        return []
     except Exception as e:
         print(f"  [Sodimac] Error: {e}")
         return []
@@ -748,111 +752,124 @@ def buscar_sodimac(query: str, limite: int = 8):
 
 # ─── VTEX stores (Easy, Construmart, Imperial) ────────────────────────────────
 
-def _vtex_catalog(store: dict, query: str, limite: int):
-    """Endpoint clásico VTEX — funciona en tiendas sin migrar a IO."""
-    r = requests.get(
-        f"https://{store['dominio']}/api/catalog_system/pub/products/search",
-        params={"ft": query, "_from": 0, "_to": limite - 1},
-        headers={**HEADERS_BROWSER, "Accept": "application/json"},
-        timeout=(4, 7),
-    )
-    if r.status_code != 200:
-        return None, r.status_code
-    resultados = []
-    for prod in r.json():
-        nombre = limpiar_nombre(prod.get("productName", ""))
-        if len(nombre) < 4:
-            continue
-        precio = None
-        link = prod.get("link", "")
-        for item in prod.get("items", []):
-            for seller in item.get("sellers", []):
-                offer = seller.get("commertialOffer", {})
-                if offer.get("AvailableQuantity", 0) > 0:
-                    precio = offer.get("Price", 0)
-                    break
-            if precio:
-                break
-        if not precio or precio < 500:
-            continue
-        if not link.startswith("http"):
-            link = f"https://{store['dominio']}{link}"
-        resultados.append({
-            "tienda": store["nombre"],
-            "nombre": nombre[:150],
-            "precio_con_iva": round(precio),
-            "url": link,
-            "fuente": "vtex_direct",
-            "pais": "CL",
-        })
-    return resultados, 200
-
-
-def _vtex_io(store: dict, query: str, limite: int):
-    """Endpoint VTEX IO Intelligent Search — tiendas migradas (Easy, Construmart, Imperial)."""
-    r = requests.get(
-        f"https://{store['dominio']}/api/io/_v/api/intelligent-search/product_search",
-        params={"query": query, "count": limite, "locale": "es-CL"},
-        headers={**HEADERS_BROWSER, "Accept": "application/json"},
-        timeout=(4, 8),
-    )
-    if r.status_code != 200:
-        return None, r.status_code
-    data = r.json()
-    productos = data.get("products", [])
-    resultados = []
-    for prod in productos:
-        nombre = limpiar_nombre(prod.get("productName", prod.get("name", "")))
-        if len(nombre) < 4:
-            continue
-        precio = None
-        link = prod.get("link", prod.get("linkText", ""))
-        items = prod.get("items", [prod]) if "items" in prod else [prod]
-        for item in items:
-            sellers = item.get("sellers", [])
-            for seller in sellers:
-                offer = seller.get("commertialOffer", {})
-                if offer.get("AvailableQuantity", 0) > 0:
-                    precio = offer.get("Price", 0)
-                    break
-            if precio:
-                break
-        # Fallback: precio directo en el producto (algunos VTEX IO lo exponen así)
-        if not precio:
-            precio = prod.get("price", prod.get("priceRange", {}).get("sellingPrice", {}).get("lowPrice"))
-        if not precio or precio < 500:
-            continue
-        if link and not link.startswith("http"):
-            link = f"https://{store['dominio']}/{link}/p"
-        resultados.append({
-            "tienda": store["nombre"],
-            "nombre": nombre[:150],
-            "precio_con_iva": round(float(precio)),
-            "url": link,
-            "fuente": "vtex_direct",
-            "pais": "CL",
-        })
-    return resultados, 200
-
-
 def buscar_vtex(store: dict, query: str, limite: int = 8):
+    """
+    Busca en tiendas VTEX chilenas probando múltiples endpoints en orden.
+    Easy, Construmart e Imperial migraron a VTEX IO — probamos varios paths.
+    """
     cache_key = get_cache_key(f"vtex_{store['nombre']}_{query}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
+    if not BS4_DISPONIBLE:
+        return []
+
+    dominio = store["dominio"]
+    nombre_tienda = store["nombre"]
+    q = urllib.parse.quote(query)
+
+    # Endpoints a probar en orden — el primero que devuelva JSON válido gana
+    endpoints = [
+        # VTEX IO Intelligent Search (stores migradas)
+        f"https://{dominio}/api/io/_v/api/intelligent-search/product_search?query={q}&page=1&count={limite}&sort=score_desc&locale=es-CL&hideUnavailableItems=true",
+        # VTEX clásico
+        f"https://{dominio}/api/catalog_system/pub/products/search?ft={q}&_from=0&_to={limite-1}",
+        # VTEX IO con _q param
+        f"https://{dominio}/api/io/search?_q={q}&map=ft&_from=0&_to={limite-1}",
+    ]
+
     try:
-        # Intentar primero VTEX IO (tiendas migradas como Easy, Construmart, Imperial)
-        resultados, status = _vtex_io(store, query, limite)
-        if status == 404 or resultados is None:
-            # Fallback al endpoint clásico
-            resultados, status = _vtex_catalog(store, query, limite)
-        if resultados is None:
-            print(f"  [{store['nombre']}] HTTP {status} en ambos endpoints")
-            return []
-        cache_resultados[cache_key] = {'data': resultados, 'timestamp': time.time()}
-        print(f"  [{store['nombre']}] {len(resultados)} productos")
-        return resultados
+        for url in endpoints:
+            try:
+                r = requests.get(url, headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=(4, 8))
+                if r.status_code != 200:
+                    continue
+                ct = r.headers.get("content-type", "")
+                if "json" not in ct:
+                    continue  # recibimos HTML — endpoint incorrecto
+                data = r.json()
+                productos = data if isinstance(data, list) else data.get("products", data.get("items", []))
+                if not productos:
+                    continue
+                resultados = []
+                for prod in productos[:limite]:
+                    nombre = limpiar_nombre(prod.get("productName", prod.get("name", prod.get("ProductName", ""))))
+                    if len(nombre) < 4:
+                        continue
+                    precio = None
+                    link = prod.get("link", prod.get("url", prod.get("LinkId", "")))
+                    for item in prod.get("items", [prod]):
+                        for seller in item.get("sellers", []):
+                            offer = seller.get("commertialOffer", {})
+                            if offer.get("AvailableQuantity", 0) > 0:
+                                precio = offer.get("Price", 0)
+                                break
+                        if precio:
+                            break
+                    if not precio:
+                        precio = prod.get("price", prod.get("Price"))
+                    if not precio or float(precio) < 500:
+                        continue
+                    if link and not link.startswith("http"):
+                        link = f"https://{dominio}/{link}/p"
+                    resultados.append({
+                        "tienda": nombre_tienda,
+                        "nombre": nombre[:150],
+                        "precio_con_iva": round(float(precio)),
+                        "url": link,
+                        "fuente": "vtex_direct",
+                        "pais": "CL",
+                    })
+                if resultados:
+                    cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+                    print(f"  [{nombre_tienda}] {len(resultados)} productos (via {url.split('/')[4]})")
+                    return resultados
+            except Exception:
+                continue
+
+        # Fallback: scraping HTML del buscador de la tienda
+        try:
+            r = requests.get(
+                f"https://{dominio}/buscador",
+                params={"q": query},
+                headers=HEADERS_BROWSER,
+                timeout=(4, 10),
+            )
+            if r.status_code == 200 and BS4_DISPONIBLE:
+                soup = BeautifulSoup(r.text, "lxml")
+                resultados = []
+                for card in soup.select("[data-product-id], .product-summary, .vtex-product-summary"):
+                    nombre_el = card.select_one(".product-summary-name, h3, [class*='name']")
+                    precio_el = card.select_one(".product-selling-price, [class*='price'], .sellingPrice")
+                    if not nombre_el or not precio_el:
+                        continue
+                    nombre = limpiar_nombre(nombre_el.get_text(strip=True))
+                    precio = limpiar_precio(re.sub(r'[^\d]', '', precio_el.get_text(strip=True)))
+                    link_el = card.select_one("a[href]")
+                    link = link_el.get("href", "") if link_el else ""
+                    if not link.startswith("http"):
+                        link = f"https://{dominio}{link}"
+                    if nombre and precio:
+                        resultados.append({
+                            "tienda": nombre_tienda,
+                            "nombre": nombre[:150],
+                            "precio_con_iva": precio,
+                            "url": link,
+                            "fuente": "vtex_direct",
+                            "pais": "CL",
+                        })
+                    if len(resultados) >= limite:
+                        break
+                if resultados:
+                    cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+                    print(f"  [{nombre_tienda}] {len(resultados)} productos (HTML fallback)")
+                    return resultados
+        except Exception:
+            pass
+
+        print(f"  [{nombre_tienda}] 0 productos")
+        return []
     except Exception as e:
-        print(f"  [{store['nombre']}] Error: {e}")
+        print(f"  [{nombre_tienda}] Error: {e}")
         return []
 
 
@@ -1103,7 +1120,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["MercadoLibre CL (API)", "Google Shopping", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.3"
+        "version": "6.4"
     })
 
 
@@ -1113,9 +1130,21 @@ def diagnostico():
 
     # Test MercadoLibre — API pública, debería funcionar siempre
     try:
+        r_meli = requests.get(
+            "https://api.mercadolibre.com/sites/MLC/search",
+            params={"q": "tornillo acero", "limit": 5},
+            headers={"Accept": "application/json"},
+            timeout=8,
+        )
+        raw = r_meli.json() if r_meli.status_code == 200 else {}
+        raw_items = raw.get("results", [])
         items = buscar_mercadolibre("tornillo acero", 5)
         resultado["mercadolibre"] = {
-            "ok": len(items) > 0, "resultados": len(items),
+            "ok": len(items) > 0,
+            "http": r_meli.status_code,
+            "raw_count": len(raw_items),
+            "first_id": raw_items[0].get("id", "") if raw_items else "",
+            "resultados": len(items),
             "muestra": items[0].get("nombre", "") if items else "",
         }
     except Exception as e:
@@ -1320,7 +1349,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.3")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.4")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
