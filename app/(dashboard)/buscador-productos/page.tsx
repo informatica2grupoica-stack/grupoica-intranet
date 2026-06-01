@@ -19,8 +19,12 @@ interface ProductoResultado {
   link: string;
   canal: string;
   score?: number;
+  unidad_detectada?: string;
+  alerta_unidad?: boolean;
   matching?: { porcentaje: number; nivel: string; razon: string };
 }
+
+type ModoOrden = 'match' | 'precio';
 
 interface ItemLista {
   numero: string;
@@ -167,6 +171,20 @@ export default function MonitorMasivoICA() {
   const [contexto, setContexto]         = useState('');
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [seleccion, setSeleccion]       = useState<Map<string, ProductoResultado>>(new Map());
+  const [ordenItem, setOrdenItem]       = useState<Map<string, ModoOrden>>(new Map());
+  const [menuDescarga, setMenuDescarga] = useState(false);
+
+  // Ordena los resultados de un item según el modo elegido (match o precio)
+  const resultadosOrdenados = useCallback((item: ItemLista): ProductoResultado[] => {
+    const modo = ordenItem.get(item.numero) || 'match';
+    const arr = [...item.resultados];
+    if (modo === 'precio') {
+      arr.sort((a, b) => (a.precio_valor || Infinity) - (b.precio_valor || Infinity));
+    } else {
+      arr.sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
+    }
+    return arr;
+  }, [ordenItem]);
 
   // ─── Notify ──────────────────────────────────────────────────────────────────
   const notify = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -322,6 +340,8 @@ export default function MonitorMasivoICA() {
           link: r.link || r.url || '',
           canal: r.canal || r.fuente || 'web',
           score: pct,
+          unidad_detectada: r.unidad_detectada || '',
+          alerta_unidad: !!r.alerta_unidad,
           matching: { porcentaje: pct, nivel: pct >= 85 ? 'exacto' : pct >= 60 ? 'parcial' : 'bajo', razon: r.etiqueta_concordancia || '' },
         };
       }).sort((a: any, b: any) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
@@ -385,16 +405,44 @@ export default function MonitorMasivoICA() {
   const iniciarTexto = () => iniciarBarrido(parsearLista(inputMasivo));
   const cancelar = () => { abortRef.current = true; notify('Cancelando barrido...', 'warning'); };
 
-  // ─── Exportar MISMO Excel (via Python/openpyxl) ───────────────────────────────
-  const exportarMismoExcel = async () => {
+  // ─── Selección de resultado por modo ──────────────────────────────────────────
+  const elegirPorModo = (item: ItemLista, modo: string): ProductoResultado | undefined => {
+    const res = item.resultados;
+    if (!res.length) return undefined;
+    if (modo === 'manual') {
+      return seleccion.get(item.numero) || item.mejor_match;
+    }
+    if (modo === 'menor_precio') {
+      return [...res].filter(r => r.precio_valor > 0)
+        .sort((a, b) => a.precio_valor - b.precio_valor)[0];
+    }
+    if (modo === 'equilibrado') {
+      // Excluir alertas de unidad y outliers de precio (> 2x la mediana)
+      const precios = res.map(r => r.precio_valor).filter(p => p > 0).sort((a, b) => a - b);
+      const mediana = precios[Math.floor(precios.length / 2)] || 0;
+      const candidatos = res.filter(r =>
+        r.precio_valor > 0 && !r.alerta_unidad &&
+        (mediana === 0 || r.precio_valor <= mediana * 2)
+      );
+      const pool = candidatos.length ? candidatos : res;
+      return [...pool].sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0))[0];
+    }
+    // mejor_match (default)
+    return [...res].sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0))[0];
+  };
+
+  // ─── Exportar MISMO Excel (via Python/openpyxl) con modo de selección ─────────
+  const exportarMismoExcel = async (modo: string = 'manual') => {
     if (!archivoExcel) { notify('Carga un Excel primero', 'warning'); return; }
+    setMenuDescarga(false);
     const items = itemsLista.flatMap(item => {
-      const sel = seleccion.get(item.numero) || item.mejor_match;
+      const sel = elegirPorModo(item, modo);
       if (!sel?.precio_valor) return [];
       return [{ numero: item.numero, precio: sel.precio_valor, link: sel.link||'', tienda: sel.tienda||'', match: sel.matching?.porcentaje??0 }];
     });
     if (!items.length) { notify('Sin resultados para exportar', 'warning'); return; }
-    notify(`Generando Excel con ${items.length} precios...`, 'success');
+    const nombreModo: Record<string,string> = { manual:'seleccion', mejor_match:'mejor-match', menor_precio:'menor-precio', equilibrado:'equilibrado' };
+    notify(`Generando Excel (${nombreModo[modo]||modo}) con ${items.length} precios...`, 'success');
     const fd = new FormData();
     fd.append('archivo', archivoExcel);
     fd.append('datos', JSON.stringify({ sheet: sheetNameActual, items }));
@@ -402,9 +450,9 @@ export default function MonitorMasivoICA() {
       const res = await fetch('/python/exportar-costeo', { method: 'POST', body: fd });
       if (!res.ok) { const e = await res.json().catch(() => ({})); notify(`Error: ${(e as any).error || `HTTP ${res.status}`}`, 'error'); return; }
       const blob = await res.blob();
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `COSTEO_cotizado_${new Date().toISOString().split('T')[0]}.xlsx` });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `COSTEO_${nombreModo[modo]||modo}_${new Date().toISOString().split('T')[0]}.xlsx` });
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      notify(`${items.length} ítems exportados`, 'success');
+      notify(`${items.length} ítems exportados (${nombreModo[modo]||modo})`, 'success');
     } catch (e: any) { notify(`Error: ${e.message}`, 'error'); }
   };
 
@@ -518,19 +566,62 @@ export default function MonitorMasivoICA() {
               </button>
             </div>
 
-            {/* Export buttons */}
-            <button onClick={exportarMismoExcel} disabled={!itemsLista.length || !archivoExcel}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
-              <FileSpreadsheet size={14} /> Mismo Excel
-            </button>
-            <button onClick={exportarMejor} disabled={!itemsLista.length}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
-              <CheckCircle2 size={14} /> Mejor
-            </button>
-            <button onClick={exportarTodos} disabled={!itemsLista.length}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
-              <Download size={14} /> Todos
-            </button>
+            {/* Menú de descargas */}
+            <div className="relative">
+              <button onClick={() => setMenuDescarga(v => !v)} disabled={!itemsLista.length}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
+                <Download size={14} /> Descargar Excel <ChevronDown size={13} />
+              </button>
+              {menuDescarga && itemsLista.length > 0 && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuDescarga(false)} />
+                  <div className="absolute right-0 mt-1 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Mismo formato COSTEO (fórmulas intactas)</p>
+                    </div>
+                    {[
+                      { modo: 'mejor_match', label: 'Mejor coincidencia', desc: 'El de mayor % match por ítem', icon: <CheckCircle2 size={14} className="text-emerald-600" />, req: true },
+                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-blue-600" />, req: true },
+                      { modo: 'equilibrado', label: 'Equilibrado', desc: 'Mejor match sin outliers ni alertas', icon: <Sparkles size={14} className="text-violet-600" />, req: true },
+                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-orange-600" />, req: true },
+                    ].map(o => (
+                      <button key={o.modo} onClick={() => exportarMismoExcel(o.modo)} disabled={!archivoExcel}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 disabled:opacity-40 text-left transition-colors border-b border-slate-50">
+                        <span className="mt-0.5">{o.icon}</span>
+                        <span>
+                          <span className="block text-xs font-semibold text-slate-700">{o.label}</span>
+                          <span className="block text-[10px] text-slate-400">{o.desc}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <div className="px-3 py-2 bg-slate-50 border-y border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Reportes nuevos</p>
+                    </div>
+                    <button onClick={() => { setMenuDescarga(false); exportarMejor(); }}
+                      className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors border-b border-slate-50">
+                      <FileSpreadsheet size={14} className="text-emerald-600 mt-0.5" />
+                      <span>
+                        <span className="block text-xs font-semibold text-slate-700">Resumen mejor resultado</span>
+                        <span className="block text-[10px] text-slate-400">Tabla nueva con costos y ahorro</span>
+                      </span>
+                    </button>
+                    <button onClick={() => { setMenuDescarga(false); exportarTodos(); }}
+                      className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors">
+                      <Download size={14} className="text-blue-600 mt-0.5" />
+                      <span>
+                        <span className="block text-xs font-semibold text-slate-700">Lista completa</span>
+                        <span className="block text-[10px] text-slate-400">Todos los resultados de cada producto</span>
+                      </span>
+                    </button>
+                    {!archivoExcel && (
+                      <div className="px-3 py-2 bg-amber-50 border-t border-amber-100">
+                        <p className="text-[10px] text-amber-700">Sube un Excel para las 4 primeras opciones</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             <button onClick={limpiar} disabled={!itemsLista.length}
               className="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 disabled:opacity-40 transition-colors">
               <Trash2 size={16} />
@@ -742,6 +833,19 @@ export default function MonitorMasivoICA() {
                             </div>
                           );
                         })()}
+                        {/* Toggle filtro: Mejor match / Menor precio */}
+                        <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden">
+                          {([['match','Match'],['precio','Menor $']] as [ModoOrden,string][]).map(([m,label]) => {
+                            const activo = (ordenItem.get(item.numero) || 'match') === m;
+                            return (
+                              <button key={m}
+                                onClick={() => setOrdenItem(prev => { const n = new Map(prev); n.set(item.numero, m); return n; })}
+                                className={`text-[10px] font-semibold px-2.5 py-1.5 transition-colors ${activo ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -763,7 +867,7 @@ export default function MonitorMasivoICA() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {item.resultados.slice(0, 15).map((r, i) => {
+                          {resultadosOrdenados(item).slice(0, 15).map((r, i) => {
                             const isSel = seleccion.get(item.numero) === r || (!seleccion.has(item.numero) && i === 0 && r === item.mejor_match);
                             const pctR = r.matching?.porcentaje ?? 0;
                             const precioWeb = r.precio_valor || 0;
@@ -783,6 +887,11 @@ export default function MonitorMasivoICA() {
                                 </td>
                                 <td className="px-4 py-3">
                                   <p className="text-xs text-slate-600 leading-tight max-w-sm line-clamp-2">{r.nombre}</p>
+                                  {r.alerta_unidad && (
+                                    <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                                      <AlertCircle size={9} /> Empaque: {r.unidad_detectada} (revisar unidad)
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <span className={`font-bold text-sm ${diff !== null && diff < 0 ? 'text-emerald-700' : diff !== null && diff > 0 ? 'text-red-600' : 'text-slate-900'}`}>

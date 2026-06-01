@@ -97,6 +97,44 @@ SERPER_DISPONIBLE = bool(SERPER_API_KEY)
 cache_resultados = {}
 CACHE_TTL = 86400  # 24 horas — evita re-buscar el mismo producto y previene rate limit
 
+# ─── Historial persistente — el caché sobrevive reinicios ─────────────────────
+_CACHE_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "servidor-local", "cache_precios.json")
+_cache_lock_disk = None
+_cache_dirty = False
+
+def _cargar_cache_disco():
+    """Carga el caché guardado en disco al arrancar (descarta lo expirado)."""
+    try:
+        if _os.path.exists(_CACHE_FILE):
+            with open(_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            ahora = time.time()
+            vivos = 0
+            for k, v in data.items():
+                if isinstance(v, dict) and (ahora - v.get("timestamp", 0)) < CACHE_TTL:
+                    cache_resultados[k] = v
+                    vivos += 1
+            print(f"   💾 Caché cargado de disco: {vivos} búsquedas vigentes")
+    except Exception as e:
+        print(f"   ⚠️  No se pudo cargar caché de disco: {e}")
+
+_ultimo_guardado_cache = 0
+
+def _guardar_cache_disco():
+    """Guarda el caché actual a disco (llamado periódicamente)."""
+    try:
+        _os.makedirs(_os.path.dirname(_CACHE_FILE), exist_ok=True)
+        # Solo guardar entradas vigentes
+        ahora = time.time()
+        vigentes = {k: v for k, v in cache_resultados.items()
+                    if isinstance(v, dict) and (ahora - v.get("timestamp", 0)) < CACHE_TTL}
+        tmp = _CACHE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(vigentes, f, ensure_ascii=False)
+        _os.replace(tmp, _CACHE_FILE)
+    except Exception as e:
+        print(f"   ⚠️  No se pudo guardar caché: {e}")
+
 HEADERS_BROWSER = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "application/json, text/html, */*",
@@ -1146,6 +1184,8 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         if conv_lower not in ("unidad", "und", "un", ""):
             if detectar_unidad_resultado(nombre_r, conv_lower):
                 score = min(100, score + 8)
+        # Detector de unidad/empaque — avisa si el resultado no calza con lo pedido
+        unidad_det, alerta_unidad = detectar_empaque(nombre_r, conv_lower)
         nivel, etiqueta = clasificar_concordancia(score)
         r.update({
             "score": score,
@@ -1154,6 +1194,8 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
             "prioridad_tienda": prioridad_tienda(r.get("url", ""), r.get("tienda", "")),
             "categoria": categoria,
             "conversion": conv_lower,
+            "unidad_detectada": unidad_det,
+            "alerta_unidad": alerta_unidad,
             "precio_neto": round(r["precio_con_iva"] / IVA),
             "precio_formateado": f"${r['precio_con_iva']:,.0f}".replace(",", "."),
             "_analisis": ar,
@@ -1162,7 +1204,42 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
     resultados.sort(key=lambda x: (-x["score"], -x["prioridad_tienda"], x["precio_con_iva"]))
     # Umbral bajo (5) para no filtrar resultados válidos de Google Shopping
     filtrados = [r for r in resultados if r["score"] >= 5] or resultados
+
+    # ── Variedad de tiendas: máx 3 por tienda, intercalando ──────────────────
+    filtrados = diversificar_tiendas(filtrados, max_por_tienda=3)
+
     return filtrados[:limite], analisis_buscado
+
+
+def diversificar_tiendas(resultados: list, max_por_tienda: int = 3) -> list:
+    """
+    Evita 10 resultados de la misma tienda. Limita a max_por_tienda y los
+    intercala para que el ranking muestre variedad, manteniendo el orden de score.
+    """
+    if not resultados:
+        return resultados
+    # Agrupar por tienda manteniendo orden de score
+    por_tienda = {}
+    for r in resultados:
+        t = (r.get("tienda") or "?").lower().strip()
+        por_tienda.setdefault(t, []).append(r)
+    # Recortar a max_por_tienda cada tienda
+    for t in por_tienda:
+        por_tienda[t] = por_tienda[t][:max_por_tienda]
+    # Intercalar: round-robin tomando 1 de cada tienda por vuelta
+    salida = []
+    grupos = list(por_tienda.values())
+    idx = 0
+    while any(grupos):
+        for g in grupos:
+            if idx < len(g):
+                salida.append(g[idx])
+        idx += 1
+        if idx >= max_por_tienda:
+            break
+    # Reordenar por score dentro del resultado intercalado (estable)
+    salida.sort(key=lambda x: (-x.get("score", 0), x.get("precio_con_iva", 0)))
+    return salida
 
 
 # ─── ENDPOINT ─────────────────────────────────────────────────────────────────
@@ -1192,6 +1269,59 @@ def detectar_unidad_resultado(nombre: str, conversion: str) -> bool:
         if conv_lower in (key, *indicadores):
             return any(ind in nombre_lower for ind in indicadores) if indicadores else True
     return True
+
+
+# Patrones de empaque que indican que NO es 1 unidad suelta
+_PATRONES_EMPAQUE = [
+    (re.compile(r'\bcaja\b|\bcajas\b', re.I),               "caja"),
+    (re.compile(r'\bpack\b|\bpaquete\b|\bset\b|\bkit\b', re.I), "pack"),
+    (re.compile(r'\bbolsa\b|\bsaco\b', re.I),               "bolsa/saco"),
+    (re.compile(r'\b(\d+)\s*(un|unid|unidades|pcs|piezas)\b', re.I), "multipack"),
+    (re.compile(r'\bdocena\b', re.I),                       "docena"),
+    (re.compile(r'\b(\d+)\s*kg\b', re.I),                   "por kg"),
+    (re.compile(r'\bgal[oó]n\b|\bgal\b|\bgl\b', re.I),      "galón"),
+    (re.compile(r'\bbid[oó]n\b|\btineta\b|\bcu[ñn]ete\b', re.I), "bidón/tineta"),
+    (re.compile(r'\brollo\b|\bbobina\b', re.I),             "rollo"),
+    (re.compile(r'\btira\b', re.I),                         "tira"),
+]
+
+
+def detectar_empaque(nombre: str, conversion: str):
+    """
+    Detecta el empaque del resultado y avisa si NO calza con lo que se busca.
+    Devuelve (unidad_detectada, alerta_unidad_bool).
+    Ej: busco 'unidad' pero el resultado es 'caja 25kg' → alerta=True.
+    """
+    nombre_l = (nombre or "").lower()
+    conv = (conversion or "unidad").lower().strip()
+
+    empaque_detectado = ""
+    for patron, etiqueta in _PATRONES_EMPAQUE:
+        if patron.search(nombre_l):
+            empaque_detectado = etiqueta
+            break
+
+    # Si no se detectó empaque especial → asumimos unidad simple, sin alerta
+    if not empaque_detectado:
+        return "unidad", False
+
+    # Si busco unidad simple pero el resultado viene en caja/pack/kg → ALERTA
+    if conv in ("unidad", "und", "un", ""):
+        # galón/litro/saco son unidades de venta normales, no alertamos esos
+        if empaque_detectado in ("caja", "pack", "multipack", "docena", "por kg", "rollo"):
+            return empaque_detectado, True
+        return empaque_detectado, False
+
+    # Si busco una unidad específica (gl, kg, etc), verificar que calce
+    mapa_conv = {
+        "gl": "galón", "galon": "galón", "galón": "galón",
+        "kg": "por kg", "caja": "caja", "pack": "pack",
+        "rollo": "rollo", "tira": "tira", "tineta": "bidón/tineta",
+    }
+    esperado = mapa_conv.get(conv)
+    if esperado and empaque_detectado != esperado:
+        return empaque_detectado, True
+    return empaque_detectado, False
 
 
 @app.route("/python/busqueda-robusta", methods=["GET"])
@@ -1240,10 +1370,18 @@ def busqueda_robusta():
             "palabras_faltantes": ar.get("palabras_faltantes", []),
             "conflicto_medidas": ar.get("conflicto_medidas", False),
             "conversion": r.get("conversion", "unidad"),
+            "unidad_detectada": r.get("unidad_detectada", ""),
+            "alerta_unidad": r.get("alerta_unidad", False),
         })
 
     tiene_suficientes = len(resultados_formateados) >= minimo_requerido
     mejor = resultados_formateados[0] if resultados_formateados else None
+
+    # Guardar caché a disco (throttled: máx 1 vez cada 20s)
+    global _ultimo_guardado_cache
+    if time.time() - _ultimo_guardado_cache > 20:
+        _ultimo_guardado_cache = time.time()
+        _guardar_cache_disco()
 
     print(f"\n📊 TOTAL: {len(resultados_formateados)} resultados chilenos")
     print(f"✅ Suficientes: {tiene_suficientes}")
@@ -1646,7 +1784,8 @@ if __name__ == "__main__":
     print("   • MercadoLibre, Sodimac")
     for s in VTEX_STORES:
         print(f"   • {s['nombre']} (VTEX directo)")
-    print("   ARQUITECTURA: ThreadPool paralelo + Cache 24h")
+    print("   ARQUITECTURA: ThreadPool paralelo + Cache 24h persistente")
+    _cargar_cache_disco()
     print("=" * 60)
     try:
         from waitress import serve

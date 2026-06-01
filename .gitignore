@@ -19,6 +19,7 @@
 servidor-local/vercel-config.txt
 servidor-local/serper-config.txt
 serper-config.txt
+servidor-local/cache_precios.json
 # -------------------------
 
 # Debug y Logs
