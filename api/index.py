@@ -46,6 +46,35 @@ CORS(app)
 
 IVA = 1.19
 
+# ─── Serper API (Google Shopping vía API oficial) ─────────────────────────────
+# La key se lee de variable de entorno SERPER_API_KEY o de serper-config.txt
+# NUNCA hardcodear la key (GitHub la bloquea y es inseguro)
+import os as _os
+
+def _leer_serper_key():
+    key = _os.environ.get("SERPER_API_KEY", "").strip()
+    if key:
+        return key
+    # Fallback: archivo local serper-config.txt (gitignored)
+    for ruta in [
+        _os.path.join(_os.path.dirname(__file__), "..", "servidor-local", "serper-config.txt"),
+        _os.path.join(_os.path.dirname(__file__), "..", "serper-config.txt"),
+    ]:
+        try:
+            if _os.path.exists(ruta):
+                with open(ruta, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip() and not line.startswith("#"):
+                            if "=" in line:
+                                return line.split("=", 1)[1].strip()
+                            return line.strip()
+        except Exception:
+            pass
+    return ""
+
+SERPER_API_KEY = _leer_serper_key()
+SERPER_DISPONIBLE = bool(SERPER_API_KEY)
+
 cache_resultados = {}
 CACHE_TTL = 86400  # 24 horas — evita re-buscar el mismo producto y previene rate limit
 
@@ -381,7 +410,72 @@ def prioridad_tienda(url: str, tienda: str) -> int:
     return 3
 
 
-# ─── Google Shopping — Playwright (headless Chromium, ejecuta JS real) ────────
+# ─── Serper API — Google Shopping vía API oficial (rápido, links, sin bloqueos) ──
+# Fuente PRINCIPAL. 1 query por producto. Plan 50k créditos.
+
+def buscar_serper(producto: str, limite: int = 20):
+    cache_key = get_cache_key(f"serper_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    if not SERPER_DISPONIBLE:
+        return []
+    try:
+        r = requests.post(
+            "https://google.serper.dev/shopping",
+            headers={
+                "X-API-KEY": SERPER_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json={"q": producto, "gl": "cl", "hl": "es", "location": "Chile"},
+            timeout=(5, 15),
+        )
+        if r.status_code != 200:
+            print(f"  [Serper] HTTP {r.status_code}: {r.text[:120]}")
+            return []
+        data = r.json()
+        items = data.get("shopping", [])
+        resultados = []
+        for it in items:
+            nombre = limpiar_nombre(it.get("title", ""))
+            if len(nombre) < 4:
+                continue
+            # Precio: priceValue (numérico) o parsear 'price' string
+            precio = None
+            pv = it.get("priceValue")
+            if pv:
+                try:
+                    precio = int(round(float(pv)))
+                except Exception:
+                    precio = None
+            if not precio:
+                precio = limpiar_precio(re.sub(r'[^\d]', '', str(it.get("price", ""))))
+            if not precio or precio < 500:
+                continue
+            tienda = (it.get("source", "") or "Google Shopping")[:40]
+            link = it.get("link", "")
+            # Filtrar tiendas/links extranjeros
+            if any(ind in tienda.lower() or ind in link.lower() for ind in INDICADORES_EXTRANJEROS):
+                continue
+            resultados.append({
+                "tienda": tienda,
+                "nombre": nombre[:150],
+                "precio_con_iva": precio,
+                "url": link,
+                "fuente": "serper_shopping",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite:
+                break
+        if resultados:
+            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [Serper] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [Serper] Error: {e}")
+        return []
+
+
+# ─── Google Shopping — Selenium (fallback gratuito si no hay Serper) ──────────
 
 def _crear_driver_selenium():
     """Crea un Chrome headless con Selenium."""
@@ -980,20 +1074,23 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         return t
     query_vtex = _sin_acentos(' '.join(palabras_clave[:5]))
 
-    print(f"  📡 MeLi + Sodimac + VTEX × {len(VTEX_STORES)} en paralelo (VTEX: '{query_vtex}')")
+    fuente_principal = "Serper" if SERPER_DISPONIBLE else "Selenium"
+    print(f"  📡 {fuente_principal} + MeLi + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
 
-    # ── Fase 1: fuentes rápidas en paralelo (sin Google Shopping) ────────────
-    # Google Shopping va FUERA del ThreadPool para no conflictuar con el semáforo
-    ex = ThreadPoolExecutor(max_workers=6)
+    # ── Fase 1: TODO en paralelo — Serper es la fuente principal ─────────────
+    # Serper es API HTTP rápida → puede ir en el ThreadPool sin problema
+    ex = ThreadPoolExecutor(max_workers=8)
     try:
         futures = {
             ex.submit(buscar_mercadolibre, producto, 12): "MercadoLibre",
             ex.submit(buscar_sodimac, query_vtex, 8): "Sodimac",
         }
+        if SERPER_DISPONIBLE:
+            futures[ex.submit(buscar_serper, producto, max(limite, 20))] = "Serper"
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
         try:
-            for future in as_completed(futures, timeout=12):
+            for future in as_completed(futures, timeout=20):
                 nombre_f = futures[future]
                 try:
                     nuevos = future.result()
@@ -1002,18 +1099,19 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 except Exception as e:
                     print(f"  ❌ {nombre_f}: {e}")
         except Exception:
-            print(f"  ⚠️ Timeout 12s fase 1 — continuando")
+            print(f"  ⚠️ Timeout 20s fase 1 — continuando con {len(resultados)}")
     finally:
         try:
             ex.shutdown(wait=False, cancel_futures=True)
         except TypeError:
             ex.shutdown(wait=False)
 
-    # ── Fase 2: Google Shopping (Selenium, secuencial, sin conflicto de semáforo) ──
-    print(f"  📡 Google Shopping (Selenium)...")
-    gshop = buscar_google_shopping(producto, max(limite, 15))
-    agregar(gshop)
-    print(f"  ✅ Google Shopping: {len(gshop)} | Total: {len(resultados)}")
+    # ── Fase 2: Selenium SOLO como fallback (sin Serper o muy pocos resultados) ──
+    if not SERPER_DISPONIBLE and len(resultados) < 5:
+        print(f"  📡 Fallback Google Shopping (Selenium)...")
+        gshop = buscar_google_shopping(producto, max(limite, 15))
+        agregar(gshop)
+        print(f"  ✅ Google Shopping: {len(gshop)} | Total: {len(resultados)}")
 
     if not resultados:
         return [], {}
@@ -1148,18 +1246,37 @@ def busqueda_robusta():
 
 @app.route("/health", methods=["GET"])
 def health():
+    fuente_ppal = "Serper (Google Shopping API)" if SERPER_DISPONIBLE else "Selenium (fallback)"
     return jsonify({
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["Google Shopping (Selenium)", "MercadoLibre", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "7.1"
+        "serper_activo": SERPER_DISPONIBLE,
+        "fuente_principal": fuente_ppal,
+        "fuentes": [fuente_ppal, "MercadoLibre", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "8.0"
     })
 
 
 @app.route("/python/diagnostico", methods=["GET"])
 def diagnostico():
     resultado = {}
+
+    # Test Serper — fuente principal
+    try:
+        if not SERPER_DISPONIBLE:
+            resultado["serper"] = {"ok": False, "error": "SERPER_API_KEY no configurada"}
+        else:
+            items = buscar_serper("tornillo acero", 5)
+            resultado["serper"] = {
+                "ok": len(items) > 0,
+                "resultados": len(items),
+                "muestra": items[0].get("nombre", "") if items else "",
+                "tienda": items[0].get("tienda", "") if items else "",
+                "link": items[0].get("url", "")[:60] if items else "",
+            }
+    except Exception as e:
+        resultado["serper"] = {"ok": False, "error": str(e)[:200]}
 
     # Test MercadoLibre — API pública, debería funcionar siempre
     try:
@@ -1487,14 +1604,17 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v7.1 — Selenium + Cache 24h")
-    print("   FUENTES PRIMARIAS:")
-    print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
-    print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
-    print("   FUENTES DIRECTAS (precios exactos):")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v8.0 — Serper + Cache 24h")
+    if SERPER_DISPONIBLE:
+        print(f"   ✅ SERPER ACTIVO (Google Shopping API) — key ...{SERPER_API_KEY[-6:]}")
+    else:
+        print("   ⚠️  SERPER NO CONFIGURADO — usando Selenium (fallback lento)")
+        print("      Configura SERPER_API_KEY o servidor-local/serper-config.txt")
+    print("   FUENTES SECUNDARIAS (precios exactos directos):")
+    print("   • MercadoLibre, Sodimac")
     for s in VTEX_STORES:
         print(f"   • {s['nombre']} (VTEX directo)")
-    print("   ARQUITECTURA: ThreadPoolExecutor — shutdown(wait=False)")
+    print("   ARQUITECTURA: ThreadPool paralelo + Cache 24h")
     print("=" * 60)
     try:
         from waitress import serve

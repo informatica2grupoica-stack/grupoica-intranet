@@ -15,6 +15,10 @@
 .env.development.local
 .env.test.local
 .env.production.local
+# Archivos con tokens/keys que NUNCA deben subirse
+servidor-local/vercel-config.txt
+servidor-local/serper-config.txt
+serper-config.txt
 # -------------------------
 
 # Debug y Logs
