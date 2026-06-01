@@ -16,6 +16,31 @@ try:
     BS4_DISPONIBLE = True
 except ImportError:
     BS4_DISPONIBLE = False
+
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_DISPONIBLE = True
+except ImportError:
+    PLAYWRIGHT_DISPONIBLE = False
+
+# Browser persistente — se lanza una sola vez y se reutiliza
+_pw_instance = None
+_pw_browser = None
+
+def _get_browser():
+    global _pw_instance, _pw_browser
+    try:
+        if _pw_browser and _pw_browser.is_connected():
+            return _pw_browser
+    except Exception:
+        pass
+    _pw_instance = sync_playwright().start()
+    _pw_browser = _pw_instance.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+              "--lang=es-CL", "--disable-blink-features=AutomationControlled"],
+    )
+    return _pw_browser
 try:
     import openpyxl
     OPENPYXL_DISPONIBLE = True
@@ -362,197 +387,145 @@ def prioridad_tienda(url: str, tienda: str) -> int:
     return 3
 
 
-# ─── Google Shopping scraper ──────────────────────────────────────────────────
-# Replica lo que hacía Serper: retorna tarjetas Shopping con precio + tienda.
-# Funciona desde IP real (notebook/oficina) sin CAPTCHA ni API key.
+# ─── Google Shopping — Playwright (headless Chromium, ejecuta JS real) ────────
 
 def buscar_google_shopping(producto: str, limite: int = 15):
     cache_key = get_cache_key(f"gshop_{producto}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
-    if not BS4_DISPONIBLE:
-        return []
+
+    if PLAYWRIGHT_DISPONIBLE:
+        return _buscar_gshop_playwright(producto, limite, cache_key)
+    print("  [GShop] Playwright no disponible")
+    return []
+
+
+def _buscar_gshop_playwright(producto: str, limite: int, cache_key: str):
+    """Google Shopping con Chromium headless — ejecuta JS real, ve los precios."""
     try:
-        r = requests.get(
-            "https://www.google.cl/search",
-            params={"q": producto + " precio Chile", "tbm": "shop", "hl": "es", "gl": "cl", "num": 30},
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-                "Accept-Language": "es-CL,es;q=0.9,en;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Referer": "https://www.google.cl/",
-                "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124"',
-                "sec-ch-ua-platform": '"Windows"',
-                "Sec-Fetch-Site": "same-origin",
-                "Sec-Fetch-Mode": "navigate",
-                "Cache-Control": "no-cache",
-            },
-            timeout=(5, 12)
+        browser = _get_browser()
+        ctx = browser.new_context(
+            locale="es-CL",
+            timezone_id="America/Santiago",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
-        if r.status_code == 429:
-            print(f"  [GShop] HTTP 429 (rate limit) — saltando")
-            return []
-        if r.status_code != 200:
-            print(f"  [GShop] HTTP {r.status_code}")
-            return []
+        page = ctx.new_page()
+        try:
+            url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
+            page.goto(url, wait_until="domcontentloaded", timeout=15000)
 
-        html = r.text
-        soup = BeautifulSoup(html, "lxml")
-        resultados = []
+            # Esperar que carguen las tarjetas de productos
+            try:
+                page.wait_for_selector(
+                    "div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, "
+                    "div[data-sh-gr], .sh-pr__product-results-grid",
+                    timeout=8000
+                )
+            except Exception:
+                pass  # continuar aunque no matchee el selector exacto
 
-        # ── Estrategia 1: selectores CSS múltiples (Google cambia clases con frecuencia) ──
-        CARD_SELECTORS = [
-            "div.sh-dgr__content",
-            "div.KZmu8e",
-            "li.sh-dlr__list-result",
-            "div.xcR77d",
-            "div.i0X6df",
-            "div[data-sh-gr]",
-            "div.sh-pr__product-results-grid > div",
-        ]
-        cards = []
-        for sel in CARD_SELECTORS:
-            cards = soup.select(sel)
-            if cards:
-                break
+            html = page.content()
 
-        def _extraer_precio_elemento(el):
-            # Intenta varios selectores de precio
-            for ps in ["span.a8Pemb", "div.e10twf", "span.kHxwFf", ".notranslate",
-                       "b", "strong", "[aria-label*='$']"]:
-                pel = el.select_one(ps)
-                if not pel:
-                    continue
-                txt = pel.get("aria-label", "") or pel.get_text(strip=True)
-                pm = re.search(r'\$\s*([\d\.]{3,})', txt)
-                if pm:
-                    p = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
-                    if p:
-                        return p
-            # Fallback: buscar en texto completo del card
-            pm = re.search(r'\$\s*([\d\.]{3,})', el.get_text())
-            if pm:
-                return limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
-            return None
+            # Extraer productos via JavaScript directamente desde la página renderizada
+            productos_js = page.evaluate("""() => {
+                const resultados = [];
+                // Buscar todos los elementos con precio en la página
+                const allEls = document.querySelectorAll('[aria-label]');
+                const visto = new Set();
+                for (const el of allEls) {
+                    const label = el.getAttribute('aria-label') || '';
+                    if (label.includes('$') && label.length > 5) {
+                        const match = label.match(/\\$([\\d\\.]+)/);
+                        if (match && !visto.has(label)) {
+                            visto.add(label);
+                            resultados.push({tipo: 'aria', texto: label});
+                        }
+                    }
+                }
+                // Buscar tarjetas de producto completas
+                const cards = document.querySelectorAll(
+                    'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, ' +
+                    'div[data-sh-gr], div[class*="xcR"], div[class*="i0X6"]'
+                );
+                for (const card of cards) {
+                    const h = card.querySelector('h3, h4, [role="heading"]');
+                    const nombre = h ? h.innerText.trim() : '';
+                    const priceEl = card.querySelector('[class*="a8Pe"], [class*="e10tw"], b, strong');
+                    const precio = priceEl ? priceEl.innerText.trim() : card.innerText.match(/\\$[\\d\\.]+/) ? card.innerText.match(/\\$[\\d\\.]+/)[0] : '';
+                    const link = card.querySelector('a') ? card.querySelector('a').href : '';
+                    const storeEl = card.querySelector('[class*="aULz"], [class*="IuHn"], [class*="E5oc"]');
+                    const tienda = storeEl ? storeEl.innerText.trim() : '';
+                    if (nombre && precio) resultados.push({tipo:'card', nombre, precio, link, tienda});
+                }
+                return resultados;
+            }""")
 
-        for card in cards:
-            name_el = card.select_one(
-                "h3, h4, div.EI11Pd, [role='heading'], .translate-content, .tAxDx, "
-                ".Xjkr3b, .sh-np__click-target, a[aria-label]"
-            )
-            nombre = ""
-            if name_el:
-                nombre = limpiar_nombre(name_el.get("aria-label", "") or name_el.get_text(strip=True))
-            if len(nombre) < 4:
-                continue
-            precio = _extraer_precio_elemento(card)
-            if not precio:
-                continue
-            store_el = card.select_one(
-                "div.aULzUe, div.IuHnof, div.LbUacb, span.E5ocAb, .qIEPib, "
-                ".sh-np__seller-container, .JNKF3c, .mvMUEb"
-            )
-            tienda = store_el.get_text(strip=True)[:40] if store_el else "Google Shopping"
-            link_el = card.select_one("a[href]")
-            url_prod = link_el.get("href", "") if link_el else ""
-            if url_prod.startswith("/url?"):
-                qs = urllib.parse.parse_qs(urllib.parse.urlparse(url_prod).query)
-                url_prod = qs.get("q", [url_prod])[0]
-            elif url_prod.startswith("/"):
-                url_prod = "https://www.google.cl" + url_prod
-            if any(ind in tienda.lower() or ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
-                continue
-            resultados.append({
-                "tienda": tienda,
-                "nombre": nombre[:150],
-                "precio_con_iva": precio,
-                "url": url_prod,
-                "fuente": "google_shopping",
-                "pais": "CL",
-            })
-            if len(resultados) >= limite:
-                break
-
-        # ── Estrategia 2: JSON-LD structured data ─────────────────────────────
-        if not resultados:
-            for script in soup.select('script[type="application/ld+json"]'):
-                try:
-                    data = json.loads(script.string or "")
-                    offers = data.get("offers", data.get("Offers", []))
-                    if isinstance(offers, dict):
-                        offers = [offers]
-                    nombre_prod = data.get("name", "")
-                    for offer in offers:
-                        p = limpiar_precio(str(offer.get("price", "")))
-                        if p and nombre_prod:
-                            resultados.append({
-                                "tienda": offer.get("seller", {}).get("name", "Google Shopping") if isinstance(offer.get("seller"), dict) else "Google Shopping",
-                                "nombre": limpiar_nombre(nombre_prod)[:150],
-                                "precio_con_iva": p,
-                                "url": offer.get("url", ""),
-                                "fuente": "google_shopping",
-                                "pais": "CL",
-                            })
-                except Exception:
-                    pass
-            if resultados:
-                resultados = resultados[:limite]
-
-        # ── Estrategia 3: regex en HTML crudo — busca bloques nombre+precio ────
-        if not resultados:
-            # Busca patrones "texto largo ... $precio" en el HTML
-            bloques = re.findall(
-                r'(?:title|aria-label)="([^"]{10,120})"[^<]{0,500}\$\s*([\d\.]{4,10})',
-                html
-            )
+            resultados = []
             vistos = set()
-            for nombre_raw, precio_raw in bloques[:limite * 3]:
-                p = limpiar_precio(re.sub(r'[^\d]', '', precio_raw))
-                if not p or nombre_raw in vistos:
+
+            # Procesar tarjetas completas primero
+            for item in productos_js:
+                if item.get("tipo") != "card":
                     continue
-                vistos.add(nombre_raw)
+                nombre = limpiar_nombre(item.get("nombre", ""))
+                if len(nombre) < 4 or nombre in vistos:
+                    continue
+                precio_raw = re.sub(r'[^\d]', '', item.get("precio", ""))
+                precio = limpiar_precio(precio_raw)
+                if not precio:
+                    continue
+                url_prod = item.get("link", "")
+                tienda = item.get("tienda", "Google Shopping")[:40] or "Google Shopping"
+                if any(ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
+                    continue
+                vistos.add(nombre)
                 resultados.append({
-                    "tienda": "Google Shopping",
-                    "nombre": limpiar_nombre(nombre_raw)[:150],
-                    "precio_con_iva": p,
-                    "url": "",
+                    "tienda": tienda,
+                    "nombre": nombre[:150],
+                    "precio_con_iva": precio,
+                    "url": url_prod,
                     "fuente": "google_shopping",
                     "pais": "CL",
                 })
                 if len(resultados) >= limite:
                     break
 
-        # ── Estrategia 4: JSON en scripts (window.shopping_...) ───────────────
-        if not resultados:
-            for script in soup.select("script"):
-                txt = script.string or ""
-                if '"Price"' not in txt and '"price"' not in txt:
-                    continue
-                pairs = re.findall(
-                    r'"(?:title|name|productName)"\s*:\s*"([^"]{5,120})"[^}]{0,300}"[Pp]rice"\s*:\s*"?\$?\s*([\d\.,]+)',
-                    txt
-                )
-                for nombre_raw, precio_raw in pairs[:limite]:
-                    p = limpiar_precio(re.sub(r'[^\d]', '', precio_raw))
-                    if p:
-                        resultados.append({
-                            "tienda": "Google Shopping",
-                            "nombre": limpiar_nombre(nombre_raw)[:150],
-                            "precio_con_iva": p,
-                            "url": "",
-                            "fuente": "google_shopping",
-                            "pais": "CL",
-                        })
-                if resultados:
-                    break
+            # Fallback: aria-label con precio si no hubo tarjetas
+            if not resultados:
+                for item in productos_js:
+                    if item.get("tipo") != "aria":
+                        continue
+                    texto = item.get("texto", "")
+                    pm = re.search(r'\$\s*([\d\.]{3,})', texto)
+                    if not pm:
+                        continue
+                    precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+                    nombre = limpiar_nombre(re.sub(r'\$[\d\.,]+', '', texto).strip())
+                    if not precio or len(nombre) < 4 or nombre in vistos:
+                        continue
+                    vistos.add(nombre)
+                    resultados.append({
+                        "tienda": "Google Shopping",
+                        "nombre": nombre[:150],
+                        "precio_con_iva": precio,
+                        "url": "",
+                        "fuente": "google_shopping",
+                        "pais": "CL",
+                    })
+                    if len(resultados) >= limite:
+                        break
 
-        if resultados:
-            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
-        print(f"  [GShop] {len(resultados)} resultados")
-        return resultados
+            if resultados:
+                cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+            print(f"  [GShop] {len(resultados)} resultados (Playwright)")
+            return resultados
+
+        finally:
+            page.close()
+            ctx.close()
+
     except Exception as e:
-        print(f"  [GShop] Error: {e}")
+        print(f"  [GShop] Error Playwright: {e}")
         return []
 
 
@@ -1153,7 +1126,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["MercadoLibre CL (API)", "Google Shopping", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.5"
+        "version": "7.0"
     })
 
 
@@ -1450,7 +1423,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.5")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v7.0 — Google Shopping con Playwright")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
