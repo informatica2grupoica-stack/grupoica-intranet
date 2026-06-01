@@ -422,25 +422,51 @@ def buscar_google_shopping(producto: str, limite: int = 15):
 
         JS = """
         const res = [];
-        const cards = document.querySelectorAll(
-            'div.sh-dgr__content,li.sh-dlr__list-result,div.KZmu8e,div[data-sh-gr]'
-        );
-        for (const c of cards) {
-            const h = c.querySelector('h3,h4,[role="heading"]');
-            const nombre = h ? h.innerText.trim() : '';
-            const pe = c.querySelector('b,strong,[class*="a8Pe"],[class*="e10tw"]');
-            const precio = pe ? pe.innerText.trim() : (c.innerText.match(/\\$[\\d\\.]+/) || [''])[0];
-            const a = c.querySelector('a');
-            const link = a ? a.href : '';
-            const se = c.querySelector('[class*="aULz"],[class*="IuHn"],[class*="E5oc"]');
-            const tienda = se ? se.innerText.trim() : '';
-            if (nombre && precio) res.push({nombre,precio,link,tienda});
+        const seen = new Set();
+
+        // Estrategia 1: buscar h3 con precio cerca (estructura actual Google Shopping 2024-2025)
+        for (const h of document.querySelectorAll('h3,h4')) {
+            const nombre = h.innerText.trim();
+            if (!nombre || nombre.length < 4) continue;
+            // Subir hasta encontrar un contenedor con precio
+            let container = h;
+            for (let i = 0; i < 6; i++) {
+                container = container.parentElement;
+                if (!container) break;
+                const txt = container.innerText || '';
+                const pm = txt.match(/\\$\\s?[\\d\\.]{3,}/);
+                if (pm) {
+                    const a = container.querySelector('a[href]');
+                    const link = a ? a.href : '';
+                    const key = nombre + pm[0];
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        // Buscar tienda: texto corto sin precio ni nombre
+                        let tienda = '';
+                        for (const span of container.querySelectorAll('span,div')) {
+                            const t = span.innerText.trim();
+                            if (t && t.length > 2 && t.length < 50 && !t.includes('$') && t !== nombre) {
+                                tienda = t; break;
+                            }
+                        }
+                        res.push({nombre, precio: pm[0], link, tienda});
+                    }
+                    break;
+                }
+            }
+            if (res.length >= 25) break;
         }
+
+        // Estrategia 2: aria-label con precio (fallback)
         if (!res.length) {
-            const seen = new Set();
             for (const el of document.querySelectorAll('[aria-label]')) {
-                const lbl = el.getAttribute('aria-label')||'';
-                if (lbl.includes('$') && !seen.has(lbl)) { seen.add(lbl); res.push({nombre:lbl,precio:lbl,link:'',tienda:''}); }
+                const lbl = el.getAttribute('aria-label') || '';
+                const pm = lbl.match(/\\$\\s?[\\d\\.]{3,}/);
+                if (pm && lbl.length > 8 && !seen.has(lbl)) {
+                    seen.add(lbl);
+                    res.push({nombre: lbl.replace(pm[0],'').trim(), precio: pm[0], link: '', tienda: ''});
+                }
+                if (res.length >= 25) break;
             }
         }
         return res;
