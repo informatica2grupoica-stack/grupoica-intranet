@@ -51,25 +51,44 @@ IVA = 1.19
 # NUNCA hardcodear la key (GitHub la bloquea y es inseguro)
 import os as _os
 
+_SERPER_PATHS_CHECKED = []
+
 def _leer_serper_key():
     key = _os.environ.get("SERPER_API_KEY", "").strip()
     if key:
+        _SERPER_PATHS_CHECKED.append("env:SERPER_API_KEY (ENCONTRADA)")
         return key
-    # Fallback: archivo local serper-config.txt (gitignored)
-    for ruta in [
-        _os.path.join(_os.path.dirname(__file__), "..", "servidor-local", "serper-config.txt"),
-        _os.path.join(_os.path.dirname(__file__), "..", "serper-config.txt"),
-    ]:
-        try:
-            if _os.path.exists(ruta):
-                with open(ruta, "r", encoding="utf-8") as f:
+
+    _base = _os.path.dirname(_os.path.abspath(__file__))
+    _cwd = _os.getcwd()
+    # Buscar el archivo en TODAS las ubicaciones posibles
+    candidatos = [
+        _os.path.join(_base, "..", "servidor-local", "serper-config.txt"),
+        _os.path.join(_base, "..", "serper-config.txt"),
+        _os.path.join(_base, "serper-config.txt"),
+        _os.path.join(_cwd, "servidor-local", "serper-config.txt"),
+        _os.path.join(_cwd, "serper-config.txt"),
+        _os.path.join(_cwd, "..", "servidor-local", "serper-config.txt"),
+        r"C:\Users\Grupo Ica\grupoica-intranet\servidor-local\serper-config.txt",
+        _os.path.expanduser("~/grupoica-intranet/servidor-local/serper-config.txt"),
+    ]
+    for ruta in candidatos:
+        ruta_abs = _os.path.abspath(ruta)
+        existe = _os.path.exists(ruta_abs)
+        _SERPER_PATHS_CHECKED.append(f"{ruta_abs} -> {'EXISTE' if existe else 'no'}")
+        if existe:
+            try:
+                with open(ruta_abs, "r", encoding="utf-8-sig") as f:
                     for line in f:
-                        if line.strip() and not line.startswith("#"):
-                            if "=" in line:
-                                return line.split("=", 1)[1].strip()
-                            return line.strip()
-        except Exception:
-            pass
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            valor = line.split("=", 1)[1].strip() if "=" in line else line
+                            valor = valor.strip().strip('"').strip("'")
+                            if valor:
+                                _SERPER_PATHS_CHECKED.append(f"  KEY LEIDA (len={len(valor)})")
+                                return valor
+            except Exception as e:
+                _SERPER_PATHS_CHECKED.append(f"  ERROR leyendo: {e}")
     return ""
 
 SERPER_API_KEY = _leer_serper_key()
@@ -1255,6 +1274,18 @@ def health():
         "fuente_principal": fuente_ppal,
         "fuentes": [fuente_ppal, "MercadoLibre", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
         "version": "8.0"
+    })
+
+
+@app.route("/python/serper-debug", methods=["GET"])
+def serper_debug():
+    return jsonify({
+        "serper_disponible": SERPER_DISPONIBLE,
+        "key_len": len(SERPER_API_KEY) if SERPER_API_KEY else 0,
+        "key_preview": (SERPER_API_KEY[:4] + "..." + SERPER_API_KEY[-4:]) if SERPER_API_KEY else "",
+        "cwd": _os.getcwd(),
+        "script_dir": _os.path.dirname(_os.path.abspath(__file__)),
+        "rutas_revisadas": _SERPER_PATHS_CHECKED,
     })
 
 
