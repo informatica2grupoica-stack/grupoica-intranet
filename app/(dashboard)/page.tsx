@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
   ClipboardCheck, MessageSquare, Calendar, Bell, Cake, 
   Clock, Loader2, ArrowRight, CheckCircle2, 
-  Briefcase, GraduationCap, Building, FileText, Truck,
+  GraduationCap, Building,
   Gift, Smile, Heart, Users, TrendingUp, Package, AlertCircle
 } from "lucide-react";
 
@@ -56,7 +56,8 @@ export default function HomePage() {
   const [capacitacionesProximas, setCapacitacionesProximas] = useState<any[]>([]);
   const [totalEmpleados, setTotalEmpleados] = useState(0);
   const [proveedoresActivos, setProveedoresActivos] = useState(0);
-  const [licitacionesActivas, setLicitacionesActivas] = useState(0);
+  const [totalProductos, setTotalProductos] = useState(0);
+  const [productosSinStock, setProductosSinStock] = useState(0);
 
   // 👤 DATOS PERSONALES
   const [misTareas, setMisTareas] = useState<Tarea[]>([]);
@@ -207,13 +208,14 @@ export default function HomePage() {
       if (provError) console.error("Error proveedores:", provError);
       setProveedoresActivos(proveedores || 0);
 
-      // 5. Licitaciones activas
-      const { count: licitaciones, error: licError } = await supabase
-        .from('licitaciones')
-        .select('id', { count: 'exact', head: true });
-      
-      if (licError) console.error("Error licitaciones:", licError);
-      setLicitacionesActivas(licitaciones || 0);
+      // 5. KPIs de inventario (productos_obuma) — datos reales
+      const [{ count: prodTotal }, { count: sinStock }] = await Promise.all([
+        supabase.from('productos_obuma').select('id', { count: 'exact', head: true }).eq('activo', true),
+        supabase.from('productos_obuma').select('id', { count: 'exact', head: true })
+          .eq('activo', true).eq('inventariable', true).eq('stock_actual', 0),
+      ]);
+      setTotalProductos(prodTotal || 0);
+      setProductosSinStock(sinStock || 0);
 
       // ============================================
       // 👤 DATOS PERSONALES - TAREAS
@@ -422,6 +424,57 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* SECCIÓN DE TAREAS PENDIENTES */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <ClipboardCheck size={18} className="text-blue-500" />
+          ✅ Mis Tareas Pendientes
+          {misTareas.length > 0 && (
+            <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+              {misTareas.length} pendientes
+            </span>
+          )}
+        </h2>
+        {misTareas.length > 0 ? (
+          <div className="space-y-3">
+            {misTareas.map((tarea) => (
+              <div 
+                key={tarea.id} 
+                onClick={() => router.push(`/tareas/${tarea.id}`)}
+                className="flex items-center justify-between p-3 bg-blue-50 rounded-xl cursor-pointer hover:bg-blue-100 transition-all group"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-slate-800">{tarea.titulo || tarea.nombre || 'Tarea sin título'}</p>
+                    {tarea.prioridad && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        tarea.prioridad === 'alta' ? 'bg-red-100 text-red-700' :
+                        tarea.prioridad === 'media' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {tarea.prioridad}
+                      </span>
+                    )}
+                  </div>
+                  {tarea.fecha_limite && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      📅 Límite: {formatearFecha(tarea.fecha_limite)}
+                    </p>
+                  )}
+                </div>
+                <Clock size={16} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-400">
+            <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
+            <p>¡No tienes tareas pendientes!</p>
+            <p className="text-xs mt-1">Todo al día ✨</p>
+          </div>
+        )}
+      </div>
+
       {/* DATOS GLOBALES */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -530,57 +583,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* SECCIÓN DE TAREAS PENDIENTES */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <ClipboardCheck size={18} className="text-blue-500" />
-          ✅ Mis Tareas Pendientes
-          {misTareas.length > 0 && (
-            <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-              {misTareas.length} pendientes
-            </span>
-          )}
-        </h2>
-        {misTareas.length > 0 ? (
-          <div className="space-y-3">
-            {misTareas.map((tarea) => (
-              <div 
-                key={tarea.id} 
-                onClick={() => router.push(`/tareas/${tarea.id}`)}
-                className="flex items-center justify-between p-3 bg-blue-50 rounded-xl cursor-pointer hover:bg-blue-100 transition-all group"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800">{tarea.titulo || tarea.nombre || 'Tarea sin título'}</p>
-                    {tarea.prioridad && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        tarea.prioridad === 'alta' ? 'bg-red-100 text-red-700' :
-                        tarea.prioridad === 'media' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
-                        {tarea.prioridad}
-                      </span>
-                    )}
-                  </div>
-                  {tarea.fecha_limite && (
-                    <p className="text-xs text-slate-500 mt-1">
-                      📅 Límite: {formatearFecha(tarea.fecha_limite)}
-                    </p>
-                  )}
-                </div>
-                <Clock size={16} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-slate-400">
-            <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-            <p>¡No tienes tareas pendientes!</p>
-            <p className="text-xs mt-1">Todo al día ✨</p>
-          </div>
-        )}
-      </div>
-
       {/* Estadísticas globales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white">
@@ -595,16 +597,16 @@ export default function HomePage() {
           <p className="text-xs opacity-80">Proveedores activos</p>
         </div>
         
-        <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl p-5 text-white">
-          <Briefcase size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{licitacionesActivas}</p>
-          <p className="text-xs opacity-80">Licitaciones activas</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white">
+        <div onClick={() => router.push('/obuma-productos')} className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white cursor-pointer hover:shadow-lg transition-all">
           <Package size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">0</p>
-          <p className="text-xs opacity-80">Órdenes pendientes</p>
+          <p className="text-2xl font-black">{totalProductos.toLocaleString('es-CL')}</p>
+          <p className="text-xs opacity-80">Productos en catálogo</p>
+        </div>
+
+        <div onClick={() => router.push('/obuma-productos')} className={`rounded-2xl p-5 text-white cursor-pointer hover:shadow-lg transition-all ${productosSinStock > 0 ? 'bg-gradient-to-br from-rose-500 to-rose-600' : 'bg-gradient-to-br from-slate-400 to-slate-500'}`}>
+          <AlertCircle size={24} className="mb-2 opacity-80" />
+          <p className="text-2xl font-black">{productosSinStock.toLocaleString('es-CL')}</p>
+          <p className="text-xs opacity-80">Productos sin stock</p>
         </div>
       </div>
 
