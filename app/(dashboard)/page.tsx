@@ -638,7 +638,7 @@ export default function HomePage() {
         ) : (
           <div className="text-center py-8 text-slate-400">
             <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-            <p>No tienes capacitaciones pendientes</p>
+            <p>No tienes capacitaciones pendiente</p>
             <p className="text-xs mt-1">¡Buen trabajo! 🎉</p>
           </div>
         )}
