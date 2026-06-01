@@ -7,7 +7,7 @@ import {
   ClipboardCheck, MessageSquare, Calendar, Bell, Cake, 
   Clock, Loader2, ArrowRight, CheckCircle2, 
   GraduationCap, Building,
-  Gift, Smile, Heart, Users, TrendingUp, Package, AlertCircle
+  Gift, Smile, Heart, Users, Package, AlertCircle
 } from "lucide-react";
 
 // Definir tipos para mejor seguridad
@@ -114,7 +114,7 @@ export default function HomePage() {
       hoy.setHours(0, 0, 0, 0);
 
       // ============================================
-      // 📊 DATOS GLOBALES - CUPLEAÑOS CORREGIDO
+      // 📊 DATOS GLOBALES - CUMPLEAÑOS CORREGIDO
       // ============================================
       
       const { data: todosPerfiles, error: perfilesError } = await supabase
@@ -129,7 +129,7 @@ export default function HomePage() {
       console.log("Perfiles cargados:", todosPerfiles?.length);
       console.log("Perfiles con fecha:", todosPerfiles?.filter(p => p.fecha_nacimiento).length);
 
-      // Procesar cumpleaños con tipo seguro
+      // Procesar cumpleaños - AHORA MUESTRA TODOS SIN LÍMITE
       const cumpleañosArray: Cumpleaños[] = [];
       
       for (const p of (todosPerfiles || [])) {
@@ -152,8 +152,9 @@ export default function HomePage() {
           }
           
           const dias = Math.ceil((proxCumple.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-          
-          if (dias <= 30 && dias >= 0) {
+
+          // ✅ CORREGIDO: Mostrar TODOS los próximos cumpleaños (sin límite de días)
+          if (dias >= 0) {
             cumpleañosArray.push({
               id: p.id,
               nombre: p.nombre,
@@ -171,11 +172,13 @@ export default function HomePage() {
         }
       }
       
-      // Ordenar de forma segura (a y b no pueden ser null aquí)
+      // Ordenar por días faltantes (más cercanos primero)
       cumpleañosArray.sort((a, b) => a.diasFaltantes - b.diasFaltantes);
-      const cumpleañosProximosFiltrados = cumpleañosArray.slice(0, 6);
       
-      console.log("Cumpleaños próximos encontrados:", cumpleañosProximosFiltrados.length);
+      // ✅ CORREGIDO: Mostrar TODOS los cumpleaños, sin limitar a 6
+      const cumpleañosProximosFiltrados = cumpleañosArray;
+      
+      console.log("Cumpleaños próximos encontrados (TODOS):", cumpleañosProximosFiltrados.length);
       setCumpleañosProximos(cumpleañosProximosFiltrados);
 
       // 2. Próximas capacitaciones globales
@@ -234,7 +237,6 @@ export default function HomePage() {
         setMisTareas([]);
       } else {
         console.log("Tareas encontradas (total):", tareasUsuario?.length);
-        console.log("Primera tarea:", tareasUsuario?.[0]);
         
         // Filtramos las pendientes
         const pendientes = (tareasUsuario || []).filter((t: any) => {
@@ -349,6 +351,8 @@ export default function HomePage() {
           console.error("Error procesando mi cumpleaños:", error);
           setMiProximoCumpleaños(null);
         }
+      } else {
+        setMiProximoCumpleaños(null);
       }
 
     } catch (error) {
@@ -478,19 +482,19 @@ export default function HomePage() {
       {/* DATOS GLOBALES */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Próximos Cumpleaños */}
+        {/* Próximos Cumpleaños - AHORA MUESTRA TODOS */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
             <Cake size={18} className="text-amber-500" />
             🎂 Próximos Cumpleaños
             {cumpleañosProximos.length > 0 && (
               <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                {cumpleañosProximos.length}
+                {cumpleañosProximos.length} {cumpleañosProximos.length === 1 ? 'persona' : 'personas'}
               </span>
             )}
           </h2>
           {cumpleañosProximos.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {cumpleañosProximos.map((p) => (
                 <div key={p.id} className="flex items-center justify-between p-2 border-b border-slate-100 hover:bg-slate-50 rounded-lg transition-colors">
                   <div className="flex-1">
@@ -502,7 +506,7 @@ export default function HomePage() {
                   </div>
                   <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
                     p.diasFaltantes === 0 ? 'bg-amber-500 text-white animate-pulse' :
-                    p.diasFaltantes <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    p.diasFaltantes <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                   }`}>
                     {p.diasFaltantes === 0 ? '🎉 ¡HOY! 🎉' : `${p.diasFaltantes} ${p.diasFaltantes === 1 ? 'día' : 'días'}`}
                   </span>
@@ -512,7 +516,7 @@ export default function HomePage() {
           ) : (
             <div className="text-center py-8 text-slate-400">
               <Smile size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No hay cumpleaños próximos</p>
+              <p>No hay cumpleaños registrados</p>
               <p className="text-xs mt-1">Pronto celebraremos a alguien 🎉</p>
             </div>
           )}
@@ -544,6 +548,7 @@ export default function HomePage() {
             <div className="text-center py-6 text-slate-400">
               <Calendar size={32} className="mx-auto mb-2 opacity-30" />
               <p>No hay capacitaciones próximas</p>
+              <p className="text-xs mt-1">Pronto se agregarán nuevas capacitaciones</p>
             </div>
           )}
         </div>
