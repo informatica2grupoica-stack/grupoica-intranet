@@ -17,15 +17,21 @@ try:
 except ImportError:
     BS4_DISPONIBLE = False
 
+PLAYWRIGHT_DISPONIBLE = False
+PLAYWRIGHT_ERROR = "playwright reemplazado por selenium"
+
 try:
-    # Usar async_api — NO necesita greenlet (compatible con Python 3.14)
-    from playwright.async_api import async_playwright as _async_playwright
-    import asyncio as _asyncio
-    PLAYWRIGHT_DISPONIBLE = True
-    PLAYWRIGHT_ERROR = None
-except Exception as _pw_err:
-    PLAYWRIGHT_DISPONIBLE = False
-    PLAYWRIGHT_ERROR = str(_pw_err)
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options as _ChromeOptions
+    from selenium.webdriver.chrome.service import Service as _ChromeService
+    from selenium.webdriver.support.ui import WebDriverWait as _WebDriverWait
+    from selenium.webdriver.support import expected_conditions as _EC
+    from selenium.webdriver.common.by import By as _By
+    SELENIUM_DISPONIBLE = True
+    SELENIUM_ERROR = None
+except Exception as _sel_err:
+    SELENIUM_DISPONIBLE = False
+    SELENIUM_ERROR = str(_sel_err)
 try:
     import openpyxl
     OPENPYXL_DISPONIBLE = True
@@ -374,105 +380,109 @@ def prioridad_tienda(url: str, tienda: str) -> int:
 
 # ─── Google Shopping — Playwright (headless Chromium, ejecuta JS real) ────────
 
+def _crear_driver_selenium():
+    """Crea un Chrome headless con Selenium."""
+    opts = _ChromeOptions()
+    opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--lang=es-CL")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
+    opts.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+    # Selenium Manager descarga ChromeDriver automáticamente
+    driver = webdriver.Chrome(options=opts)
+    driver.execute_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
+    return driver
+
+
 def buscar_google_shopping(producto: str, limite: int = 15):
     cache_key = get_cache_key(f"gshop_{producto}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
-    if not PLAYWRIGHT_DISPONIBLE:
-        print(f"  [GShop] Playwright no disponible: {PLAYWRIGHT_ERROR}")
+    if not SELENIUM_DISPONIBLE:
+        print(f"  [GShop] Selenium no disponible: {SELENIUM_ERROR}")
         return []
+    driver = None
     try:
-        return _asyncio.run(_gshop_async(producto, limite, cache_key))
-    except Exception as e:
-        print(f"  [GShop] Error: {e}")
-        return []
+        driver = _crear_driver_selenium()
+        url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
+        driver.get(url)
 
+        # Esperar que carguen productos (máx 8s)
+        try:
+            _WebDriverWait(driver, 8).until(
+                _EC.presence_of_element_located((_By.CSS_SELECTOR,
+                    "div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]"))
+            )
+        except Exception:
+            pass
 
-async def _gshop_async(producto: str, limite: int, cache_key: str):
-    """Google Shopping con async Playwright — no necesita greenlet."""
-    JS_EXTRACT = """() => {
+        JS = """
         const res = [];
         const cards = document.querySelectorAll(
-            'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]'
+            'div.sh-dgr__content,li.sh-dlr__list-result,div.KZmu8e,div[data-sh-gr]'
         );
-        for (const card of cards) {
-            const h = card.querySelector('h3,h4,[role="heading"]');
+        for (const c of cards) {
+            const h = c.querySelector('h3,h4,[role="heading"]');
             const nombre = h ? h.innerText.trim() : '';
-            const priceEl = card.querySelector('b,strong,[class*="a8Pe"],[class*="e10tw"]');
-            const precio = priceEl ? priceEl.innerText.trim() : '';
-            const a = card.querySelector('a');
+            const pe = c.querySelector('b,strong,[class*="a8Pe"],[class*="e10tw"]');
+            const precio = pe ? pe.innerText.trim() : (c.innerText.match(/\\$[\\d\\.]+/) || [''])[0];
+            const a = c.querySelector('a');
             const link = a ? a.href : '';
-            const storeEl = card.querySelector('[class*="aULz"],[class*="IuHn"],[class*="E5oc"]');
-            const tienda = storeEl ? storeEl.innerText.trim() : '';
-            if (nombre && precio) res.push({nombre, precio, link, tienda});
+            const se = c.querySelector('[class*="aULz"],[class*="IuHn"],[class*="E5oc"]');
+            const tienda = se ? se.innerText.trim() : '';
+            if (nombre && precio) res.push({nombre,precio,link,tienda});
         }
-        // Fallback: aria-labels con precio
-        if (res.length === 0) {
+        if (!res.length) {
             const seen = new Set();
             for (const el of document.querySelectorAll('[aria-label]')) {
-                const lbl = el.getAttribute('aria-label') || '';
-                if (lbl.includes('$') && !seen.has(lbl)) {
-                    seen.add(lbl);
-                    res.push({nombre: lbl, precio: lbl, link: '', tienda: ''});
-                }
+                const lbl = el.getAttribute('aria-label')||'';
+                if (lbl.includes('$') && !seen.has(lbl)) { seen.add(lbl); res.push({nombre:lbl,precio:lbl,link:'',tienda:''}); }
             }
         }
         return res;
-    }"""
-    async with _async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-gpu", "--lang=es-CL",
-                  "--disable-blink-features=AutomationControlled"]
-        )
-        ctx = await browser.new_context(
-            locale="es-CL", timezone_id="America/Santiago",
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        )
-        page = await ctx.new_page()
-        try:
-            url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        """
+        items = driver.execute_script(JS) or []
+        resultados = []
+        vistos = set()
+        for item in items:
+            nombre = limpiar_nombre(item.get("nombre", ""))
+            if len(nombre) < 4 or nombre in vistos:
+                continue
+            precio = limpiar_precio(re.sub(r'[^\d]', '', item.get("precio", "")))
+            if not precio:
+                continue
+            url_prod = item.get("link", "")
+            tienda = (item.get("tienda", "") or "Google Shopping")[:40]
+            if any(ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
+                continue
+            vistos.add(nombre)
+            resultados.append({
+                "tienda": tienda,
+                "nombre": nombre[:150],
+                "precio_con_iva": precio,
+                "url": url_prod,
+                "fuente": "google_shopping",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite:
+                break
+        if resultados:
+            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [GShop] {len(resultados)} resultados (Selenium)")
+        return resultados
+    except Exception as e:
+        print(f"  [GShop] Error Selenium: {e}")
+        return []
+    finally:
+        if driver:
             try:
-                await page.wait_for_selector(
-                    "div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]",
-                    timeout=8000
-                )
+                driver.quit()
             except Exception:
                 pass
-            items = await page.evaluate(JS_EXTRACT)
-            resultados = []
-            vistos = set()
-            for item in items:
-                nombre = limpiar_nombre(item.get("nombre", ""))
-                if len(nombre) < 4 or nombre in vistos:
-                    continue
-                precio = limpiar_precio(re.sub(r'[^\d]', '', item.get("precio", "")))
-                if not precio:
-                    continue
-                url_prod = item.get("link", "")
-                tienda = (item.get("tienda", "") or "Google Shopping")[:40]
-                if any(ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
-                    continue
-                vistos.add(nombre)
-                resultados.append({
-                    "tienda": tienda,
-                    "nombre": nombre[:150],
-                    "precio_con_iva": precio,
-                    "url": url_prod,
-                    "fuente": "google_shopping",
-                    "pais": "CL",
-                })
-                if len(resultados) >= limite:
-                    break
-            if resultados:
-                cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
-            print(f"  [GShop] {len(resultados)} resultados (async Playwright)")
-            return resultados
-        finally:
-            await page.close()
-            await ctx.close()
-            await browser.close()
 
 
 # ─── DuckDuckGo HTML (GET — maneja 200 y 202) ────────────────────────────────
@@ -1071,7 +1081,7 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["MercadoLibre CL (API)", "Google Shopping", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
+        "fuentes": ["Google Shopping (Selenium)", "MercadoLibre", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
         "version": "7.0"
     })
 
@@ -1213,28 +1223,25 @@ def diagnostico():
 
     # Test Playwright directo
     try:
-        if not PLAYWRIGHT_DISPONIBLE:
-            resultado["playwright"] = {"ok": False, "error": f"playwright no disponible: {PLAYWRIGHT_ERROR}"}
+        if not SELENIUM_DISPONIBLE:
+            resultado["selenium"] = {"ok": False, "error": f"selenium no disponible: {SELENIUM_ERROR}"}
         else:
-            async def _test_pw():
-                async with _async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu"])
-                    ctx = await browser.new_context(locale="es-CL",
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    page = await ctx.new_page()
-                    try:
-                        await page.goto("https://www.google.cl/search?q=tornillo+acero+precio+Chile&tbm=shop&hl=es&gl=cl",
-                                        wait_until="domcontentloaded", timeout=12000)
-                        title = await page.title()
-                        html_len = len(await page.content())
-                        n_cards = await page.evaluate("() => document.querySelectorAll('div.sh-dgr__content,li.sh-dlr__list-result,div.KZmu8e,div[data-sh-gr]').length")
-                        precios = await page.evaluate("() => (document.body.innerText.match(/\\$[\\d\\.]{3,}/g)||[]).slice(0,5)")
-                        return {"ok": True, "title": title[:60], "html_len": html_len, "cards_encontradas": n_cards, "precios_visibles": precios}
-                    finally:
-                        await page.close()
-                        await ctx.close()
-                        await browser.close()
-            resultado["playwright"] = _asyncio.run(_test_pw())
+            driver = None
+            try:
+                driver = _crear_driver_selenium()
+                driver.get("https://www.google.cl/search?q=tornillo+acero+precio+Chile&tbm=shop&hl=es&gl=cl")
+                import time as _t; _t.sleep(4)
+                title = driver.title
+                html_len = len(driver.page_source)
+                n_cards = driver.execute_script("return document.querySelectorAll('div.sh-dgr__content,li.sh-dlr__list-result,div.KZmu8e,div[data-sh-gr]').length")
+                precios = driver.execute_script("return (document.body.innerText.match(/\\$[\\d\\.]{3,}/g)||[]).slice(0,5)")
+                resultado["selenium"] = {"ok": True, "title": title[:60], "html_len": html_len, "cards": n_cards, "precios": precios}
+            except Exception as e:
+                resultado["selenium"] = {"ok": False, "error": str(e)[:200]}
+            finally:
+                if driver:
+                    try: driver.quit()
+                    except: pass
     except Exception as e:
         resultado["playwright"] = {"ok": False, "error": str(e)[:200]}
 
