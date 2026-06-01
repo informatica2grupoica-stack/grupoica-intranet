@@ -431,13 +431,20 @@ def buscar_google_shopping(producto: str, limite: int = 15):
         const res = [];
         const seen = new Set();
 
-        // Estrategia 1: buscar h3 con precio cerca (estructura actual Google Shopping 2024-2025)
+        // Limpiar nombre de texto basura de Google Shopping
+        function limpiarNombre(t) {
+            t = t.replace(/\\.\\s*(Precio actual|precio actual|DESCUENTO|ahora|Comprar en|Ver más)[^$]*/g, '');
+            t = t.replace(/\\s+(Precio actual|precio actual|DESCUENTO|ahora)[^$]*/g, '');
+            t = t.replace(/\\s{2,}/g, ' ').trim();
+            return t;
+        }
+
+        // Estrategia 1: buscar h3 con precio cerca
         for (const h of document.querySelectorAll('h3,h4')) {
-            const nombre = h.innerText.trim();
+            let nombre = limpiarNombre(h.innerText.trim());
             if (!nombre || nombre.length < 4) continue;
-            // Subir hasta encontrar un contenedor con precio
             let container = h;
-            for (let i = 0; i < 6; i++) {
+            for (let i = 0; i < 7; i++) {
                 container = container.parentElement;
                 if (!container) break;
                 const txt = container.innerText || '';
@@ -445,15 +452,16 @@ def buscar_google_shopping(producto: str, limite: int = 15):
                 if (pm) {
                     const a = container.querySelector('a[href]');
                     const link = a ? a.href : '';
-                    const key = nombre + pm[0];
+                    const key = nombre.substring(0, 30) + pm[0];
                     if (!seen.has(key)) {
                         seen.add(key);
-                        // Buscar tienda: texto corto sin precio ni nombre
+                        // Buscar tienda: elemento con dominio .cl o nombre corto
                         let tienda = '';
-                        for (const span of container.querySelectorAll('span,div')) {
-                            const t = span.innerText.trim();
-                            if (t && t.length > 2 && t.length < 50 && !t.includes('$') && t !== nombre) {
-                                tienda = t; break;
+                        for (const el of container.querySelectorAll('span,div,a')) {
+                            const t = el.innerText.trim();
+                            if (t && t.length > 2 && t.length < 50 && !t.includes('$') && t !== nombre
+                                && !t.match(/^[\\d\\.]+$/) && !t.includes('Precio') && !t.includes('DESCUENTO')) {
+                                if (t.includes('.cl') || t.length < 30) { tienda = t; break; }
                             }
                         }
                         res.push({nombre, precio: pm[0], link, tienda});
@@ -461,21 +469,29 @@ def buscar_google_shopping(producto: str, limite: int = 15):
                     break;
                 }
             }
-            if (res.length >= 25) break;
+            if (res.length >= 30) break;
         }
 
-        // Estrategia 2: aria-label con precio (fallback)
-        if (!res.length) {
-            for (const el of document.querySelectorAll('[aria-label]')) {
-                const lbl = el.getAttribute('aria-label') || '';
-                const pm = lbl.match(/\\$\\s?[\\d\\.]{3,}/);
-                if (pm && lbl.length > 8 && !seen.has(lbl)) {
-                    seen.add(lbl);
-                    res.push({nombre: lbl.replace(pm[0],'').trim(), precio: pm[0], link: '', tienda: ''});
-                }
-                if (res.length >= 25) break;
-            }
+        // Estrategia 2: aria-label con precio completo (incluye nombre+precio+tienda)
+        for (const el of document.querySelectorAll('[aria-label]')) {
+            const lbl = el.getAttribute('aria-label') || '';
+            if (lbl.length < 10) continue;
+            const pm = lbl.match(/\\$\\s?[\\d\\.]{3,}/);
+            if (!pm) continue;
+            // Extraer nombre: texto antes de "Precio actual" o "ahora" o "$"
+            let nombre = lbl.split(/\\.\\s*(Precio actual|ahora|DESCUENTO)/)[0].trim();
+            nombre = limpiarNombre(nombre);
+            if (nombre.length < 4) continue;
+            const key = nombre.substring(0, 30) + pm[0];
+            if (seen.has(key)) continue;
+            seen.add(key);
+            // Tienda: texto entre precio y fin
+            const tiendaM = lbl.match(/Precio actual:\\s*([^.]+)/);
+            const tienda = tiendaM ? tiendaM[1].trim().substring(0, 40) : '';
+            res.push({nombre, precio: pm[0], link: el.href || '', tienda});
+            if (res.length >= 30) break;
         }
+
         return res;
         """
         # Detectar página de rate limit / CAPTCHA
