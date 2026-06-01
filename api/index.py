@@ -638,50 +638,83 @@ def buscar_duckduckgo(producto: str, limite: int = 12):
         return []
 
 
-# ─── MercadoLibre Chile — API pública oficial (sin token, sin costo) ─────────
-# Documentación: https://developers.mercadolibre.cl/es_ar/items-y-busquedas
-# Límite free tier: 10.000 requests/día — más que suficiente para 70 productos
+# ─── MercadoLibre Chile — scraping del website (API requiere OAuth) ───────────
+# La API pública da 403 desde datacenter IPs. El website funciona desde IP residencial.
 
 def buscar_mercadolibre(producto: str, limite: int = 12):
     cache_key = get_cache_key(f"meli_{producto}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
+    if not BS4_DISPONIBLE:
+        return []
     try:
+        q = urllib.parse.quote(producto)
         r = requests.get(
-            "https://api.mercadolibre.com/sites/MLC/search",
-            params={"q": producto, "limit": min(limite * 2, 20), "sort": "relevance"},
-            headers={"Accept": "application/json", "Accept-Language": "es-CL"},
-            timeout=(4, 8),
+            f"https://listado.mercadolibre.cl/{urllib.parse.quote(producto.replace(' ', '-'))}",
+            params={"_NoIndex": "True"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+                "Accept-Language": "es-CL,es;q=0.9",
+                "Referer": "https://www.mercadolibre.cl/",
+            },
+            timeout=(5, 10),
         )
-        if r.status_code != 200:
+        if r.status_code not in (200, 301, 302):
             print(f"  [MeLi] HTTP {r.status_code}")
             return []
-        data = r.json()
+
+        soup = BeautifulSoup(r.text, "lxml")
         resultados = []
-        for item in data.get("results", []):
-            nombre = limpiar_nombre(item.get("title", ""))
+
+        # Selectores actuales MercadoLibre Chile (2024-2025)
+        items = (soup.select("li.ui-search-layout__item")
+                 or soup.select("div.ui-search-result__wrapper")
+                 or soup.select(".andes-card"))
+
+        for item in items:
+            # Título
+            title_el = (item.select_one("h2.ui-search-item__title")
+                        or item.select_one(".poly-component__title")
+                        or item.select_one("[class*='title']"))
+            if not title_el:
+                continue
+            nombre = limpiar_nombre(title_el.get_text(strip=True))
             if len(nombre) < 4:
                 continue
-            precio = item.get("price", 0)
-            if not precio or precio < 500:
+
+            # Precio — fracción entera
+            precio_el = item.select_one("span.andes-money-amount__fraction")
+            if not precio_el:
+                # fallback: buscar cualquier monto en CLP
+                pm = re.search(r'\$([\d\.]{3,})', item.get_text())
+                if not pm:
+                    continue
+                precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+            else:
+                precio = limpiar_precio(re.sub(r'[^\d]', '', precio_el.get_text(strip=True)))
+            if not precio:
                 continue
-            # Solo Chile — IDs chilenos empiezan con MLC
-            item_id = item.get("id", "")
-            if not item_id.startswith("MLC"):
-                continue
-            permalink = item.get("permalink", "")
-            tienda_info = item.get("seller", {})
-            tienda = tienda_info.get("nickname", "MercadoLibre CL")[:40]
+
+            # Link
+            link_el = item.select_one("a[href*='mercadolibre.cl']") or item.select_one("a[href]")
+            url = link_el.get("href", "").split("?")[0] if link_el else ""
+
+            # Vendedor
+            seller_el = item.select_one(".ui-search-official-store-label, [class*='seller']")
+            tienda = seller_el.get_text(strip=True)[:40] if seller_el else "MercadoLibre CL"
+
             resultados.append({
                 "tienda": tienda,
                 "nombre": nombre[:150],
-                "precio_con_iva": round(float(precio)),
-                "url": permalink,
+                "precio_con_iva": precio,
+                "url": url,
                 "fuente": "mercadolibre_cl",
                 "pais": "CL",
             })
             if len(resultados) >= limite:
                 break
+
         if resultados:
             cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
         print(f"  [MeLi] {len(resultados)} resultados")
@@ -1120,7 +1153,7 @@ def health():
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
         "fuentes": ["MercadoLibre CL (API)", "Google Shopping", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.4"
+        "version": "6.5"
     })
 
 
@@ -1202,35 +1235,49 @@ def diagnostico():
     except Exception as e:
         resultado["sodimac"] = {"ok": False, "error": str(e)}
 
-    # Test VTEX Easy — prueba ambos endpoints
-    for endpoint, label in [
-        ("https://www.easy.cl/api/io/_v/api/intelligent-search/product_search", "vtex_easy_io"),
-        ("https://www.easy.cl/api/catalog_system/pub/products/search", "vtex_easy_catalog"),
-    ]:
+    # Test VTEX — prueba account subdomains y endpoints alternativos
+    vtex_tests = [
+        ("easy_vtex_account",    "https://easy.vtexcommercestable.com.br/api/catalog_system/pub/products/search?ft=tornillo&_from=0&_to=2"),
+        ("construmart_vtex_acct","https://construmart.vtexcommercestable.com.br/api/catalog_system/pub/products/search?ft=tornillo&_from=0&_to=2"),
+        ("easy_s_endpoint",      "https://www.easy.cl/s?q=tornillo&map=ft&_from=0&_to=2"),
+        ("easy_search_json",     "https://www.easy.cl/api/catalog_system/pub/products/search?fq=ft:tornillo&_from=0&_to=2"),
+    ]
+    for label, url in vtex_tests:
         try:
-            params = {"query": "tornillo", "count": 3} if "intelligent" in endpoint else {"ft": "tornillo", "_from": 0, "_to": 2}
-            r = requests.get(endpoint, params=params,
-                             headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=7)
+            r = requests.get(url, headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=7)
+            ct = r.headers.get("content-type", "")
             try:
                 body = r.json()
                 n = len(body) if isinstance(body, list) else len(body.get("products", body.get("items", [])))
             except Exception:
                 body = {}
                 n = 0
-            resultado[label] = {"http": r.status_code, "resultados": n, "body_preview": r.text[:200]}
+            resultado[label] = {
+                "http": r.status_code,
+                "content_type": ct[:60],
+                "resultados": n,
+                "body_preview": r.text[:150],
+            }
         except Exception as e:
-            resultado[label] = {"error": str(e)}
+            resultado[label] = {"error": str(e)[:100]}
 
-    # Test VTEX Construmart — igual
+    # Test MercadoLibre website (no API)
     try:
-        r = requests.get(
-            "https://www.construmart.cl/api/io/_v/api/intelligent-search/product_search",
-            params={"query": "tornillo", "count": 3},
-            headers={**HEADERS_BROWSER, "Accept": "application/json"}, timeout=7,
+        r_web = requests.get(
+            "https://listado.mercadolibre.cl/tornillo-acero",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "Accept-Language": "es-CL"},
+            timeout=8,
         )
-        resultado["construmart_io"] = {"http": r.status_code, "body_preview": r.text[:200]}
+        items_web = buscar_mercadolibre("tornillo acero", 3)
+        resultado["mercadolibre_web"] = {
+            "ok": len(items_web) > 0,
+            "http": r_web.status_code,
+            "html_len": len(r_web.text),
+            "resultados": len(items_web),
+            "muestra": items_web[0].get("nombre", "") if items_web else "",
+        }
     except Exception as e:
-        resultado["construmart_io"] = {"error": str(e)}
+        resultado["mercadolibre_web"] = {"ok": False, "error": str(e)}
 
     alguna_ok = any(v.get("ok") for v in resultado.values())
     return jsonify({
@@ -1349,7 +1396,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.4")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.5")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
