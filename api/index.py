@@ -1287,6 +1287,60 @@ def diagnostico():
     })
 
 
+@app.route("/python/debug-html", methods=["GET"])
+def debug_html():
+    """Devuelve fragmento del HTML real para identificar selectores CSS."""
+    fuente = request.args.get("fuente", "gshop")
+    q = request.args.get("q", "tornillo acero")
+
+    if fuente == "gshop":
+        r = requests.get(
+            "https://www.google.cl/search",
+            params={"q": q + " precio Chile", "tbm": "shop", "hl": "es", "gl": "cl", "num": 10},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                     "Accept-Language": "es-CL,es;q=0.9"},
+            timeout=10,
+        )
+        html = r.text
+        # Extraer clases CSS únicas del HTML para identificar estructura
+        import re as _re
+        clases = _re.findall(r'class="([^"]{5,60})"', html)
+        clases_unicas = list(dict.fromkeys(clases))[:80]
+        # Buscar divs con precio
+        fragmentos_precio = _re.findall(r'.{0,100}\$[\d\.]{3,}.{0,100}', html)[:10]
+        return jsonify({
+            "fuente": "google_shopping",
+            "http": r.status_code,
+            "html_len": len(html),
+            "clases_css": clases_unicas,
+            "fragmentos_con_precio": fragmentos_precio[:8],
+            "html_inicio": html[5000:7000],
+        })
+
+    elif fuente == "meli":
+        r = requests.get(
+            f"https://listado.mercadolibre.cl/{urllib.parse.quote(q.replace(' ','-'))}",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                     "Accept-Language": "es-CL,es;q=0.9"},
+            timeout=10,
+        )
+        html = r.text
+        import re as _re
+        clases = _re.findall(r'class="([^"]{5,60})"', html)
+        clases_unicas = list(dict.fromkeys(clases))[:80]
+        fragmentos_precio = _re.findall(r'.{0,100}\$[\d\.]{3,}.{0,100}', html)[:10]
+        return jsonify({
+            "fuente": "mercadolibre_web",
+            "http": r.status_code,
+            "html_len": len(html),
+            "clases_css": clases_unicas,
+            "fragmentos_con_precio": fragmentos_precio[:8],
+            "html_inicio": html[3000:5000],
+        })
+
+    return jsonify({"error": "fuente inválida — usa ?fuente=gshop o ?fuente=meli"})
+
+
 @app.route("/python/cache/clear", methods=["POST"])
 def clear_cache():
     cache_resultados.clear()
