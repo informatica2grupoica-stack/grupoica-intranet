@@ -18,31 +18,14 @@ except ImportError:
     BS4_DISPONIBLE = False
 
 try:
-    from playwright.sync_api import sync_playwright
+    # Usar async_api — NO necesita greenlet (compatible con Python 3.14)
+    from playwright.async_api import async_playwright as _async_playwright
+    import asyncio as _asyncio
     PLAYWRIGHT_DISPONIBLE = True
     PLAYWRIGHT_ERROR = None
 except Exception as _pw_err:
     PLAYWRIGHT_DISPONIBLE = False
     PLAYWRIGHT_ERROR = str(_pw_err)
-
-# Browser persistente — se lanza una sola vez y se reutiliza
-_pw_instance = None
-_pw_browser = None
-
-def _get_browser():
-    global _pw_instance, _pw_browser
-    try:
-        if _pw_browser and _pw_browser.is_connected():
-            return _pw_browser
-    except Exception:
-        pass
-    _pw_instance = sync_playwright().start()
-    _pw_browser = _pw_instance.chromium.launch(
-        headless=True,
-        args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-              "--lang=es-CL", "--disable-blink-features=AutomationControlled"],
-    )
-    return _pw_browser
 try:
     import openpyxl
     OPENPYXL_DISPONIBLE = True
@@ -395,89 +378,80 @@ def buscar_google_shopping(producto: str, limite: int = 15):
     cache_key = get_cache_key(f"gshop_{producto}", limite)
     if cache_key in cache_resultados:
         return cache_resultados[cache_key]['data']
-
-    if PLAYWRIGHT_DISPONIBLE:
-        return _buscar_gshop_playwright(producto, limite, cache_key)
-    print("  [GShop] Playwright no disponible")
-    return []
-
-
-def _buscar_gshop_playwright(producto: str, limite: int, cache_key: str):
-    """Google Shopping con Chromium headless — ejecuta JS real, ve los precios."""
+    if not PLAYWRIGHT_DISPONIBLE:
+        print(f"  [GShop] Playwright no disponible: {PLAYWRIGHT_ERROR}")
+        return []
     try:
-        browser = _get_browser()
-        ctx = browser.new_context(
-            locale="es-CL",
-            timezone_id="America/Santiago",
+        return _asyncio.run(_gshop_async(producto, limite, cache_key))
+    except Exception as e:
+        print(f"  [GShop] Error: {e}")
+        return []
+
+
+async def _gshop_async(producto: str, limite: int, cache_key: str):
+    """Google Shopping con async Playwright — no necesita greenlet."""
+    JS_EXTRACT = """() => {
+        const res = [];
+        const cards = document.querySelectorAll(
+            'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]'
+        );
+        for (const card of cards) {
+            const h = card.querySelector('h3,h4,[role="heading"]');
+            const nombre = h ? h.innerText.trim() : '';
+            const priceEl = card.querySelector('b,strong,[class*="a8Pe"],[class*="e10tw"]');
+            const precio = priceEl ? priceEl.innerText.trim() : '';
+            const a = card.querySelector('a');
+            const link = a ? a.href : '';
+            const storeEl = card.querySelector('[class*="aULz"],[class*="IuHn"],[class*="E5oc"]');
+            const tienda = storeEl ? storeEl.innerText.trim() : '';
+            if (nombre && precio) res.push({nombre, precio, link, tienda});
+        }
+        // Fallback: aria-labels con precio
+        if (res.length === 0) {
+            const seen = new Set();
+            for (const el of document.querySelectorAll('[aria-label]')) {
+                const lbl = el.getAttribute('aria-label') || '';
+                if (lbl.includes('$') && !seen.has(lbl)) {
+                    seen.add(lbl);
+                    res.push({nombre: lbl, precio: lbl, link: '', tienda: ''});
+                }
+            }
+        }
+        return res;
+    }"""
+    async with _async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-gpu", "--lang=es-CL",
+                  "--disable-blink-features=AutomationControlled"]
+        )
+        ctx = await browser.new_context(
+            locale="es-CL", timezone_id="America/Santiago",
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         )
-        page = ctx.new_page()
+        page = await ctx.new_page()
         try:
             url = f"https://www.google.cl/search?q={urllib.parse.quote(producto + ' precio Chile')}&tbm=shop&hl=es&gl=cl&num=20"
-            page.goto(url, wait_until="domcontentloaded", timeout=15000)
-
-            # Esperar que carguen las tarjetas de productos
+            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
             try:
-                page.wait_for_selector(
-                    "div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, "
-                    "div[data-sh-gr], .sh-pr__product-results-grid",
+                await page.wait_for_selector(
+                    "div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]",
                     timeout=8000
                 )
             except Exception:
-                pass  # continuar aunque no matchee el selector exacto
-
-            html = page.content()
-
-            # Extraer productos via JavaScript directamente desde la página renderizada
-            productos_js = page.evaluate("""() => {
-                const resultados = [];
-                // Buscar todos los elementos con precio en la página
-                const allEls = document.querySelectorAll('[aria-label]');
-                const visto = new Set();
-                for (const el of allEls) {
-                    const label = el.getAttribute('aria-label') || '';
-                    if (label.includes('$') && label.length > 5) {
-                        const match = label.match(/\\$([\\d\\.]+)/);
-                        if (match && !visto.has(label)) {
-                            visto.add(label);
-                            resultados.push({tipo: 'aria', texto: label});
-                        }
-                    }
-                }
-                // Buscar tarjetas de producto completas
-                const cards = document.querySelectorAll(
-                    'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, ' +
-                    'div[data-sh-gr], div[class*="xcR"], div[class*="i0X6"]'
-                );
-                for (const card of cards) {
-                    const h = card.querySelector('h3, h4, [role="heading"]');
-                    const nombre = h ? h.innerText.trim() : '';
-                    const priceEl = card.querySelector('[class*="a8Pe"], [class*="e10tw"], b, strong');
-                    const precio = priceEl ? priceEl.innerText.trim() : card.innerText.match(/\\$[\\d\\.]+/) ? card.innerText.match(/\\$[\\d\\.]+/)[0] : '';
-                    const link = card.querySelector('a') ? card.querySelector('a').href : '';
-                    const storeEl = card.querySelector('[class*="aULz"], [class*="IuHn"], [class*="E5oc"]');
-                    const tienda = storeEl ? storeEl.innerText.trim() : '';
-                    if (nombre && precio) resultados.push({tipo:'card', nombre, precio, link, tienda});
-                }
-                return resultados;
-            }""")
-
+                pass
+            items = await page.evaluate(JS_EXTRACT)
             resultados = []
             vistos = set()
-
-            # Procesar tarjetas completas primero
-            for item in productos_js:
-                if item.get("tipo") != "card":
-                    continue
+            for item in items:
                 nombre = limpiar_nombre(item.get("nombre", ""))
                 if len(nombre) < 4 or nombre in vistos:
                     continue
-                precio_raw = re.sub(r'[^\d]', '', item.get("precio", ""))
-                precio = limpiar_precio(precio_raw)
+                precio = limpiar_precio(re.sub(r'[^\d]', '', item.get("precio", "")))
                 if not precio:
                     continue
                 url_prod = item.get("link", "")
-                tienda = item.get("tienda", "Google Shopping")[:40] or "Google Shopping"
+                tienda = (item.get("tienda", "") or "Google Shopping")[:40]
                 if any(ind in url_prod.lower() for ind in INDICADORES_EXTRANJEROS):
                     continue
                 vistos.add(nombre)
@@ -491,44 +465,14 @@ def _buscar_gshop_playwright(producto: str, limite: int, cache_key: str):
                 })
                 if len(resultados) >= limite:
                     break
-
-            # Fallback: aria-label con precio si no hubo tarjetas
-            if not resultados:
-                for item in productos_js:
-                    if item.get("tipo") != "aria":
-                        continue
-                    texto = item.get("texto", "")
-                    pm = re.search(r'\$\s*([\d\.]{3,})', texto)
-                    if not pm:
-                        continue
-                    precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
-                    nombre = limpiar_nombre(re.sub(r'\$[\d\.,]+', '', texto).strip())
-                    if not precio or len(nombre) < 4 or nombre in vistos:
-                        continue
-                    vistos.add(nombre)
-                    resultados.append({
-                        "tienda": "Google Shopping",
-                        "nombre": nombre[:150],
-                        "precio_con_iva": precio,
-                        "url": "",
-                        "fuente": "google_shopping",
-                        "pais": "CL",
-                    })
-                    if len(resultados) >= limite:
-                        break
-
             if resultados:
                 cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
-            print(f"  [GShop] {len(resultados)} resultados (Playwright)")
+            print(f"  [GShop] {len(resultados)} resultados (async Playwright)")
             return resultados
-
         finally:
-            page.close()
-            ctx.close()
-
-    except Exception as e:
-        print(f"  [GShop] Error Playwright: {e}")
-        return []
+            await page.close()
+            await ctx.close()
+            await browser.close()
 
 
 # ─── DuckDuckGo HTML (GET — maneja 200 y 202) ────────────────────────────────
@@ -1272,37 +1216,25 @@ def diagnostico():
         if not PLAYWRIGHT_DISPONIBLE:
             resultado["playwright"] = {"ok": False, "error": f"playwright no disponible: {PLAYWRIGHT_ERROR}"}
         else:
-            browser = _get_browser()
-            ctx = browser.new_context(locale="es-CL",
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            page = ctx.new_page()
-            try:
-                page.goto("https://www.google.cl/search?q=tornillo+acero+precio+Chile&tbm=shop&hl=es&gl=cl",
-                          wait_until="domcontentloaded", timeout=12000)
-                title = page.title()
-                html_len = len(page.content())
-                # Contar elementos tipo card
-                n_cards = page.evaluate("""() => {
-                    return document.querySelectorAll(
-                        'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]'
-                    ).length;
-                }""")
-                # Buscar cualquier precio en la página
-                precios = page.evaluate("""() => {
-                    const txt = document.body.innerText;
-                    const matches = txt.match(/\\$[\\d\\.]{3,}/g) || [];
-                    return matches.slice(0, 5);
-                }""")
-                resultado["playwright"] = {
-                    "ok": True,
-                    "title": title[:60],
-                    "html_len": html_len,
-                    "cards_encontradas": n_cards,
-                    "precios_visibles": precios,
-                }
-            finally:
-                page.close()
-                ctx.close()
+            async def _test_pw():
+                async with _async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu"])
+                    ctx = await browser.new_context(locale="es-CL",
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    page = await ctx.new_page()
+                    try:
+                        await page.goto("https://www.google.cl/search?q=tornillo+acero+precio+Chile&tbm=shop&hl=es&gl=cl",
+                                        wait_until="domcontentloaded", timeout=12000)
+                        title = await page.title()
+                        html_len = len(await page.content())
+                        n_cards = await page.evaluate("() => document.querySelectorAll('div.sh-dgr__content,li.sh-dlr__list-result,div.KZmu8e,div[data-sh-gr]').length")
+                        precios = await page.evaluate("() => (document.body.innerText.match(/\\$[\\d\\.]{3,}/g)||[]).slice(0,5)")
+                        return {"ok": True, "title": title[:60], "html_len": html_len, "cards_encontradas": n_cards, "precios_visibles": precios}
+                    finally:
+                        await page.close()
+                        await ctx.close()
+                        await browser.close()
+            resultado["playwright"] = _asyncio.run(_test_pw())
     except Exception as e:
         resultado["playwright"] = {"ok": False, "error": str(e)[:200]}
 
