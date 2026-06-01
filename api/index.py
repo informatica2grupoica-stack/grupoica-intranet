@@ -638,6 +638,62 @@ def buscar_duckduckgo(producto: str, limite: int = 12):
         return []
 
 
+# ─── MercadoLibre Chile — API pública oficial (sin token, sin costo) ─────────
+# Documentación: https://developers.mercadolibre.cl/es_ar/items-y-busquedas
+# Límite free tier: 10.000 requests/día — más que suficiente para 70 productos
+
+def buscar_mercadolibre(producto: str, limite: int = 12):
+    cache_key = get_cache_key(f"meli_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        r = requests.get(
+            "https://api.mercadolibre.com/sites/MLC/search",
+            params={"q": producto, "limit": min(limite * 2, 20), "sort": "relevance"},
+            headers={"Accept": "application/json", "Accept-Language": "es-CL"},
+            timeout=(4, 8),
+        )
+        if r.status_code != 200:
+            print(f"  [MeLi] HTTP {r.status_code}")
+            return []
+        data = r.json()
+        resultados = []
+        for item in data.get("results", []):
+            nombre = limpiar_nombre(item.get("title", ""))
+            if len(nombre) < 4:
+                continue
+            precio = item.get("price", 0)
+            if not precio or precio < 500:
+                continue
+            # Solo Chile — filtrar items con currency CLP
+            if item.get("currency_id", "CLP") != "CLP":
+                continue
+            permalink = item.get("permalink", "")
+            # Solo MLC (Chile) — no Argentina ni México
+            if "/MLC" not in item.get("id", "") and "articulo.mercadolibre.cl" not in permalink:
+                if not permalink.endswith(".cl") and "mercadolibre.cl" not in permalink:
+                    continue
+            tienda_info = item.get("seller", {})
+            tienda = tienda_info.get("nickname", "MercadoLibre CL")[:40]
+            resultados.append({
+                "tienda": tienda,
+                "nombre": nombre[:150],
+                "precio_con_iva": round(float(precio)),
+                "url": permalink,
+                "fuente": "mercadolibre_cl",
+                "pais": "CL",
+            })
+            if len(resultados) >= limite:
+                break
+        if resultados:
+            cache_resultados[cache_key] = {"data": resultados, "timestamp": time.time()}
+        print(f"  [MeLi] {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"  [MeLi] Error: {e}")
+        return []
+
+
 # ─── Sodimac Chile (API propia) ───────────────────────────────────────────────
 
 def buscar_sodimac(query: str, limite: int = 8):
@@ -855,12 +911,13 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         return t
     query_vtex = _sin_acentos(' '.join(palabras_clave[:5]))
 
-    print(f"  📡 GShop + DDG + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
+    print(f"  📡 MeLi + GShop + DDG + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
 
     # IMPORTANTE: NO usar "with" — espera todos los threads al salir aunque haya timeout
     ex = ThreadPoolExecutor(max_workers=12)
     try:
         futures = {
+            ex.submit(buscar_mercadolibre, producto, 12): "MercadoLibre",
             ex.submit(buscar_google_shopping, producto, limite): "Google Shopping",
             ex.submit(buscar_duckduckgo, producto, 12): "DuckDuckGo",
             ex.submit(buscar_sodimac, query_vtex, 8): "Sodimac",
@@ -1045,14 +1102,24 @@ def health():
         "status": "ok",
         "pais": "Chile 🇨🇱",
         "cache_size": len(cache_resultados),
-        "fuentes": ["Google Shopping (scraper)", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
-        "version": "6.2"
+        "fuentes": ["MercadoLibre CL (API)", "Google Shopping", "DuckDuckGo", "Sodimac"] + [s["nombre"] for s in VTEX_STORES],
+        "version": "6.3"
     })
 
 
 @app.route("/python/diagnostico", methods=["GET"])
 def diagnostico():
     resultado = {}
+
+    # Test MercadoLibre — API pública, debería funcionar siempre
+    try:
+        items = buscar_mercadolibre("tornillo acero", 5)
+        resultado["mercadolibre"] = {
+            "ok": len(items) > 0, "resultados": len(items),
+            "muestra": items[0].get("nombre", "") if items else "",
+        }
+    except Exception as e:
+        resultado["mercadolibre"] = {"ok": False, "error": str(e)}
 
     # Test Google Shopping — captura HTTP status real
     try:
@@ -1253,7 +1320,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
     print("=" * 60)
-    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.2")
+    print("🚀 BUSCADOR CHILE — GRUPO ICA v6.3")
     print("   FUENTES PRIMARIAS:")
     print("   • Google Shopping Chile (scraper tbm=shop — IP real)")
     print("   • DuckDuckGo Chile (scraper HTML — cualquier IP)")
