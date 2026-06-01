@@ -1252,6 +1252,19 @@ def diagnostico():
     except Exception as e:
         resultado["mercadolibre_web"] = {"ok": False, "error": str(e)}
 
+    # Info del Python que corre Flask
+    import sys as _sys, subprocess as _sub
+    resultado["python_info"] = {
+        "executable": _sys.executable,
+        "version": _sys.version[:30],
+    }
+    try:
+        pip_list = _sub.check_output([_sys.executable, "-m", "pip", "show", "playwright"],
+                                      capture_output=True, text=True, timeout=5)
+        resultado["python_info"]["playwright_pip"] = pip_list.stdout[:200] if pip_list.returncode == 0 else "no encontrado"
+    except Exception as ep:
+        resultado["python_info"]["playwright_pip"] = str(ep)[:100]
+
     # Test Playwright directo
     try:
         if not PLAYWRIGHT_DISPONIBLE:
