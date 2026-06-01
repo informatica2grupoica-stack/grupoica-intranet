@@ -108,8 +108,23 @@ async function buscarProductos(pregunta: string, limit = 15) {
 
   if (!palabras.length) return [];
 
-  // Búsqueda OR por palabra clave (ilike en nombre)
-  const orFilter = palabras.map((w) => `nombre.ilike.%${w}%`).join(',');
+  // Generar variantes singular/plural para cada palabra (tornillo↔tornillos)
+  const variantes = (w: string): string[] => {
+    const set = new Set<string>([w]);
+    if (w.length > 4) {
+      if (w.endsWith('s')) set.add(w.slice(0, -1));
+      else set.add(w + 's');
+      // raíz corta para coincidencias parciales (martill, tornill)
+      if (w.length > 6) set.add(w.slice(0, w.length - 1));
+    }
+    return [...set];
+  };
+
+  // Búsqueda OR por palabra clave (ilike en nombre, insensible a mayúsculas)
+  const orFilter = palabras
+    .flatMap(variantes)
+    .map((w) => `nombre.ilike.%${w}%`)
+    .join(',');
   const { data } = await supabase
     .from('productos_obuma')
     .select(TABLAS.productos_obuma.campos)
