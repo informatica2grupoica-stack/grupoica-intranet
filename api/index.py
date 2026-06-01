@@ -133,9 +133,10 @@ DOMINIOS_CHILE = {
 }
 
 INDICADORES_EXTRANJEROS = [
-    "amazon.com", "ebay.com", "aliexpress", "wish.com",
-    "walmart.com", "homedepot.com", "lowes.com",
-    ".com.ar", ".com.mx", ".com.pe", ".com.co",
+    "amazon.com", "ebay.com", "ebay", "amazon", "aliexpress", "wish.com",
+    "walmart.com", "walmart", "homedepot.com", "home depot", "lowes.com", "alibaba",
+    "etsy", "temu", "shein", "banggood", "dhgate",
+    ".com.ar", ".com.mx", ".com.pe", ".com.co", ".com.br",
     "mercadolibre.com.ar", "mercadolibre.com.mx",
 ]
 
