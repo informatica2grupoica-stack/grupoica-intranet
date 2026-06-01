@@ -1252,6 +1252,45 @@ def diagnostico():
     except Exception as e:
         resultado["mercadolibre_web"] = {"ok": False, "error": str(e)}
 
+    # Test Playwright directo
+    try:
+        if not PLAYWRIGHT_DISPONIBLE:
+            resultado["playwright"] = {"ok": False, "error": "playwright no instalado (pip install playwright)"}
+        else:
+            browser = _get_browser()
+            ctx = browser.new_context(locale="es-CL",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            page = ctx.new_page()
+            try:
+                page.goto("https://www.google.cl/search?q=tornillo+acero+precio+Chile&tbm=shop&hl=es&gl=cl",
+                          wait_until="domcontentloaded", timeout=12000)
+                title = page.title()
+                html_len = len(page.content())
+                # Contar elementos tipo card
+                n_cards = page.evaluate("""() => {
+                    return document.querySelectorAll(
+                        'div.sh-dgr__content, li.sh-dlr__list-result, div.KZmu8e, div[data-sh-gr]'
+                    ).length;
+                }""")
+                # Buscar cualquier precio en la página
+                precios = page.evaluate("""() => {
+                    const txt = document.body.innerText;
+                    const matches = txt.match(/\\$[\\d\\.]{3,}/g) || [];
+                    return matches.slice(0, 5);
+                }""")
+                resultado["playwright"] = {
+                    "ok": True,
+                    "title": title[:60],
+                    "html_len": html_len,
+                    "cards_encontradas": n_cards,
+                    "precios_visibles": precios,
+                }
+            finally:
+                page.close()
+                ctx.close()
+    except Exception as e:
+        resultado["playwright"] = {"ok": False, "error": str(e)[:200]}
+
     alguna_ok = any(v.get("ok") for v in resultado.values())
     return jsonify({
         "estado_general": "operativo" if alguna_ok else "diagnostico_detallado",
