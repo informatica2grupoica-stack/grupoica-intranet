@@ -1,6 +1,6 @@
 // app/api/buscar-proveedores-por-producto/route.ts
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseAdmin';
 
 export async function GET(request: Request) {
   const startTime = Date.now();

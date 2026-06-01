@@ -1,6 +1,6 @@
 // app/api/sincronizar-productos-obuma/route.ts
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseAdmin';
 
 interface OrdenCompra {
   compra_oc_id: string;

@@ -1,5 +1,5 @@
 // lib/deepseek/aprendizaje.ts
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseAdmin';
 
 interface AprendizajeData {
   producto_nombre: string;

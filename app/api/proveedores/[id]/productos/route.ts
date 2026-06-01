@@ -1,6 +1,6 @@
 // app/api/proveedores/[id]/productos/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseAdmin';
 
 // GET: Obtener todos los productos de un proveedor específico
 export async function GET(
