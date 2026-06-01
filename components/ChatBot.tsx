@@ -42,6 +42,7 @@ interface Usuario {
   id: string;
   email: string;
   nombre: string;
+  rol?: string;
 }
 
 export default function ChatBot() {
@@ -70,10 +71,17 @@ export default function ChatBot() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
+          // Traer rol/nombre del perfil para personalizar el asistente
+          const { data: perfil } = await supabase
+            .from('perfiles')
+            .select('nombre, rol')
+            .eq('user_id', session.user.id)
+            .single();
           setUsuario({
             id: session.user.id,
             email: session.user.email || '',
-            nombre: session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || 'Usuario'
+            nombre: perfil?.nombre || session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || 'Usuario',
+            rol: perfil?.rol || 'usuario'
           });
         }
       } catch (error) {
@@ -388,13 +396,21 @@ export default function ChatBot() {
         return;
       }
       
+      // Memoria: últimos 6 mensajes como contexto de conversación
+      const historialReciente = mensajes.slice(-6).map(m => ({
+        role: m.esUsuario ? 'user' : 'assistant',
+        content: m.texto,
+      }));
+
       // Consultar a DeepSeek con todos los datos
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           pregunta,
-          contexto: { 
+          usuario_rol: usuario?.rol || 'usuario',
+          historial_reciente: historialReciente,
+          contexto: {
             productos: productos,
             clientes: clientes
           }

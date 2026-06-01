@@ -1,554 +1,303 @@
 // app/api/deepseek/chat/route.ts
+// Motor del chatbot "Asistente Obuma" v2 — multi-tabla, memoria, aprendizaje y prompts por rol.
 import { NextResponse } from 'next/server';
 import { callDeepSeek } from '@/app/lib/deepseek/client';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface Producto {
-  nombre: string;
-  sku: string;
-  precio: number;
-  stock: number;
-  categoria?: string;
-}
+// ─── Base de conocimiento: qué es el sistema y qué hace cada módulo ──────────
+// Esto le da al bot contexto del PROYECTO, no solo de la base de datos.
+const CONOCIMIENTO_SISTEMA = `
+SISTEMA: Intranet de Grupo ICA Chile (empresa de construcción/ferretería y licitaciones públicas).
+Integrado con el ERP Obuma (productos, clientes, stock, órdenes de compra).
+MÓDULOS:
+- Productos (Obuma): catálogo con SKU, precios (costo/neto/total con IVA 19%), stock por bodega.
+- Clientes (Obuma): empresas, RUT, crédito, condiciones de pago.
+- Proveedores: empresas que nos venden, con categoría, contacto y productos que ofrecen.
+- Buscador de precios: cotiza productos en tiendas chilenas (Sodimac, Easy, Construmart, etc.).
+- Tareas: gestión del equipo con prioridad, estado y responsable.
+- RRHH: empleados, asistencias, contratos, capacitaciones, evaluaciones.
+- Dispositivos: equipos asignados a colaboradores.
+REGLA DE NEGOCIO: el IVA en Chile es 19% (factor 1.19). Precio total = neto × 1.19.
+`.trim();
 
-interface DatosResponse {
-  tipo: string;
-  datos: any[];
-  total: number;
-  termino?: string;
-  fuente?: string;
-  esLista?: boolean;
-  esPreguntaGeneral?: boolean;
-  noEncontrado?: boolean;
-  error?: boolean;
-  productosTotal?: number;
-  clientesTotal?: number;
-  proveedoresTotal?: number;
-  tareasTotal?: number;
-  dispositivosTotal?: number;
-  usuariosTotal?: number;
-  mensajesTotal?: number;
-}
-
-// Esquema completo de la base de datos
-const databaseSchema = {
-  tablas: {
-    productos_obuma: {
-      descripcion: "Productos del inventario",
-      campos: ["nombre", "sku", "precio_total", "stock_actual", "categoria_nombre"],
-      keywords: ["producto", "inventario", "stock", "precio", "sku"]
-    },
-    clientes_obuma: {
-      descripcion: "Clientes de la empresa",
-      campos: ["razon_social", "rut", "email", "telefono", "estado"],
-      keywords: ["cliente", "clientes", "empresa", "rut", "razon social"]
-    },
-    proveedores: {
-      descripcion: "Proveedores de la empresa",
-      campos: ["nombre_empresa", "rut_empresa", "categoria", "email_contacto", "telefono"],
-      keywords: ["proveedor", "proveedores", "empresa"]
-    },
-    proveedores_transporte: {
-      descripcion: "Proveedores de transporte",
-      campos: ["nombre", "tipo", "correo", "direccion"],
-      keywords: ["transporte", "camión", "flete", "logística"]
-    },
-    tareas: {
-      descripcion: "Tareas del equipo",
-      campos: ["titulo", "prioridad", "estado", "asignado_a", "fecha_limite"],
-      keywords: ["tarea", "tareas", "pendiente", "asignada", "prioridad"]
-    },
-    perfiles: {
-      descripcion: "Usuarios del sistema",
-      campos: ["nombre", "apellido", "email", "rol", "cargo"],
-      keywords: ["usuario", "usuarios", "administrador", "admin", "perfil"]
-    },
-    dispositivos: {
-      descripcion: "Equipos y dispositivos",
-      campos: ["nombre_equipo", "tipo", "marca", "modelo", "estado", "asignado_a"],
-      keywords: ["dispositivo", "equipo", "computador", "notebook", "pc", "teléfono"]
-    },
-    mensajes: {
-      descripcion: "Mensajes internos",
-      campos: ["contenido", "emisor_id", "receptor_id", "leido", "created_at"],
-      keywords: ["mensaje", "mensajes", "conversación", "chat"]
-    },
-    chatbot_historial: {
-      descripcion: "Historial de conversaciones",
-      campos: ["pregunta", "respuesta", "created_at"],
-      keywords: ["historial", "conversación anterior"]
-    },
-    analisis_competencia: {
-      descripcion: "Análisis de precios de la competencia",
-      campos: ["termino_busqueda", "nombre_producto_tienda", "precio_num"],
-      keywords: ["competencia", "precio competencia"]
-    },
-    registros_precios: {
-      descripcion: "Historial de precios",
-      campos: ["nombre_producto", "tienda", "precio_valor", "fecha"],
-      keywords: ["historial precio", "evolución precio"]
-    },
-    ia_aprendizaje: {
-      descripcion: "Aprendizaje de IA para SKUs",
-      campos: ["producto_nombre", "sku_generado", "c1", "c2", "c3", "c4"],
-      keywords: ["aprendizaje", "sugerencia", "patrón"]
-    },
-    comentarios_tareas: {
-      descripcion: "Comentarios en tareas",
-      campos: ["contenido", "created_at"],
-      keywords: ["comentario", "comentarios"]
-    }
-  }
+// ─── Tablas consultables (con columnas seguras y palabras clave) ─────────────
+const TABLAS: Record<string, { campos: string; keywords: string[]; label: string }> = {
+  productos_obuma: {
+    label: 'productos',
+    campos: 'nombre, sku, precio_costo, precio_neto, precio_total, stock_actual, stock_minimo, categoria_nombre, bodega',
+    keywords: ['producto', 'productos', 'inventario', 'stock', 'precio', 'sku', 'catalogo', 'catálogo', 'articulo', 'artículo', 'mercaderia', 'mercadería'],
+  },
+  clientes_obuma: {
+    label: 'clientes',
+    campos: 'razon_social, nombre_fantasia, rut, email, telefono, comuna, ciudad, vendedor, credito_aprobado, dias_pago',
+    keywords: ['cliente', 'clientes', 'razon social', 'razón social', 'comprador'],
+  },
+  proveedores: {
+    label: 'proveedores',
+    campos: 'nombre_empresa, rut_empresa, categoria, tipo_servicio, email_contacto, telefono, calificacion, comuna, ciudad',
+    keywords: ['proveedor', 'proveedores', 'abastecedor'],
+  },
+  proveedores_transporte: {
+    label: 'transporte',
+    campos: 'nombre, tipo, rut, correo, direccion, vendedor',
+    keywords: ['transporte', 'camion', 'camión', 'flete', 'logistica', 'logística', 'despacho'],
+  },
+  tareas: {
+    label: 'tareas',
+    campos: 'titulo, descripcion, prioridad, estado, fecha_limite, proyecto',
+    keywords: ['tarea', 'tareas', 'pendiente', 'pendientes', 'asignada', 'proyecto'],
+  },
+  perfiles: {
+    label: 'usuarios',
+    campos: 'nombre, apellido, email, rol, cargo, activo',
+    keywords: ['usuario', 'usuarios', 'colaborador', 'empleado', 'personal', 'administrador', 'admin', 'perfil'],
+  },
+  dispositivos: {
+    label: 'dispositivos',
+    campos: 'nombre_equipo, tipo, marca, modelo, serie_imei, estado, numero_telefono',
+    keywords: ['dispositivo', 'equipo', 'computador', 'notebook', 'pc', 'telefono', 'teléfono', 'celular'],
+  },
+  registros_precios: {
+    label: 'historial de precios',
+    campos: 'nombre_producto, tienda, precio_valor, link, fecha',
+    keywords: ['historial precio', 'evolucion precio', 'evolución precio', 'cotizacion anterior', 'cotización anterior'],
+  },
+  analisis_competencia: {
+    label: 'competencia',
+    campos: 'termino_busqueda, nombre_producto_tienda, precio_num, tienda_url',
+    keywords: ['competencia', 'precio competencia', 'la competencia'],
+  },
 };
 
-// Función para normalizar texto (quitar tildes, mayúsculas)
-function normalizarTexto(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+function normalizar(t: string): string {
+  return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
-// Función para buscar productos en Supabase (BÚSQUEDA INTELIGENTE)
-async function buscarProductosEnSupabase(termino: string, limit: number = 20): Promise<Producto[]> {
-  console.log(`🔍 Búsqueda inteligente - Término original: "${termino}"`);
-  
-  try {
-    const terminoNormalizado = normalizarTexto(termino);
-    console.log(`📝 Término normalizado: "${terminoNormalizado}"`);
-    
-    // Dividir en palabras clave para búsqueda más flexible
-    const palabrasClave = terminoNormalizado.split(/\s+/).filter(p => p.length > 2);
-    console.log(`🔑 Palabras clave: ${palabrasClave.join(', ')}`);
-    
-    // Primero, obtener todos los productos activos
-    let query = supabase
+// Detecta TODAS las tablas relevantes (no solo una) → permite respuestas cruzadas
+function detectarTablas(pregunta: string): string[] {
+  const p = normalizar(pregunta);
+  const encontradas: string[] = [];
+  for (const [tabla, cfg] of Object.entries(TABLAS)) {
+    if (cfg.keywords.some((k) => p.includes(normalizar(k)))) encontradas.push(tabla);
+  }
+  return encontradas;
+}
+
+// Búsqueda de productos del lado de Supabase (escala a miles, no carga todo a memoria)
+async function buscarProductos(pregunta: string, limit = 15) {
+  const p = normalizar(pregunta);
+  // Extraer término: quitar palabras de relleno
+  const relleno = ['busca', 'buscar', 'encuentra', 'dame', 'muestra', 'muestrame', 'lista', 'listame', 'ver', 'tienes', 'hay', 'algun', 'alguna', 'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'producto', 'productos', 'precio', 'stock', 'sku', 'inventario', 'cuanto', 'cuantos'];
+  const palabras = p.split(/\s+/).filter((w) => w.length > 2 && !relleno.includes(w));
+
+  // SKU exacto
+  const skuMatch = pregunta.match(/\b(\d{6,})\b/);
+  if (skuMatch) {
+    const { data } = await supabase
       .from('productos_obuma')
-      .select('nombre, sku, precio_total, stock_actual, categoria_nombre')
-      .eq('activo', true);
-    
-    const { data: todosProductos, error: errorProductos } = await query;
-    
-    if (errorProductos) {
-      console.error(`❌ Error obteniendo productos:`, errorProductos);
-      return [];
-    }
-    
-    if (!todosProductos || todosProductos.length === 0) {
-      console.log(`⚠️ No hay productos en la base de datos`);
-      return [];
-    }
-    
-    console.log(`📊 Total productos en BD: ${todosProductos.length}`);
-    
-    // Búsqueda inteligente por SKU exacto (prioridad máxima)
-    const esSKU = /^\d{7,}$/.test(terminoNormalizado);
-    if (esSKU) {
-      const producto = todosProductos.find(p => p.sku === terminoNormalizado);
-      if (producto) {
-        console.log(`✅ Encontrado por SKU exacto: "${producto.nombre}"`);
-        return [{
-          nombre: producto.nombre,
-          sku: producto.sku,
-          precio: producto.precio_total || 0,
-          stock: producto.stock_actual || 0,
-          categoria: producto.categoria_nombre || ''
-        }];
-      }
-    }
-    
-    // Búsqueda por coincidencia de palabras clave
-    const resultados = todosProductos.filter(producto => {
-      const nombreNormalizado = normalizarTexto(producto.nombre);
-      
-      // Coincidencia exacta (prioridad alta)
-      if (nombreNormalizado === terminoNormalizado) {
-        return true;
-      }
-      
-      // Coincidencia por palabras clave (todas las palabras deben coincidir)
-      if (palabrasClave.length > 0) {
-        return palabrasClave.every(palabra => nombreNormalizado.includes(palabra));
-      }
-      
-      // Coincidencia parcial
-      return nombreNormalizado.includes(terminoNormalizado);
-    });
-    
-    console.log(`✅ Resultados encontrados: ${resultados.length}`);
-    
-    if (resultados.length > 0) {
-      resultados.slice(0, 5).forEach((p, idx) => {
-        console.log(`   ${idx+1}. "${p.nombre}" - SKU: ${p.sku}`);
-      });
-    }
-    
-    return resultados.slice(0, limit).map((p: any) => ({
-      nombre: p.nombre || '',
-      sku: p.sku || '',
-      precio: p.precio_total || 0,
-      stock: p.stock_actual || 0,
-      categoria: p.categoria_nombre || ''
-    }));
-    
-  } catch (error) {
-    console.error("❌ Error en búsqueda inteligente:", error);
-    return [];
+      .select(TABLAS.productos_obuma.campos)
+      .eq('sku', skuMatch[1])
+      .limit(1);
+    if (data && data.length) return data;
   }
-}
 
-// Función para obtener estadísticas completas
-async function obtenerEstadisticasCompletas(): Promise<any> {
-  const { count: productosCount } = await supabase
+  if (!palabras.length) return [];
+
+  // Búsqueda OR por palabra clave (ilike en nombre)
+  const orFilter = palabras.map((w) => `nombre.ilike.%${w}%`).join(',');
+  const { data } = await supabase
     .from('productos_obuma')
-    .select('*', { count: 'exact', head: true });
-  
-  console.log(`📊 Total productos en Supabase: ${productosCount || 0}`);
-  
-  const [clientes, proveedores, tareas, dispositivos, perfiles, mensajes] = await Promise.all([
-    supabase.from('clientes_obuma').select('*', { count: 'exact', head: true }),
-    supabase.from('proveedores').select('*', { count: 'exact', head: true }),
-    supabase.from('tareas').select('*', { count: 'exact', head: true }),
-    supabase.from('dispositivos').select('*', { count: 'exact', head: true }),
-    supabase.from('perfiles').select('*', { count: 'exact', head: true }),
-    supabase.from('mensajes').select('*', { count: 'exact', head: true })
-  ]);
-  
-  return {
-    productos: productosCount || 0,
-    clientes: clientes.count || 0,
-    proveedores: proveedores.count || 0,
-    tareas: tareas.count || 0,
-    dispositivos: dispositivos.count || 0,
-    usuarios: perfiles.count || 0,
-    mensajes: mensajes.count || 0
-  };
+    .select(TABLAS.productos_obuma.campos)
+    .eq('activo', true)
+    .or(orFilter)
+    .limit(limit);
+
+  // Priorizar los que contienen TODAS las palabras
+  const lista = data || [];
+  lista.sort((a: any, b: any) => {
+    const na = normalizar(a.nombre), nb = normalizar(b.nombre);
+    const ca = palabras.filter((w) => na.includes(w)).length;
+    const cb = palabras.filter((w) => nb.includes(w)).length;
+    return cb - ca;
+  });
+  return lista;
 }
 
-// Función para detectar intención del usuario
-function detectarIntencion(pregunta: string): string {
-  const p = pregunta.toLowerCase();
-  
-  const mapas = [
-    { tabla: "clientes_obuma", palabras: ["cliente", "clientes", "empresa", "rut", "razon social", "envapol", "brigada", "municipalidad"] },
-    { tabla: "productos_obuma", palabras: ["producto", "inventario", "stock", "precio", "sku", "catalogo"] },
-    { tabla: "proveedores", palabras: ["proveedor", "proveedores"] },
-    { tabla: "proveedores_transporte", palabras: ["transporte", "camión", "flete", "logística"] },
-    { tabla: "tareas", palabras: ["tarea", "tareas", "pendiente", "asignada"] },
-    { tabla: "perfiles", palabras: ["usuario", "usuarios", "administrador", "admin"] },
-    { tabla: "dispositivos", palabras: ["dispositivo", "equipo", "computador", "notebook", "pc"] },
-    { tabla: "mensajes", palabras: ["mensaje", "mensajes", "conversación", "chat"] },
-    { tabla: "analisis_competencia", palabras: ["competencia", "precio competencia"] },
-    { tabla: "registros_precios", palabras: ["historial precio", "evolución precio"] }
-  ];
-  
-  for (const mapa of mapas) {
-    if (mapa.palabras.some(palabra => p.includes(palabra))) {
-      return mapa.tabla;
-    }
+// Trae datos de una tabla genérica con filtro opcional
+async function fetchTabla(tabla: string, pregunta: string, limit = 15) {
+  const cfg = TABLAS[tabla];
+  if (!cfg) return { datos: [], total: 0 };
+  const p = normalizar(pregunta);
+
+  const { count } = await supabase.from(tabla).select('*', { count: 'exact', head: true });
+
+  if (tabla === 'productos_obuma') {
+    const datos = await buscarProductos(pregunta, limit);
+    return { datos, total: count || 0 };
   }
-  return "general";
+
+  let query = supabase.from(tabla).select(cfg.campos);
+
+  // Filtros específicos útiles
+  if (tabla === 'tareas') {
+    if (p.includes('pendiente')) query = query.eq('estado', 'pendiente');
+    else if (p.includes('proceso')) query = query.eq('estado', 'en_proceso');
+    else if (p.includes('completada') || p.includes('terminada')) query = query.eq('estado', 'completada');
+    if (p.includes('alta')) query = query.eq('prioridad', 'alta');
+    query = query.order('created_at', { ascending: false });
+  }
+  if (tabla === 'perfiles') {
+    if (p.includes('admin')) query = query.in('rol', ['admin', 'superuser']);
+    if (p.includes('activo')) query = query.eq('activo', true);
+  }
+  if (tabla === 'proveedores') query = query.eq('activo', true);
+  if (tabla === 'dispositivos') {
+    if (p.includes('disponible') || p.includes('operativo')) query = query.eq('estado', 'operativo');
+  }
+  if (tabla === 'clientes_obuma') {
+    const term = palabrasClave(pregunta);
+    if (term) query = query.ilike('razon_social', `%${term}%`);
+  }
+
+  const { data } = await query.limit(limit);
+  return { datos: data || [], total: count || 0 };
 }
 
-// Función para obtener datos según la intención
-async function obtenerDatosPorIntencion(intencion: string, pregunta: string, limit: number = 20): Promise<DatosResponse> {
-  const p = pregunta.toLowerCase();
-  
+function palabrasClave(pregunta: string): string {
+  const p = normalizar(pregunta);
+  const relleno = ['cliente', 'clientes', 'busca', 'buscar', 'encuentra', 'dame', 'lista', 'todos', 'muestra', 'el', 'la', 'los', 'las', 'de', 'del'];
+  const w = p.split(/\s+/).filter((x) => x.length > 2 && !relleno.includes(x));
+  return w.join(' ');
+}
+
+// Aprendizaje: respuestas pasadas BIEN valoradas (feedback positivo) para preguntas similares
+async function ejemplosAprendidos(pregunta: string): Promise<string> {
   try {
-    switch (intencion) {
-      case "productos_obuma": {
-        let termino = '';
-        
-        if (p.match(/^(busca|encuentra|dame|muestra|listame|ver)\s+/)) {
-          termino = p.replace(/^(busca|encuentra|dame|muestra|listame|ver)\s+/, '').trim();
-        } else {
-          termino = p
-            .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
-            .replace(/producto|productos|inventario|stock|precio|sku|catalogo|tienes|hay|algún|alguna/gi, '')
-            .replace(/de|del|para|por|con|sin|sobre|entre/gi, '')
-            .trim();
-        }
-        
-        if (!termino || termino.length < 3) {
-          const { count } = await supabase
-            .from('productos_obuma')
-            .select('*', { count: 'exact', head: true });
-          return { tipo: "productos", datos: [], total: count || 0, esPreguntaGeneral: true };
-        }
-        
-        console.log(`🔍 Buscando producto: "${termino}"`);
-        
-        const productos = await buscarProductosEnSupabase(termino, limit);
-        
-        if (productos.length > 0) {
-          return { 
-            tipo: "productos", 
-            datos: productos, 
-            total: productos.length,
-            fuente: "Supabase"
-          };
-        }
-        
-        const { count } = await supabase
-          .from('productos_obuma')
-          .select('*', { count: 'exact', head: true });
-        
-        return { 
-          tipo: "productos", 
-          datos: [], 
-          total: count || 0, 
-          noEncontrado: true, 
-          termino 
-        };
-      }
-        
-      case "clientes_obuma": {
-        const { count: totalClientes } = await supabase.from('clientes_obuma').select('*', { count: 'exact', head: true });
-        
-        let termino = p.replace(/cliente|clientes|busca|encuentra|dame|lista|todos/gi, '').trim();
-        if (termino && termino.length > 2 && termino !== 'activos') {
-          const { data } = await supabase
-            .from('clientes_obuma')
-            .select('razon_social, rut, email, telefono')
-            .ilike('razon_social', `%${termino}%`)
-            .limit(5);
-          return { tipo: "clientes", datos: data || [], total: totalClientes || 0, termino };
-        }
-        
-        if (p.includes('lista') || p.includes('todos')) {
-          const { data } = await supabase.from('clientes_obuma').select('razon_social, rut').limit(limit);
-          return { tipo: "clientes", datos: data || [], total: totalClientes || 0, esLista: true };
-        }
-        
-        return { tipo: "clientes", datos: [], total: totalClientes || 0, esPreguntaGeneral: true };
-      }
-      
-      case "proveedores": {
-        const { count } = await supabase.from('proveedores').select('*', { count: 'exact', head: true });
-        const { data } = await supabase
-          .from('proveedores')
-          .select('nombre_empresa, categoria, email_contacto, telefono, calificacion')
-          .eq('activo', true)
-          .limit(limit);
-        return { tipo: "proveedores", datos: data || [], total: count || 0 };
-      }
-      
-      case "tareas": {
-        const { count } = await supabase.from('tareas').select('*', { count: 'exact', head: true });
-        
-        let query = supabase
-          .from('tareas')
-          .select(`
-            titulo,
-            descripcion,
-            prioridad,
-            estado,
-            fecha_limite,
-            fecha_inicio,
-            proyecto,
-            creado_por,
-            asignado_a,
-            responsable:perfiles!tareas_asignado_a_fkey(
-              nombre,
-              apellido
-            )
-          `);
-        
-        if (p.includes('pendiente')) query = query.eq('estado', 'pendiente');
-        if (p.includes('en proceso') || p.includes('en_proceso')) query = query.eq('estado', 'en_proceso');
-        if (p.includes('completada')) query = query.eq('estado', 'completada');
-        if (p.includes('alta')) query = query.eq('prioridad', 'alta');
-        if (p.includes('baja')) query = query.eq('prioridad', 'baja');
-        
-        const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
-        
-        if (error) {
-          console.error("Error en consulta de tareas:", error);
-          return { tipo: "tareas", datos: [], total: count || 0, error: true };
-        }
-        
-        const tareasFormateadas = (data || []).map((t: any) => ({
-          titulo: t.titulo,
-          descripcion: t.descripcion,
-          prioridad: t.prioridad,
-          estado: t.estado,
-          fecha_limite: t.fecha_limite,
-          fecha_inicio: t.fecha_inicio,
-          proyecto: t.proyecto || 'Sin proyecto',
-          responsable: t.responsable ? `${t.responsable.nombre} ${t.responsable.apellido}` : 'No asignado'
-        }));
-        
-        return { tipo: "tareas", datos: tareasFormateadas, total: count || 0 };
-      }
-      
-      case "perfiles": {
-        const { count } = await supabase.from('perfiles').select('*', { count: 'exact', head: true });
-        let query = supabase.from('perfiles').select('nombre, apellido, email, rol, cargo, activo');
-        if (p.includes('admin') || p.includes('administrador')) {
-          query = query.in('rol', ['admin', 'superuser']);
-        }
-        if (p.includes('activo')) query = query.eq('activo', true);
-        const { data } = await query.limit(limit);
-        return { tipo: "usuarios", datos: data || [], total: count || 0 };
-      }
-      
-      case "dispositivos": {
-        const { count } = await supabase.from('dispositivos').select('*', { count: 'exact', head: true });
-        let query = supabase.from('dispositivos').select('nombre_equipo, tipo, marca, modelo, estado, asignado_a');
-        if (p.includes('disponible')) query = query.eq('estado', 'operativo');
-        if (p.includes('asignado')) query = query.not('asignado_a', 'is', null);
-        const { data } = await query.limit(limit);
-        return { tipo: "dispositivos", datos: data || [], total: count || 0 };
-      }
-      
-      case "mensajes": {
-        const { count } = await supabase.from('mensajes').select('*', { count: 'exact', head: true });
-        let query = supabase.from('mensajes').select('contenido, leido, created_at, emisor_id, receptor_id');
-        if (p.includes('no leído') || p.includes('no leidos')) query = query.eq('leido', false);
-        const { data } = await query.order('created_at', { ascending: false }).limit(limit);
-        return { tipo: "mensajes", datos: data || [], total: count || 0 };
-      }
-      
-      case "proveedores_transporte": {
-        const { count } = await supabase.from('proveedores_transporte').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('proveedores_transporte').select('nombre, tipo, correo, direccion').limit(limit);
-        return { tipo: "transporte", datos: data || [], total: count || 0 };
-      }
-      
-      case "analisis_competencia": {
-        const { count } = await supabase.from('analisis_competencia').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('analisis_competencia').select('termino_busqueda, nombre_producto_tienda, precio_num, tienda_url').limit(limit);
-        return { tipo: "competencia", datos: data || [], total: count || 0 };
-      }
-      
-      case "registros_precios": {
-        const { count } = await supabase.from('registros_precios').select('*', { count: 'exact', head: true });
-        const { data } = await supabase.from('registros_precios').select('nombre_producto, tienda, precio_valor, fecha').limit(limit);
-        return { tipo: "precios", datos: data || [], total: count || 0 };
-      }
-        
-      default: {
-        const stats = await obtenerEstadisticasCompletas();
-        return { 
-          tipo: "estadisticas", 
-          datos: [], 
-          total: 7,
-          productosTotal: stats.productos,
-          clientesTotal: stats.clientes,
-          proveedoresTotal: stats.proveedores,
-          tareasTotal: stats.tareas,
-          dispositivosTotal: stats.dispositivos,
-          usuariosTotal: stats.usuarios,
-          mensajesTotal: stats.mensajes
-        };
-      }
-    }
-  } catch (error) {
-    console.error(`Error en ${intencion}:`, error);
-    return { tipo: intencion, datos: [], total: 0, error: true };
+    const palabras = normalizar(pregunta).split(/\s+/).filter((w) => w.length > 3);
+    if (!palabras.length) return '';
+    const { data } = await supabase
+      .from('chatbot_historial')
+      .select('pregunta, respuesta')
+      .eq('feedback', true)
+      .ilike('pregunta', `%${palabras[0]}%`)
+      .order('created_at', { ascending: false })
+      .limit(2);
+    if (!data || !data.length) return '';
+    return data
+      .map((e: any) => `P: ${e.pregunta}\nR (bien valorada): ${String(e.respuesta).slice(0, 250)}`)
+      .join('\n---\n');
+  } catch {
+    return '';
   }
+}
+
+async function estadisticas() {
+  const tablas = ['productos_obuma', 'clientes_obuma', 'proveedores', 'tareas', 'dispositivos', 'perfiles'];
+  const counts = await Promise.all(
+    tablas.map((t) => supabase.from(t).select('*', { count: 'exact', head: true }))
+  );
+  return tablas.reduce((acc, t, i) => ({ ...acc, [t]: counts[i].count || 0 }), {} as Record<string, number>);
 }
 
 export async function POST(req: Request) {
   try {
-    const { pregunta, contexto } = await req.json();
-    
-    if (!pregunta || pregunta.trim() === "") {
-      return NextResponse.json({ error: "La pregunta no puede estar vacía" }, { status: 400 });
+    const body = await req.json();
+    const pregunta: string = (body.pregunta || '').trim();
+    const usuarioRol: string = body.usuario_rol || 'usuario';
+    const historialReciente: Array<{ role: string; content: string }> = Array.isArray(body.historial_reciente)
+      ? body.historial_reciente.slice(-6)
+      : [];
+
+    if (!pregunta) {
+      return NextResponse.json({ error: 'La pregunta no puede estar vacía' }, { status: 400 });
     }
 
-    const intencion = detectarIntencion(pregunta);
-    const datosDB = await obtenerDatosPorIntencion(intencion, pregunta);
-    
-    let systemPrompt = `Eres "Asistente Obuma", un asistente inteligente que conoce TODA la base de datos de la empresa.
+    // 1. Detectar tablas relevantes (puede ser más de una → respuestas cruzadas)
+    const tablas = detectarTablas(pregunta);
 
-📊 ESQUEMA COMPLETO DE LA BASE DE DATOS:
-${JSON.stringify(databaseSchema, null, 2)}
-
-🎯 PREGUNTA DEL USUARIO: "${pregunta}"
-🔍 INTENCIÓN DETECTADA: ${intencion}`;
-
-    if (datosDB.tipo === "productos" && datosDB.datos && datosDB.datos.length > 0) {
-      systemPrompt += `\n\n📦 PRODUCTOS REALES ENCONTRADOS EN SUPABASE (${datosDB.total} resultados):
-${JSON.stringify(datosDB.datos, null, 2)}
-
-⚠️ REGLA ESTRICTA: Estos son los ÚNICOS productos que existen en la base de datos.
-NO INVENTES NINGÚN PRODUCTO. Si el usuario pregunta por un producto que no está en esta lista, responde que no existe.
-NO uses ejemplos como "producto de prueba" a menos que estén explícitamente en esta lista.`;
-    }
-    else if (datosDB.tipo === "productos" && datosDB.noEncontrado) {
-      systemPrompt += `\n\n❌ **NO SE ENCONTRARON PRODUCTOS EN LA BASE DE DATOS**
-
-La búsqueda del producto "${datosDB.termino}" no arrojó resultados en la tabla productos_obuma.
-
-⚠️ **REGLAS ESTRICTAS:**
-1. NO inventes productos falsos
-2. NO uses SKU inventados
-3. Responde EXACTAMENTE: "No encontré el producto '${datosDB.termino}' en nuestra base de datos. Tenemos ${datosDB.total} productos en total. ¿Quieres que busque por otra palabra o SKU?"`;
-    }
-    else if (datosDB.tipo === "productos" && datosDB.esPreguntaGeneral) {
-      systemPrompt += `\n\nResponde: "Tenemos ${datosDB.total} productos en inventario."`;
-    }
-    else if (datosDB.tipo === "clientes" && datosDB.datos && datosDB.datos.length > 0) {
-      systemPrompt += `\n\n👥 CLIENTES ENCONTRADOS:
-${JSON.stringify(datosDB.datos, null, 2)}`;
-    }
-    else if (datosDB.tipo === "clientes" && datosDB.esPreguntaGeneral) {
-      systemPrompt += `\n\nResponde: "Tenemos ${datosDB.total} clientes registrados."`;
-    }
-    else if (datosDB.datos && datosDB.datos.length > 0) {
-      systemPrompt += `\n\n📋 DATOS ENCONTRADOS (${datosDB.tipo}):
-${JSON.stringify(datosDB.datos, null, 2)}`;
-    }
-    else if (datosDB.tipo === "estadisticas") {
-      systemPrompt += `\n\n📊 ESTADÍSTICAS COMPLETAS:
-- 📦 Productos: ${datosDB.productosTotal || 0}
-- 👥 Clientes: ${datosDB.clientesTotal || 0}
-- 🏢 Proveedores: ${datosDB.proveedoresTotal || 0}
-- ✅ Tareas: ${datosDB.tareasTotal || 0}
-- 💻 Dispositivos: ${datosDB.dispositivosTotal || 0}
-- 👤 Usuarios: ${datosDB.usuariosTotal || 0}
-- 💬 Mensajes: ${datosDB.mensajesTotal || 0}`;
+    // 2. Traer datos de cada tabla relevante en paralelo
+    let bloquesDatos = '';
+    let totalEncontrado = 0;
+    if (tablas.length > 0) {
+      const resultados = await Promise.all(tablas.map((t) => fetchTabla(t, pregunta)));
+      tablas.forEach((t, i) => {
+        const { datos, total } = resultados[i];
+        totalEncontrado += datos.length;
+        bloquesDatos += `\n\n### ${TABLAS[t].label.toUpperCase()} (total en BD: ${total}, mostrando ${datos.length})\n`;
+        bloquesDatos += datos.length
+          ? JSON.stringify(datos, null, 1)
+          : '(sin coincidencias para esta búsqueda)';
+      });
+    } else {
+      // Pregunta general → estadísticas
+      const stats = await estadisticas();
+      bloquesDatos = `\n\n### RESUMEN GENERAL\n${JSON.stringify(stats, null, 1)}`;
     }
 
-    systemPrompt += `\n\n🎨 REGLAS DE RESPUESTA:
-1. Responde en español, de forma natural, amable y conversacional
-2. Usa los datos REALES que se te proporcionan - NUNCA inventes información
-3. Si no hay datos en la lista que se te proporcionó, NO INVENTES NADA
-4. Usa emojis para hacer la conversación más amigable (📦 para productos, 👥 para clientes, ✅ para tareas, 💻 para dispositivos)
-5. Si muestras listados, usa • o ✅ al inicio de cada línea
-6. Destaca información importante con **negritas**
-7. Si no hay datos, dilo honestamente y ofrece ayuda`;
+    // 3. Aprendizaje: ejemplos pasados bien valorados
+    const aprendido = await ejemplosAprendidos(pregunta);
 
-    const result = await callDeepSeek([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: pregunta }
-    ], 0.2, 600);
+    // 4. Prompt profesional por rol
+    const vistaPrecios =
+      ['admin', 'superuser', 'jefe'].includes(usuarioRol)
+        ? 'Puedes mostrar precio de COSTO y de VENTA, márgenes y datos sensibles.'
+        : usuarioRol === 'vendedor'
+        ? 'Enfócate en precio de VENTA (precio_total con IVA) y stock disponible. NO menciones precio de costo ni márgenes.'
+        : 'Muestra precio de venta y stock. Evita datos financieros sensibles (costos, márgenes, créditos).';
+
+    const systemPrompt = `Eres "Asistente Obuma", el asistente interno de Grupo ICA Chile. Profesional, directo y útil.
+
+${CONOCIMIENTO_SISTEMA}
+
+ROL DEL USUARIO: ${usuarioRol}. ${vistaPrecios}
+
+DATOS REALES DE LA BASE DE DATOS (úsalos como ÚNICA fuente de verdad):${bloquesDatos}
+${aprendido ? `\n\nEJEMPLOS DE RESPUESTAS BIEN VALORADAS (imita su estilo y precisión):\n${aprendido}` : ''}
+
+REGLAS ESTRICTAS:
+1. Responde SOLO con los datos reales de arriba. NUNCA inventes productos, precios, SKU, clientes ni cifras.
+2. Si no hay coincidencias, dilo claro y ofrece alternativas (buscar por otra palabra, SKU, etc.).
+3. Formatea precios en pesos chilenos: $1.234.567. El IVA es 19%.
+4. Usa **negritas** para lo importante y viñetas (•) para listas. Emojis con moderación (📦 productos, 👥 clientes, ✅ tareas, 💻 equipos).
+5. Si la pregunta cruza temas (ej: un producto y su proveedor), conecta los datos de las distintas secciones.
+6. Sé conciso: respuestas claras y al grano, sin relleno.`;
+
+    // 5. Construir mensajes con MEMORIA de conversación
+    const mensajes: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+    for (const m of historialReciente) {
+      if (m.role === 'user' || m.role === 'assistant') {
+        mensajes.push({ role: m.role, content: String(m.content).slice(0, 500) });
+      }
+    }
+    mensajes.push({ role: 'user', content: pregunta });
+
+    const result = await callDeepSeek(mensajes, 0.3, 800);
 
     if (result.error) {
-      return NextResponse.json({ 
-        respuesta: "🔌 Lo siento, tuve un problema de conexión. ¿Puedes intentarlo de nuevo?",
-        error: result.error 
-      }, { status: 500 });
+      return NextResponse.json(
+        { respuesta: '🔌 Tuve un problema de conexión con el asistente. Intenta de nuevo.', error: result.error },
+        { status: 500 }
+      );
     }
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       respuesta: result.content,
       timestamp: new Date().toISOString(),
-      intencion,
-      total_encontrado: datosDB.datos?.length || 0
+      tablas_consultadas: tablas,
+      productos_encontrados: totalEncontrado,
+      criterio_busqueda: tablas.join(', ') || 'general',
     });
-    
   } catch (error: any) {
-    console.error("Error en chat:", error);
+    console.error('Error en chat:', error);
     return NextResponse.json(
-      { respuesta: "🔌 Ups, algo salió mal. Por favor, intenta nuevamente." },
+      { respuesta: '🔌 Ups, algo salió mal. Intenta nuevamente.' },
       { status: 500 }
     );
   }
