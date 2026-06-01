@@ -455,14 +455,17 @@ def buscar_google_shopping(producto: str, limite: int = 15):
                     const key = nombre.substring(0, 30) + pm[0];
                     if (!seen.has(key)) {
                         seen.add(key);
-                        // Buscar tienda: elemento con dominio .cl o nombre corto
+                        // Buscar tienda: texto sin $ ni números puros
                         let tienda = '';
                         for (const el of container.querySelectorAll('span,div,a')) {
+                            if (el.children.length > 2) continue; // skip contenedores
                             const t = el.innerText.trim();
-                            if (t && t.length > 2 && t.length < 50 && !t.includes('$') && t !== nombre
-                                && !t.match(/^[\\d\\.]+$/) && !t.includes('Precio') && !t.includes('DESCUENTO')) {
-                                if (t.includes('.cl') || t.length < 30) { tienda = t; break; }
-                            }
+                            if (!t || t.length < 3 || t.length > 60) continue;
+                            if (t.includes('$') || t.match(/^[\\d\\.\\s]+$/) || t === nombre) continue;
+                            if (t.includes('Precio') || t.includes('DESCUENTO') || t.includes('ahora')) continue;
+                            if (t.includes('Ver más') || t.includes('Comprar')) continue;
+                            tienda = t.replace(/^(En|en|De|de)\\s+/, '').trim();
+                            break;
                         }
                         res.push({nombre, precio: pm[0], link, tienda});
                     }
