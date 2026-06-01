@@ -235,7 +235,16 @@ export async function POST(req: Request) {
     }
 
     // 1. Detectar tablas relevantes (puede ser más de una → respuestas cruzadas)
-    const tablas = detectarTablas(pregunta);
+    let tablas = detectarTablas(pregunta);
+
+    // ¿Es una pregunta de conteo/resumen general? ("cuántos productos", "resumen")
+    const esConteo = /\bcu[aá]nt|\bcantidad\b|\btotal(es)?\b|\bresumen\b|\bestad[ií]stica/.test(normalizar(pregunta));
+
+    // Si NO se detectó ninguna tabla y NO es conteo general, asumir que busca
+    // un PRODUCTO (es la consulta más común: "busca martillo", "tienes tornillos").
+    if (tablas.length === 0 && !esConteo) {
+      tablas = ['productos_obuma'];
+    }
 
     // 2. Traer datos de cada tabla relevante en paralelo
     let bloquesDatos = '';
@@ -250,10 +259,11 @@ export async function POST(req: Request) {
           ? JSON.stringify(datos, null, 1)
           : '(sin coincidencias para esta búsqueda)';
       });
-    } else {
-      // Pregunta general → estadísticas
+    }
+    // Si es conteo general o no hubo tablas, agregar estadísticas globales
+    if (esConteo || tablas.length === 0) {
       const stats = await estadisticas();
-      bloquesDatos = `\n\n### RESUMEN GENERAL\n${JSON.stringify(stats, null, 1)}`;
+      bloquesDatos += `\n\n### RESUMEN GENERAL (conteos por tabla)\n${JSON.stringify(stats, null, 1)}`;
     }
 
     // 3. Aprendizaje: ejemplos pasados bien valorados
