@@ -459,22 +459,19 @@ export default function MonitorMasivoICA() {
       if (headerRow < 0 || colItem < 0) { notify('No se encontró columna ITEM en la pestaña', 'error'); return; }
       if (colValor < 0) { notify('No se encontró columna VALOR C/IVA', 'error'); return; }
 
-      const colTienda = ws.columnCount + 1;
-      const colMatch = ws.columnCount + 2;
-      ws.getRow(headerRow).getCell(colTienda).value = 'TIENDA COTIZADA';
-      ws.getRow(headerRow).getCell(colMatch).value = '% COINCIDENCIA';
-
+      // Se rellena IDÉNTICO al COSTEO manual: solo VALOR C/IVA (precio) y LINK 1.
+      // NO se agregan columnas ni se toca CONVERSIÓN/EMPRESA/SKU.
       const mapa = new Map(seleccionados.map(s => [s.numero, s]));
       let filled = 0;
       for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
         const itemVal = ws.getRow(rn).getCell(colItem).value;
         if (itemVal == null) continue;
-        const dato = mapa.get(String(itemVal).trim());
+        // El ITEM puede ser tipo "4.1"; normalizar para comparar
+        const key = String(typeof itemVal === 'object' ? (itemVal as any).result ?? (itemVal as any).text ?? itemVal : itemVal).trim();
+        const dato = mapa.get(key);
         if (!dato) continue;
-        ws.getRow(rn).getCell(colValor).value = dato.precio; // las fórmulas F-M recalculan solas
+        ws.getRow(rn).getCell(colValor).value = dato.precio; // las fórmulas (costo neto, etc.) recalculan solas
         if (colLink > 0 && dato.link) ws.getRow(rn).getCell(colLink).value = dato.link;
-        ws.getRow(rn).getCell(colTienda).value = dato.tienda;
-        ws.getRow(rn).getCell(colMatch).value = `${dato.match}%`;
         filled++;
       }
       if (!filled) { notify('No se encontraron ítems para rellenar', 'warning'); return; }
