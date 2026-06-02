@@ -35,25 +35,48 @@ function limpiarPrecio(raw: any): number | null {
 }
 
 function tokens(s: string): string[] {
-  return normalizar(s).split(/\s+/).filter((w) => w.length > 2);
+  // Quitar puntuación para que "seguridad," == "seguridad"
+  return normalizar(s).replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
 }
 
-// Score 0-100: solapamiento de palabras + bonus por números/medidas coincidentes
+// Sinónimos comunes en ferretería/construcción (se cuentan como la misma palabra)
+const SINONIMOS: Record<string, string> = {
+  antiparra: 'lente', antiparras: 'lente', anteojo: 'lente', anteojos: 'lente', gafa: 'lente', gafas: 'lente',
+  fierro: 'acero', golilla: 'arandela', golillas: 'arandela', pernos: 'perno', tornillos: 'tornillo',
+  guantes: 'guante', botas: 'bota', oleo: 'oleo', esmalte: 'esmalte',
+};
+
+// Normaliza un token: sinónimo + raíz (quita plural) para que coincidan variantes
+function raiz(w: string): string {
+  let x = SINONIMOS[w] || w;
+  if (x.length > 4 && x.endsWith('s')) x = x.slice(0, -1); // plural → singular
+  return x;
+}
+
+function tokensMatch(s: string): string[] {
+  return tokens(s).map(raiz);
+}
+
+// Score 0-100 con precisión+cobertura (F1) → premia coincidir en lo distintivo,
+// no penaliza de más cuando faltan palabras genéricas. Insensible a may/min/acentos.
 function calcularScore(buscado: string, encontrado: string): number {
-  const b = tokens(buscado);
-  const e = new Set(tokens(encontrado));
-  if (!b.length) return 50;
-  const comunes = b.filter((w) => e.has(w)).length;
-  const jaccard = comunes / b.length;
-  // Números/medidas (ej: 2", 12mm, 25kg)
-  const numsB = (normalizar(buscado).match(/\d+(?:[.,]\d+)?/g) || []);
+  const b = tokensMatch(buscado);
+  const e = tokensMatch(encontrado);
+  if (!b.length || !e.length) return 50;
+  const setB = new Set(b), setE = new Set(e);
+  const comunes = [...setB].filter((w) => setE.has(w)).length;
+  if (comunes === 0) return 5;
+  const cobertura = comunes / setB.size;   // cuánto de lo buscado aparece (recall)
+  const precision = comunes / setE.size;   // qué tan enfocado está el resultado
+  const f1 = (2 * cobertura * precision) / (cobertura + precision);
+
+  // Bonus por números/medidas coincidentes (2", 12mm, 25kg, 8)
+  const numsB = normalizar(buscado).match(/\d+(?:[.,]\d+)?/g) || [];
   const numsE = new Set(normalizar(encontrado).match(/\d+(?:[.,]\d+)?/g) || []);
   let bonusNum = 0;
-  if (numsB.length) {
-    const m = numsB.filter((n) => numsE.has(n)).length / numsB.length;
-    bonusNum = m * 15;
-  }
-  const score = Math.round(jaccard * 80 + bonusNum + (comunes > 0 ? 5 : 0));
+  if (numsB.length) bonusNum = (numsB.filter((n) => numsE.has(n)).length / numsB.length) * 12;
+
+  const score = Math.round(f1 * 85 + bonusNum);
   return Math.max(0, Math.min(100, score));
 }
 
