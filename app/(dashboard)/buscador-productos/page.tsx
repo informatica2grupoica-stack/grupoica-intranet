@@ -150,6 +150,60 @@ const ModalPreview = ({ productos, onClose, onConfirm }: {
   </div>
 );
 
+// ─── Modal: revisar ítems extraídos de las BASES (Gemini) ─────────────────────
+const ModalBases = ({ items, onClose }: {
+  items: Array<{ item: string; nombre: string; especificaciones: string; cantidad: string; unidad: string; _excel?: string }>;
+  onClose: () => void;
+}) => {
+  const enlazados = items.filter(i => i._excel).length;
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col">
+        <div className="flex justify-between items-center p-5 border-b">
+          <div>
+            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              <Sparkles size={16} className="text-violet-600" /> Ítems detectados en las bases
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">{items.length} ítems leídos por IA · {enlazados} enlazados a tu Excel (verde)</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
+        </div>
+        <div className="overflow-auto flex-1 p-5">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+                <th className="pb-2 pr-3 font-semibold">Ítem</th>
+                <th className="pb-2 pr-3 font-semibold">Producto</th>
+                <th className="pb-2 pr-3 font-semibold">Especificación detectada</th>
+                <th className="pb-2 pr-3 font-semibold text-center">Cant.</th>
+                <th className="pb-2 font-semibold text-center">Enlace Excel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={i} className={`border-b border-slate-50 ${it._excel ? 'bg-emerald-50/40' : ''}`}>
+                  <td className="py-2 pr-3 text-slate-500 text-xs">{it.item}</td>
+                  <td className="py-2 pr-3 text-slate-800 font-medium max-w-[200px]">{it.nombre}</td>
+                  <td className="py-2 pr-3 text-slate-600 text-xs max-w-sm">{it.especificaciones || <span className="text-slate-300">—</span>}</td>
+                  <td className="py-2 pr-3 text-center text-slate-500 text-xs">{it.cantidad} {it.unidad}</td>
+                  <td className="py-2 text-center">
+                    {it._excel
+                      ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">#{it._excel}</span>
+                      : <span className="text-[10px] text-slate-300">sin enlace</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end gap-3 p-5 border-t">
+          <button onClick={onClose} className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold transition-colors">Entendido</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const IVA = 1.19;
 
 export default function MonitorMasivoICA() {
@@ -166,6 +220,9 @@ export default function MonitorMasivoICA() {
   const [especPorItem, setEspecPorItem]       = useState<Map<string, string>>(new Map());
   const [cargandoBases, setCargandoBases]     = useState(false);
   const [basesInfo, setBasesInfo]             = useState<{ total: number } | null>(null);
+  const [basesItems, setBasesItems]           = useState<Array<{ item: string; nombre: string; especificaciones: string; cantidad: string; unidad: string; _excel?: string }>>([]);
+  const [showBasesModal, setShowBasesModal]   = useState(false);
+  const [preguntarBases, setPreguntarBases]   = useState(false);
   const [sheetNameActual, setSheetNameActual] = useState('COSTEO');
   const [showModal, setShowModal]             = useState(false);
   const [pestanas, setPestanas]               = useState<string[]>([]);
@@ -231,26 +288,31 @@ export default function MonitorMasivoICA() {
       const data = await leerRes.json();
       if (!leerRes.ok || !data.ok) throw new Error(data.error || 'No se pudo leer el PDF');
 
-      const itemsBases: Array<{ nombre: string; especificaciones: string }> = data.items || [];
+      const itemsBases: Array<{ item: string; nombre: string; especificaciones: string; cantidad: string; unidad: string; _excel?: string }> = data.items || [];
 
       // 4) Asociar especificaciones a cada ítem del Excel por similitud de nombre
       const mapa = new Map<string, string>();
       if (productosExcel.length) {
         productosExcel.forEach(pe => {
           const toksExcel = new Set(norm(pe.nombre).split(/\s+/).filter(w => w.length > 2));
-          let mejor = ''; let mejorScore = 0;
+          let mejorIb: any = null; let mejorScore = 0;
           itemsBases.forEach(ib => {
             const toksBase = norm(ib.nombre).split(/\s+/).filter(w => w.length > 2);
             const comunes = toksBase.filter(w => toksExcel.has(w)).length;
             const sc = toksBase.length ? comunes / toksBase.length : 0;
-            if (sc > mejorScore) { mejorScore = sc; mejor = ib.especificaciones; }
+            if (sc > mejorScore) { mejorScore = sc; mejorIb = ib; }
           });
-          if (mejorScore >= 0.4 && mejor) mapa.set(String(pe.numero), mejor);
+          if (mejorScore >= 0.4 && mejorIb?.especificaciones) {
+            mapa.set(String(pe.numero), mejorIb.especificaciones);
+            mejorIb._excel = String(pe.numero); // marcar enlace para el modal
+          }
         });
       }
       setEspecPorItem(mapa);
+      setBasesItems(itemsBases);
       setBasesInfo({ total: itemsBases.length });
-      notify(`Bases leídas: ${itemsBases.length} ítems detectados, ${mapa.size} enlazados a tu Excel`, 'success');
+      setShowBasesModal(true); // mostrar lo que encontró para revisar
+      notify(`Bases leídas: ${itemsBases.length} ítems · ${mapa.size} enlazados a tu Excel`, 'success');
     } catch (e: any) {
       notify(`Error con las bases: ${e.message}`, 'error');
     } finally {
@@ -331,6 +393,7 @@ export default function MonitorMasivoICA() {
     console.log(`✅ ${items.length} productos cargados`);
     setProductosExcel(items);
     setShowModal(true);
+    if (!basesInfo) setPreguntarBases(true); // ofrecer reforzar con el PDF de bases
     notify(`${items.length} productos desde "${sheetName}"`, 'success');
   };
 
@@ -622,6 +685,9 @@ export default function MonitorMasivoICA() {
       {showModal && productosExcel.length > 0 && (
         <ModalPreview productos={productosExcel} onClose={() => setShowModal(false)} onConfirm={iniciarExcel} />
       )}
+      {showBasesModal && basesItems.length > 0 && (
+        <ModalBases items={basesItems} onClose={() => setShowBasesModal(false)} />
+      )}
 
       {/* Toasts */}
       <div className="fixed top-20 right-4 z-50 flex flex-col gap-2">
@@ -738,18 +804,30 @@ export default function MonitorMasivoICA() {
             <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden"
               onChange={e => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
 
+            {/* Prompt: ofrecer reforzar con el PDF tras cargar el Excel */}
+            {preguntarBases && !basesInfo && (
+              <div className="mt-3 p-3 bg-violet-50 border border-violet-200 rounded-lg">
+                <p className="text-[11px] text-violet-800 font-medium mb-2">
+                  💡 ¿Tienes el PDF de las bases? Súbelo para que la IA busque <b>exacto lo que piden</b> (medidas, marcas, specs).
+                </p>
+              </div>
+            )}
+
             {/* Subir bases PDF (Gemini lee las especificaciones) */}
             <button onClick={() => document.getElementById('bases-input')?.click()}
               disabled={cargandoBases}
-              className="mt-2 w-full bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-              {cargandoBases ? <><Loader2 size={15} className="animate-spin" /> Leyendo bases…</> : <><Sparkles size={15} /> Subir bases (PDF)</>}
+              className={`mt-2 w-full ${preguntarBases && !basesInfo ? 'ring-2 ring-violet-300' : ''} bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors`}>
+              {cargandoBases ? <><Loader2 size={15} className="animate-spin" /> Leyendo bases…</> : <><Sparkles size={15} /> {basesInfo ? 'Cambiar bases (PDF)' : 'Subir bases (PDF) — opcional'}</>}
             </button>
             <input id="bases-input" type="file" accept="application/pdf,.pdf" className="hidden"
               onChange={e => e.target.files?.[0] && cargarBases(e.target.files[0])} />
             {basesInfo && (
-              <p className="mt-2 text-[10px] text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-2 py-1.5">
-                📄 Bases leídas: {basesInfo.total} ítems · {especPorItem.size} con especificaciones enlazadas a tu Excel
-              </p>
+              <div className="mt-2 flex items-center justify-between text-[10px] text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-2 py-1.5">
+                <span>📄 {basesInfo.total} ítems · {especPorItem.size} enlazados</span>
+                <button onClick={() => setShowBasesModal(true)} className="font-bold underline hover:text-violet-900 flex items-center gap-1">
+                  <Eye size={11} /> Ver ítems
+                </button>
+              </div>
             )}
 
             {pestanas.length > 1 && (
