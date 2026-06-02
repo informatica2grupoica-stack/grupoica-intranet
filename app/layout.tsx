@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Intranet GrupoICA",
-  description: "Sistema de Control Operativo",
+  title: "Comercial MP Workspace",
+  description: "Plataforma comercial y operativa — Comercial MP Workspace",
 };
 
 export default function RootLayout({

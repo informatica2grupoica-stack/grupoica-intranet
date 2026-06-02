@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Mail, Lock, Loader2, AlertCircle, ArrowRight } from "lucide-react";
+import { Mail, Lock, Loader2, AlertCircle, ArrowRight, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -64,16 +64,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000d1a] flex items-center justify-center p-4">
-      {/* Contenedor principal con tus bordes redondeados XL */}
-      <div className="bg-white p-10 md:p-14 rounded-[50px] w-full max-w-md shadow-[0_20px_60px_rgba(0,0,0,0.5)] border border-white/10">
-        
-        <header className="mb-12 text-center">
-          <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none mb-3">
-            Intranet <span className="text-[#00338d]">ICA</span>
+    <div className="min-h-screen bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#1F2937] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Glows decorativos */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#059669]/20 blur-[120px] rounded-full" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#10B981]/20 blur-[120px] rounded-full" />
+
+      <div className="relative bg-white/95 backdrop-blur-xl p-10 md:p-12 rounded-3xl w-full max-w-md shadow-[0_30px_80px_rgba(0,0,0,0.55)] border border-white/20">
+
+        <header className="mb-10 text-center">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-xl shadow-blue-900/30">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-black tracking-tight leading-none mb-2 text-slate-800">
+            Comercial <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#059669] to-[#10B981]">MP</span>
           </h1>
-          <div className="h-1 w-12 bg-[#00338d] mx-auto mb-3 rounded-full"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Acceso Corporativo</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.45em] text-slate-400">Workspace</p>
         </header>
 
         {error && (
@@ -85,60 +90,59 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="relative group">
-            <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#00338d] transition-colors" />
-            <input 
-              type="email" 
-              placeholder="Correo electrónico" 
+            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#059669] transition-colors" />
+            <input
+              type="email"
+              placeholder="Correo electrónico"
               required
               disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-500/10 focus:bg-white rounded-[25px] pl-16 pr-6 py-5 font-bold outline-none transition-all disabled:opacity-50 text-sm"
-              value={email} 
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#059669]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              value={email}
               onChange={e => setEmail(e.target.value)}
             />
           </div>
 
           <div className="relative group">
-            <Lock className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#00338d] transition-colors" />
-            <input 
-              type="password" 
-              placeholder="Contraseña" 
+            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#059669] transition-colors" />
+            <input
+              type="password"
+              placeholder="Contraseña"
               required
               disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-500/10 focus:bg-white rounded-[25px] pl-16 pr-6 py-5 font-bold outline-none transition-all disabled:opacity-50 text-sm"
-              value={password} 
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#059669]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              value={password}
               onChange={e => setPassword(e.target.value)}
             />
           </div>
 
-          {/* LINK DE RECUPERACIÓN MINIMALISTA */}
-          <div className="flex justify-end px-2">
-            <Link 
-              href="/forgot-password" 
-              className="text-[11px] font-bold text-slate-400 hover:text-[#00338d] transition-colors uppercase tracking-wider"
+          <div className="flex justify-end px-1">
+            <Link
+              href="/forgot-password"
+              className="text-[11px] font-bold text-slate-400 hover:text-[#059669] transition-colors uppercase tracking-wider"
             >
               ¿Olvidaste tu clave?
             </Link>
           </div>
 
-          <button 
+          <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#00338d] hover:bg-[#002566] text-white py-6 rounded-[25px] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-blue-900/20 transition-all active:scale-[0.97] flex items-center justify-center gap-3 disabled:bg-slate-300 mt-4"
+            className="w-full bg-gradient-to-r from-[#059669] to-[#10B981] hover:shadow-[0_10px_30px_rgba(29,78,216,0.45)] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                <span>Entrar al Sistema</span>
+                <span>Ingresar al Workspace</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        <footer className="mt-12 text-center border-t border-slate-50 pt-8">
+        <footer className="mt-10 text-center border-t border-slate-100 pt-6">
           <p className="text-[9px] font-black uppercase text-slate-300 tracking-[0.3em]">
-            Grupo ICA Chile &copy; 2026
+            Comercial MP Workspace &copy; 2026
           </p>
         </footer>
       </div>

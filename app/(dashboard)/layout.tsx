@@ -2,189 +2,190 @@
 "use client";
 import { supabase } from "@/lib/supabase";
 import {
-  LayoutDashboard,
-  Users,
-  MessageSquare,
-  LogOut,
-  ShoppingBag,
-  Briefcase,
-  Database,
-  Box,
-  FileText,
-  Laptop,
-  ChevronRight,
-  ExternalLink,
-  CheckSquare,
-  Truck,
-  TrendingUp,
-  BarChart3,
-  Building2,
-  Server,
-  FileCheck,
-  Star,
-  PieChart,
-  Bell,
-  GitBranch,
-  Clock,
-  FileSignature,
-  Download,
-  Home,
-  Package,
-  ShoppingCart
+  Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
+  Users, Building2, Database, FileText, Package, ShoppingCart, Server,
+  Laptop, LogOut, ChevronRight, ExternalLink, ShieldCheck, Sparkles, X
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-
-// --- IMPORTACIÓN DEL COMPONENTE IA ---
 import ChatBot from "@/components/ChatBot";
+
+// ─── Identidad y metadatos de cada vista (identificador por vista) ────────────
+const VIEW_META: Record<string, { id: string; label: string }> = {
+  "/":                    { id: "MP-00", label: "Inicio" },
+  "/chat":                { id: "MP-CHT", label: "Chat Interno" },
+  "/tareas":              { id: "MP-TAR", label: "Tareas" },
+  "/dashboard":           { id: "MP-DSH", label: "Dashboard de Análisis" },
+  "/buscador-productos":  { id: "MP-BUS", label: "Buscador de Productos" },
+  "/historial-precios":   { id: "MP-HIS", label: "Historial de Precios" },
+  "/obuma-clientes":      { id: "MP-CLI", label: "Clientes Obuma" },
+  "/proveedores":         { id: "MP-PRV", label: "Mis Proveedores" },
+  "/obuma-proveedores":   { id: "MP-OPV", label: "Proveedores Obuma" },
+  "/obuma-productos":     { id: "MP-PRD", label: "Productos Obuma" },
+  "/compras":             { id: "MP-OC",  label: "Órdenes de Compra" },
+  "/usuarios":            { id: "MP-USR", label: "Usuarios" },
+  "/dispositivos":        { id: "MP-DEV", label: "Dispositivos" },
+};
+
+// Etiquetas legibles de privilegios (campo perfiles.permisos)
+const PERM_LABELS: Record<string, string> = {
+  can_assign_tasks: "Asignar tareas",
+  can_create_tasks: "Crear tareas",
+  can_view_billing: "Ver facturación",
+  can_manage_devices: "Gestionar dispositivos",
+  can_create_products: "Crear productos",
+  can_search_products_only: "Solo búsqueda de productos",
+};
+
+const ROL_LABEL: Record<string, string> = {
+  superuser: "Super Usuario", admin: "Administrador", user: "Usuario",
+  rrhh: "Recursos Humanos", jefe: "Jefatura", vendedor: "Vendedor",
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState("");
-  const [userName, setUserName] = useState("Cargando...");
+  const [userName, setUserName] = useState("Cargando…");
   const [userRol, setUserRol] = useState<string | null>(null);
-  const [perfilId, setPerfilId] = useState<string | null>(null);
-  const [permisos, setPermisos] = useState<any>(null);
+  const [permisos, setPermisos] = useState<Record<string, boolean> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showPerms, setShowPerms] = useState(false);
 
   useEffect(() => {
-    const getUserData = async () => {
+    (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-
       if (session?.user) {
         setUserEmail(session.user.email || "");
-
         const { data: perfil } = await supabase
-          .from('perfiles')
-          .select('nombre, rol, id, permisos')
-          .eq('user_id', session.user.id)
-          .single();
-
+          .from("perfiles").select("nombre, rol, id, permisos")
+          .eq("user_id", session.user.id).single();
         if (perfil) {
           setUserName(perfil.nombre);
           setUserRol(perfil.rol);
-          setPerfilId(perfil.id);
-          setPermisos(perfil.permisos);
+          setPermisos(perfil.permisos || {});
         } else {
-          setUserName(session.user.email?.split('@')[0] || "Usuario");
+          setUserName(session.user.email?.split("@")[0] || "Usuario");
         }
       }
       setIsLoading(false);
-    };
-
-    getUserData();
+    })();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  };
+  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = "/login"; };
 
-  // Verificar si es usuario de solo productos
   const isOnlyProductsUser = permisos?.can_search_products_only === true;
-
-  // Redirigir si es usuario de solo productos y no está en página permitida
   useEffect(() => {
     if (!isLoading && isOnlyProductsUser) {
-      const allowedPaths = ['/buscador-productos', '/obuma-productos'];
-      const isAllowed = allowedPaths.includes(pathname);
-      if (!isAllowed) {
-        router.push('/buscador-productos');
-      }
+      const allowed = ["/buscador-productos", "/obuma-productos"];
+      if (!allowed.includes(pathname)) router.push("/buscador-productos");
     }
   }, [isLoading, isOnlyProductsUser, pathname, router]);
 
-  // Secciones del menú SIN RRHH
   const sections = [
-    {
-      title: "PRINCIPAL",
-      items: [
-        { name: "Inicio", icon: Home, path: "/" }
-      ]
-    },
-    {
-      title: "COMUNICACIÓN",
-      items: [
-        { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
-        { name: "Tareas", icon: CheckSquare, path: "/tareas" },
-      ]
-    },
-    {
-      title: "ANÁLISIS",
-      items: [
-        { name: "Dashboard Análisis", icon: BarChart3, path: "/dashboard" },
-        { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
-        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
-      ]
-    },
-    {
-      title: "CRM",
-      items: [
-        { name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" },
-      ]
-    },
-    {
-      title: "LOGÍSTICA",
-      icon: Truck,
-      items: [
-        { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
-        { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
-      ]
-    },
-    {
-      title: "OBUMA",
-      icon: Server,
-      items: [
-        { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
-        { name: "Productos", icon: Package, path: "/obuma-productos" },
-        { name: "Órdenes de Compras", icon: ShoppingCart, path: "/compras" },
-        { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
-      ]
-    },
-    {
-      title: "ADMINISTRACIÓN",
-      items: [
-        { name: "Usuarios", icon: Users, path: "/usuarios" },
-        { name: "Dispositivos", icon: Laptop, path: "/dispositivos" },
-      ]
-    }
+    { title: "PRINCIPAL", items: [{ name: "Inicio", icon: Home, path: "/" }] },
+    { title: "COMUNICACIÓN", items: [
+      { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
+      { name: "Tareas", icon: CheckSquare, path: "/tareas" },
+    ]},
+    { title: "ANÁLISIS", items: [
+      { name: "Dashboard Análisis", icon: BarChart3, path: "/dashboard" },
+      { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
+      { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
+    ]},
+    { title: "CRM", items: [{ name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" }] },
+    { title: "LOGÍSTICA", items: [
+      { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
+      { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
+    ]},
+    { title: "OBUMA", items: [
+      { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
+      { name: "Productos", icon: Package, path: "/obuma-productos" },
+      { name: "Órdenes de Compras", icon: ShoppingCart, path: "/compras" },
+      { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
+    ]},
+    { title: "ADMINISTRACIÓN", items: [
+      { name: "Usuarios", icon: Users, path: "/usuarios" },
+      { name: "Dispositivos", icon: Laptop, path: "/dispositivos" },
+    ]},
   ];
 
-  // Filtrar secciones para usuarios de solo productos
-  const getFilteredSections = () => {
-    if (isOnlyProductsUser) return [];
-    return sections;
-  };
+  const meta = VIEW_META[pathname] || { id: "MP-··", label: (pathname.split("/").filter(Boolean).pop() || "inicio").replace(/-/g, " ") };
+  const permActivos = permisos ? Object.entries(permisos).filter(([, v]) => v === true) : [];
 
-  const sectionsData = getFilteredSections();
+  // ─── Marca ─────────────────────────────────────────────────────────────────
+  const Brand = ({ dark = true }: { dark?: boolean }) => (
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-lg shadow-blue-900/30">
+        <Sparkles className="w-5 h-5 text-white" />
+      </div>
+      <div className="leading-tight">
+        <p className={`font-black text-[15px] tracking-tight ${dark ? "text-white" : "text-slate-800"}`}>
+          Comercial <span className="text-[#10B981]">MP</span>
+        </p>
+        <p className={`text-[9px] font-bold tracking-[0.35em] ${dark ? "text-slate-400" : "text-slate-400"}`}>WORKSPACE</p>
+      </div>
+    </div>
+  );
 
-  // Si es usuario de solo productos, renderizar sin sidebar
+  // ─── Tarjeta de usuario + privilegios ────────────────────────────────────────
+  const UserCard = () => (
+    <div className="relative">
+      {showPerms && (
+        <div className="absolute bottom-full mb-2 left-0 right-0 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" /> Privilegios
+            </span>
+            <button onClick={() => setShowPerms(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+          </div>
+          <div className="mb-2">
+            <span className="text-[9px] text-slate-400">Rol</span>
+            <p className="text-xs font-bold text-[#059669]">{userRol ? (ROL_LABEL[userRol] || userRol) : "—"}</p>
+          </div>
+          <div className="space-y-1">
+            {permActivos.length ? permActivos.map(([k]) => (
+              <div key={k} className="flex items-center gap-2 text-[11px] text-slate-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> {PERM_LABELS[k] || k}
+              </div>
+            )) : <p className="text-[11px] text-slate-400">Privilegios estándar de su rol.</p>}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-blue-900/40">
+          {userName.substring(0, 2).toUpperCase()}
+        </div>
+        <button onClick={() => setShowPerms(s => !s)} className="flex-1 overflow-hidden text-left">
+          <p className="text-xs font-bold text-white truncate">{userName}</p>
+          <p className="text-[9px] text-slate-400 truncate">{userEmail}</p>
+          {userRol && (
+            <span className="inline-flex items-center gap-1 mt-0.5 text-[8px] font-bold uppercase text-[#10B981]">
+              <ShieldCheck className="w-2.5 h-2.5" /> {ROL_LABEL[userRol] || userRol}
+            </span>
+          )}
+        </button>
+        <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-400 transition-colors" title="Cerrar sesión">
+          <LogOut className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+
+  // ─── Vista restringida (solo productos) ──────────────────────────────────────
   if (isOnlyProductsUser) {
     return (
-      <div className="flex min-h-screen bg-[#f8faff]">
-        <main className="flex-1 p-8">
+      <div className="flex min-h-screen bg-[#F3F4F6]">
+        <main className="flex-1 p-6 md:p-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-2">
-                <img
-                  src="https://i.postimg.cc/NMhmBtKx/logo.webp"
-                  alt="Grupo ICA"
-                  className="h-8 w-auto"
-                />
-              </div>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Cerrar Sesión
+              <Brand dark={false} />
+              <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">
+                <LogOut className="w-4 h-4" /> Cerrar Sesión
               </button>
             </div>
-            <div className="px-4">
-              {children}
-            </div>
+            {children}
           </div>
         </main>
         <ChatBot />
@@ -192,118 +193,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  // Render normal con sidebar para otros usuarios
+  // ─── Layout completo ─────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-[#f8faff]">
+    <div className="flex min-h-screen bg-[#F3F4F6]">
       {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-100 flex flex-col fixed h-full z-20">
+      <aside className="w-64 fixed h-full z-20 flex flex-col bg-gradient-to-b from-[#111827] to-[#1F2937] border-r border-white/5">
+        <div className="px-5 py-6 border-b border-white/5"><Brand /></div>
 
-        <div className="px-8 py-10 flex justify-center items-center">
-          <div className="relative group cursor-pointer">
-            <img
-              src="https://i.postimg.cc/NMhmBtKx/logo.webp"
-              alt="Grupo ICA"
-              className="h-12 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
-            />
-            <div className="absolute -inset-2 bg-blue-500/5 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-        </div>
-
-        {/* NAVEGACIÓN */}
-        <nav className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-          {sectionsData.map((section, idx) => (
-            <div key={idx} className="mb-6">
-              <h3 className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                {section.title}
-              </h3>
+        <nav className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
+          {sections.map((section, idx) => (
+            <div key={idx} className="mb-5">
+              <h3 className="px-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">{section.title}</h3>
               <div className="space-y-1">
                 {section.items.map((item) => {
-                  const isActive = pathname === item.path || pathname?.startsWith(item.path + '/');
-                  const commonClasses = `flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
-                      ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100/50'
-                      : 'text-slate-600 hover:bg-slate-50'
-                    }`;
-
+                  const isActive = pathname === item.path || pathname?.startsWith(item.path + "/");
+                  const cls = `group flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all relative ${
+                    isActive ? "bg-gradient-to-r from-[#059669]/25 to-transparent text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`;
                   const content = (
                     <>
-                      <div className="flex items-center gap-3">
-                        <item.icon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                      {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#10B981]" />}
+                      <span className="flex items-center gap-3">
+                        <item.icon className={`w-[18px] h-[18px] transition-colors ${isActive ? "text-[#10B981]" : "text-slate-500 group-hover:text-[#10B981]"}`} />
                         {item.name}
-                      </div>
-                      {(item as any).external && <ExternalLink className="w-3 h-3 text-slate-300" />}
-                      {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-300" />}
+                      </span>
+                      {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-600" />}
                     </>
                   );
-
-                  return (item as any).external ? (
-                    <a
-                      key={item.path}
-                      href={item.path}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={commonClasses}
-                    >
-                      {content}
-                    </a>
-                  ) : (
-                    <Link key={item.path} href={item.path} className={commonClasses}>
-                      {content}
-                    </Link>
-                  );
+                  return (item as any).external
+                    ? <a key={item.path} href={item.path} target="_blank" rel="noopener noreferrer" className={cls}>{content}</a>
+                    : <Link key={item.path} href={item.path} className={cls}>{content}</Link>;
                 })}
               </div>
             </div>
           ))}
         </nav>
 
-        {/* PERFIL DE USUARIO */}
-        <div className="p-4 border-t border-slate-50 bg-slate-50/30">
-          <div className="flex items-center gap-3 p-2 rounded-2xl hover:bg-white hover:shadow-sm transition-all group relative border border-transparent hover:border-slate-100">
-            <div className="w-10 h-10 bg-[#00338d] rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-blue-900/10">
-              {userName.substring(0, 2).toUpperCase()}
-            </div>
-            <div className="flex-1 overflow-hidden text-left">
-              <p className="text-xs font-bold text-slate-800 truncate">
-                {userName}
-              </p>
-              <p className="text-[9px] text-slate-400 truncate tracking-tight">{userEmail}</p>
-              {userRol && (
-                <p className="text-[8px] font-bold uppercase text-blue-500">{userRol}</p>
-              )}
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
-              title="Cerrar Sesión"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        <div className="p-3 border-t border-white/5"><UserCard /></div>
       </aside>
 
-      {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 ml-64 p-8">
-        <div className="max-w-7xl mx-auto">
-          {/* HEADER CON BREADCRUMB */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-slate-400 px-4 bg-white/50 w-fit py-2 rounded-full border border-slate-100 shadow-sm">
-              <LayoutDashboard className="w-3 h-3 text-blue-500" />
-              <span>Sistema Central</span>
-              <ChevronRight className="w-2.5 h-2.5 opacity-50" />
-              <span className="text-slate-600">
-                {pathname === "/" ? "Inicio" : pathname.split('/').filter(Boolean).pop()?.replace(/-/g, " ")}
+      {/* CONTENIDO */}
+      <main className="flex-1 ml-64 p-6 md:p-8">
+        <div className="max-w-[1600px] mx-auto">
+          {/* HEADER con identificador de vista */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-7">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[10px] font-bold tracking-wider text-white bg-gradient-to-r from-[#059669] to-[#10B981] px-2.5 py-1 rounded-md shadow-sm">
+                {meta.id}
               </span>
+              <div>
+                <h1 className="text-lg font-black text-slate-800 leading-none">{meta.label}</h1>
+                <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                  Comercial MP Workspace <ChevronRight className="w-2.5 h-2.5" /> {meta.label}
+                </p>
+              </div>
             </div>
           </div>
-
-          <div className="px-4">
-            {children}
-          </div>
+          {children}
         </div>
       </main>
 
-      {/* --- BOT FLOTANTE --- */}
       <ChatBot />
     </div>
   );
