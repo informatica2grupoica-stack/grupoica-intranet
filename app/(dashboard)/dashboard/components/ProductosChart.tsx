@@ -55,7 +55,7 @@ export default function ProductosChart() {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="animate-spin text-[#00338d]" size={32} />
+          <Loader2 className="animate-spin text-[#059669]" size={32} />
         </div>
       </div>
     );
@@ -66,7 +66,7 @@ export default function ProductosChart() {
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
       <div className="flex items-center gap-2 mb-4">
-        <BarChart3 size={18} className="text-[#00338d]" />
+        <span className="w-8 h-8 rounded-lg bg-[#D1FAE5] text-[#059669] flex items-center justify-center"><BarChart3 size={17} /></span>
         <h3 className="text-sm font-black uppercase text-slate-600">Productos por Categoría</h3>
       </div>
       
@@ -84,7 +84,7 @@ export default function ProductosChart() {
               </div>
               <div className="h-6 bg-slate-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-[#00338d] to-blue-500 rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-[#059669] to-[#10B981] rounded-full transition-all duration-500"
                   style={{ width: `${(cat.cantidad / maxCantidad) * 100}%` }}
                 />
               </div>

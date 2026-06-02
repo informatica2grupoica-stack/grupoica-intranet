@@ -24,7 +24,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Total Productos",
       valor: stats.total_productos,
       icono: Package,
-      color: "bg-blue-500",
+      gradient: "from-[#111827] to-[#374151]",
       descripcion: `${stats.categorias_count} categorías`,
       trend: null
     },
@@ -32,7 +32,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Stock Total",
       valor: stats.total_stock,
       icono: TrendingUp,
-      color: "bg-emerald-500",
+      gradient: "from-[#059669] to-[#10B981]",
       descripcion: "unidades en inventario",
       trend: "up"
     },
@@ -40,7 +40,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Valor Inventario",
       valor: formatPrice(stats.total_valor_inventario),
       icono: DollarSign,
-      color: "bg-purple-500",
+      gradient: "from-[#0F766E] to-[#0D9488]",
       descripcion: "valor total en CLP",
       trend: "up"
     },
@@ -48,7 +48,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Alertas",
       valor: stats.productos_con_stock_bajo + stats.productos_sin_stock,
       icono: AlertTriangle,
-      color: "bg-amber-500",
+      gradient: "from-[#F59E0B] to-[#F97316]",
       descripcion: `${stats.productos_con_stock_bajo} stock bajo, ${stats.productos_sin_stock} sin stock`,
       trend: "down"
     }
@@ -59,27 +59,27 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       {cards.map((card, idx) => (
         <div
           key={idx}
-          className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all"
+          className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-lg hover:-translate-y-0.5 transition-all group"
         >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
                 {card.titulo}
               </p>
-              <p className="text-2xl font-black text-slate-800 mt-1">{card.valor}</p>
+              <p className="text-2xl font-black text-[#111827] mt-1.5">{card.valor}</p>
               <p className="text-[9px] text-slate-400 mt-1">{card.descripcion}</p>
             </div>
-            <div className={`${card.color} p-2 rounded-xl text-white`}>
+            <div className={`bg-gradient-to-br ${card.gradient} p-2.5 rounded-xl text-white shadow-md group-hover:scale-105 transition-transform`}>
               <card.icono size={18} />
             </div>
           </div>
           {card.trend === "up" && (
-            <div className="flex items-center gap-1 mt-3 text-[9px] text-emerald-500">
+            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#059669]">
               <TrendingUp size={10} /> Tendencia positiva
             </div>
           )}
           {card.trend === "down" && (
-            <div className="flex items-center gap-1 mt-3 text-[9px] text-amber-500">
+            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#F59E0B]">
               <TrendingDown size={10} /> Requiere atención
             </div>
           )}
