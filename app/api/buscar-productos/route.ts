@@ -92,6 +92,93 @@ function detectarEmpaque(nombre: string, conversion: string): [string, boolean] 
   return [empaque, false];
 }
 
+// ─── Análisis completo del producto (para que el reranker IA funcione bien) ──
+function extraerMedidas(texto: string): Record<string, any> {
+  const t = (texto || '').toLowerCase();
+  const m: Record<string, any> = {};
+  const d3 = t.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/);
+  if (d3) m.dim3 = [d3[1], d3[2], d3[3]].map((x) => parseFloat(x.replace(',', '.')));
+  const d2 = t.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/);
+  if (d2) m.dim2 = [d2[1], d2[2]].map((x) => parseFloat(x.replace(',', '.')));
+  const pulg = t.match(/(\d+(?:[.,]\d+)?)\s*(?:"|pulgadas?|pulg\b|inch)/);
+  if (pulg) m.pulgadas = parseFloat(pulg[1].replace(',', '.'));
+  const mm = t.match(/(\d+(?:[.,]\d+)?)\s*mm\b/);
+  if (mm) m.mm = parseFloat(mm[1].replace(',', '.'));
+  const kg = t.match(/(\d+(?:[.,]\d+)?)\s*kg\b/);
+  if (kg) m.kg = parseFloat(kg[1].replace(',', '.'));
+  const lts = t.match(/(\d+(?:[.,]\d+)?)\s*(?:lt|lts|litros?)\b/);
+  if (lts) m.litros = parseFloat(lts[1].replace(',', '.'));
+  if (/\bgal[oó]n|gal\b|\bgl\b/.test(t)) m.galon = true;
+  if (/\btineta\b/.test(t)) m.tineta = true;
+  if (/1\/4|cuarto/.test(t)) m.cuarto = true;
+  return m;
+}
+
+function medidasATexto(m: Record<string, any>): string {
+  const p: string[] = [];
+  if (m.dim3) p.push(m.dim3.join('x'));
+  if (m.dim2) p.push(m.dim2.join('x'));
+  if (m.pulgadas) p.push(`${m.pulgadas}"`);
+  if (m.mm) p.push(`${m.mm}mm`);
+  if (m.kg) p.push(`${m.kg}kg`);
+  if (m.litros) p.push(`${m.litros}lt`);
+  if (m.galon) p.push('galón');
+  if (m.tineta) p.push('tineta');
+  if (m.cuarto) p.push('1/4');
+  return p.length ? p.join(', ') : 'sin medidas';
+}
+
+function inferirTipoProducto(nombre: string) {
+  const n = normalizar(nombre);
+  return {
+    maquinaria_pesada: /retroexcavadora|minicargador|grua|compactador|pavimentadora/.test(n),
+    herramienta_electrica: /taladro|amoladora|sierra|esmeril|compresor|soldadora|atornillador|lijadora/.test(n),
+    material_construccion: /cemento|hormigon|arena|grava|madera|fierro|acero|tubo|placa|tabla|barra|perfil|plancha|terciado|osb/.test(n),
+    articulo_pequeno: /clavo|tornillo|perno|tuerca|remache|tarugo|golilla|arandela/.test(n),
+    pintura_quimico: /pintura|anticorrosivo|barniz|esmalte|sellador|impermeabilizante|oleo|latex|diluyente|aguarras|cerestain|laca/.test(n),
+    senaletica_vial: /letrero|senal|transito|paso cebra|tachas|delineador|valla|cono|baliza/.test(n),
+  };
+}
+
+function extraerEspecificaciones(texto: string): string[] {
+  const t = normalizar(texto);
+  const s = new Set<string>();
+  ['acero', 'hierro', 'fierro', 'pino', 'madera', 'cemento', 'galvanizado', 'inoxidable', 'zincado',
+   'brillante', 'opaco', 'satinado', 'mate', 'semibrillo', 'blanco', 'negro', 'rojo', 'azul', 'amarillo',
+   'verde', 'gris', 'interior', 'exterior', 'antihumedad', 'antihongos'].forEach((w) => { if (t.includes(w)) s.add(w); });
+  return [...s];
+}
+
+const MARCAS = ['sherwin', 'sipa', 'ceresita', 'soquina', 'passol', 'tajamar', 'tricolor', 'gerdau',
+  'cintac', 'arauco', 'masisa', 'melon', 'stanley', 'bosch', 'dewalt', 'makita', 'hilti', 'sika', 'inchalam', 'cbb'];
+
+function analizarProducto(producto: string) {
+  const categoria = clasificarCategoria(producto);
+  const medidas = extraerMedidas(producto);
+  const n = normalizar(producto);
+  return {
+    nombre_original: producto,
+    nombre_normalizado: n,
+    categoria,
+    palabras_clave: tokens(producto),
+    medidas: { tiene_medidas: Object.keys(medidas).length > 0, detalle: medidas, texto_legible: medidasATexto(medidas) },
+    especificaciones_tecnicas: extraerEspecificaciones(producto),
+    unidades_relevantes: [],
+    es_accesorio: /repuesto|accesorio|disco|carbon|estuche|funda/.test(n),
+    marca_detectada: MARCAS.find((m) => n.includes(m)) || null,
+    tipo_producto: inferirTipoProducto(producto),
+  };
+}
+
+// Compara medidas del buscado vs encontrado → true si hay conflicto claro
+function conflictoMedidas(mb: Record<string, any>, me: Record<string, any>): boolean {
+  if (mb.galon && (me.tineta || me.cuarto)) return true;       // galón vs tineta/cuarto
+  if (mb.pulgadas && me.pulgadas && Math.abs(mb.pulgadas - me.pulgadas) > 0.1) return true;
+  if (mb.litros && me.litros && Math.abs(mb.litros - me.litros) > 0.5) return true;
+  if (mb.mm && me.mm && Math.abs(mb.mm - me.mm) > 0.5) return true;
+  return false;
+}
+
 function clasificarCategoria(nombre: string): string {
   const n = normalizar(nombre);
   if (/madera|pino|mdf|osb|terciado|tabla/.test(n)) return 'madera';
@@ -212,9 +299,14 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Análisis completo del producto buscado (alimenta el reranker IA)
+  const analisis = analizarProducto(producto);
+  const categoria = analisis.categoria;
+  const palabrasProd: string[] = analisis.palabras_clave;
+  const medidasProd = analisis.medidas.detalle;
+
   // Dedupe por url/nombre
   const vistos = new Set<string>();
-  const categoria = clasificarCategoria(producto);
   const resultados = crudos
     .filter((r) => {
       const k = r.url || normalizar(r.nombre);
@@ -226,6 +318,11 @@ export async function GET(req: NextRequest) {
       const score = calcularScore(producto, r.nombre);
       const [nivel, etiqueta] = nivelConcordancia(score);
       const [unidadDet, alertaUnidad] = detectarEmpaque(r.nombre, conversion);
+      // Enriquecimiento para el reranker IA
+      const medRes = extraerMedidas(r.nombre);
+      const palabrasR = new Set(tokens(r.nombre));
+      const palabrasComunes = palabrasProd.filter((w) => palabrasR.has(w));
+      const palabrasFaltantes = palabrasProd.filter((w) => !palabrasR.has(w));
       return {
         tienda: r.tienda,
         nombre: r.nombre,
@@ -243,6 +340,11 @@ export async function GET(req: NextRequest) {
         conversion,
         unidad_detectada: unidadDet,
         alerta_unidad: alertaUnidad,
+        medidas_encontradas: medidasATexto(medRes),
+        specs_encontradas: extraerEspecificaciones(r.nombre),
+        palabras_comunes: palabrasComunes,
+        palabras_faltantes: palabrasFaltantes,
+        conflicto_medidas: analisis.medidas.tiene_medidas && conflictoMedidas(medidasProd, medRes),
       };
     })
     .sort((a, b) => b.score - a.score)
@@ -259,10 +361,6 @@ export async function GET(req: NextRequest) {
     pais_busqueda: 'CL',
     queries_ia: queriesUsadas,
     expandido_ia: queriesUsadas.length > 1,
-    analisis_producto: {
-      nombre_original: producto,
-      categoria,
-      palabras_clave: tokens(producto),
-    },
+    analisis_producto: analisis,
   });
 }
