@@ -308,7 +308,7 @@ export default function MonitorMasivoICA() {
         } catch { /* usar original */ }
       }
 
-      const url = `/python/busqueda-robusta?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}`;
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -431,29 +431,72 @@ export default function MonitorMasivoICA() {
     return [...res].sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0))[0];
   };
 
-  // ─── Exportar MISMO Excel (via Python/openpyxl) con modo de selección ─────────
+  // ─── Exportar MISMO Excel — 100% en el navegador (SheetJS), sin servidor ──────
   const exportarMismoExcel = async (modo: string = 'manual') => {
     if (!archivoExcel) { notify('Carga un Excel primero', 'warning'); return; }
     setMenuDescarga(false);
-    const items = itemsLista.flatMap(item => {
+    const seleccionados = itemsLista.flatMap(item => {
       const sel = elegirPorModo(item, modo);
       if (!sel?.precio_valor) return [];
-      return [{ numero: item.numero, precio: sel.precio_valor, link: sel.link||'', tienda: sel.tienda||'', match: sel.matching?.porcentaje??0 }];
+      return [{ numero: String(item.numero), precio: sel.precio_valor, link: sel.link || '', tienda: sel.tienda || '', match: sel.matching?.porcentaje ?? 0 }];
     });
-    if (!items.length) { notify('Sin resultados para exportar', 'warning'); return; }
-    const nombreModo: Record<string,string> = { manual:'seleccion', mejor_match:'mejor-match', menor_precio:'menor-precio', equilibrado:'equilibrado' };
-    notify(`Generando Excel (${nombreModo[modo]||modo}) con ${items.length} precios...`, 'success');
-    const fd = new FormData();
-    fd.append('archivo', archivoExcel);
-    fd.append('datos', JSON.stringify({ sheet: sheetNameActual, items }));
+    if (!seleccionados.length) { notify('Sin resultados para exportar', 'warning'); return; }
+    const nombreModo: Record<string, string> = { manual: 'seleccion', mejor_match: 'mejor-match', menor_precio: 'menor-precio', equilibrado: 'equilibrado' };
+    notify(`Generando Excel (${nombreModo[modo] || modo})...`, 'success');
+
     try {
-      const res = await fetch('/python/exportar-costeo', { method: 'POST', body: fd });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); notify(`Error: ${(e as any).error || `HTTP ${res.status}`}`, 'error'); return; }
-      const blob = await res.blob();
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `COSTEO_${nombreModo[modo]||modo}_${new Date().toISOString().split('T')[0]}.xlsx` });
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      notify(`${items.length} ítems exportados (${nombreModo[modo]||modo})`, 'success');
-    } catch (e: any) { notify(`Error: ${e.message}`, 'error'); }
+      // Releer el archivo original fresco → preserva fórmulas y formato intactos
+      const buf = await archivoExcel.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellStyles: true });
+      const ws = wb.Sheets[sheetNameActual];
+      if (!ws) { notify('No se encontró la pestaña', 'error'); return; }
+
+      // Detectar fila de encabezados y columnas
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as any[][];
+      let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
+      for (let i = 0; i < Math.min(25, aoa.length); i++) {
+        const up = (aoa[i] || []).map((c: any) => String(c || '').toUpperCase().trim());
+        if (up.some(h => h === 'ITEM' || h.includes('ITEM'))) {
+          headerRow = i;
+          up.forEach((h, j) => {
+            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = j;
+            else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
+            else if (h.startsWith('LINK') && colLink < 0) colLink = j;
+          });
+          break;
+        }
+      }
+      if (headerRow < 0 || colItem < 0) { notify('No se encontró columna ITEM en la pestaña', 'error'); return; }
+      if (colValor < 0) { notify('No se encontró columna VALOR C/IVA', 'error'); return; }
+
+      const range = XLSX.utils.decode_range(ws['!ref'] as string);
+      const colTienda = range.e.c + 1;
+      const colMatch = range.e.c + 2;
+      ws[XLSX.utils.encode_cell({ r: headerRow, c: colTienda })] = { t: 's', v: 'TIENDA COTIZADA' };
+      ws[XLSX.utils.encode_cell({ r: headerRow, c: colMatch })] = { t: 's', v: '% COINCIDENCIA' };
+
+      const mapa = new Map(seleccionados.map(s => [s.numero, s]));
+      let filled = 0;
+      for (let r = headerRow + 1; r < aoa.length; r++) {
+        const itemVal = aoa[r]?.[colItem];
+        if (itemVal == null) continue;
+        const dato = mapa.get(String(itemVal).trim());
+        if (!dato) continue;
+        ws[XLSX.utils.encode_cell({ r, c: colValor })] = { t: 'n', v: dato.precio };
+        if (colLink >= 0 && dato.link) ws[XLSX.utils.encode_cell({ r, c: colLink })] = { t: 's', v: dato.link };
+        ws[XLSX.utils.encode_cell({ r, c: colTienda })] = { t: 's', v: dato.tienda };
+        ws[XLSX.utils.encode_cell({ r, c: colMatch })] = { t: 's', v: `${dato.match}%` };
+        filled++;
+      }
+      range.e.c = Math.max(range.e.c, colMatch);
+      ws['!ref'] = XLSX.utils.encode_range(range);
+
+      if (!filled) { notify('No se encontraron ítems para rellenar', 'warning'); return; }
+      XLSX.writeFile(wb, `COSTEO_${nombreModo[modo] || modo}_${new Date().toISOString().split('T')[0]}.xlsx`, { bookType: 'xlsx' });
+      notify(`${filled} ítems exportados (${nombreModo[modo] || modo})`, 'success');
+    } catch (e: any) {
+      notify(`Error generando Excel: ${e.message}`, 'error');
+    }
   };
 
   // ─── Exportar MEJOR resultado ─────────────────────────────────────────────────
