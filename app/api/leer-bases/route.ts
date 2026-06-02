@@ -57,10 +57,12 @@ export async function POST(req: Request) {
   if (!GEMINI_KEY) return NextResponse.json({ error: 'GEMINI_API_KEY no configurada' }, { status: 500 });
 
   let bucket = '', path = '';
+  let itemsExcel: Array<{ numero: string; detalle: string; conversion?: string }> = [];
   try {
     const body = await req.json();
     bucket = body.bucket || 'bases-licitaciones';
     path = body.path;
+    itemsExcel = Array.isArray(body.itemsExcel) ? body.itemsExcel.slice(0, 120) : [];
     if (!path) return NextResponse.json({ error: 'Falta path del PDF' }, { status: 400 });
   } catch {
     return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
@@ -75,12 +77,33 @@ export async function POST(req: Request) {
     // Subir a Gemini y extraer
     const fileUri = await subirAGemini(bytes, bytes.byteLength);
 
-    const prompt = `Eres experto en licitaciones de Mercado Público Chile. Este PDF son las BASES de una licitación.
+    let prompt = `Eres experto en licitaciones de Mercado Público Chile. Este PDF son las BASES de una licitación.
 Extrae TODOS los productos/ítems solicitados con sus especificaciones técnicas completas.
-Para cada ítem incluye: número de ítem, nombre del producto, especificaciones técnicas detalladas
-(medidas, materiales, marcas de referencia "equivalente/similar/superior a X"), cantidad y unidad de medida.
-Responde SOLO JSON con esta forma exacta:
-{"items":[{"item":"4.1","nombre":"...","especificaciones":"...","cantidad":"10","unidad":"Unidades"}]}`;
+Para cada ítem incluye: número, nombre, especificaciones técnicas detalladas
+(medidas, materiales, marcas de referencia "equivalente/similar/superior a X"), cantidad y unidad.`;
+
+    if (itemsExcel.length) {
+      prompt += `
+
+ADEMÁS, tengo esta lista de ítems de mi COSTEO (Excel) que voy a cotizar:
+${JSON.stringify(itemsExcel.map((i) => ({ numero: i.numero, detalle: i.detalle })))}
+
+Tu tarea PRINCIPAL: para CADA ítem de MI costeo, genera una "busqueda" mejorada que sea lo que conviene
+escribir en un buscador de productos para encontrar EXACTAMENTE lo que piden las bases.
+- Si al ítem le faltan especificaciones (medida, material, marca de referencia, color, capacidad), COMPLÉTALO con lo que dicen las bases.
+- Si el ítem ya está bien descrito, devuelve la búsqueda igual o casi igual.
+- NO inventes specs que no estén en las bases. Mantén el nombre base del producto.
+- Empareja cada ítem de mi costeo con el ítem correspondiente de las bases por significado, no solo por texto.
+
+Responde SOLO JSON con esta forma EXACTA:
+{
+  "items":[{"item":"4.1","nombre":"...","especificaciones":"...","cantidad":"10","unidad":"Unidades"}],
+  "enriquecidos":[{"numero":"1","busqueda":"texto mejorado para buscar","agregado":"qué specs se añadieron (o vacío si no faltaba nada)"}]
+}`;
+    } else {
+      prompt += `
+Responde SOLO JSON: {"items":[{"item":"4.1","nombre":"...","especificaciones":"...","cantidad":"10","unidad":"Unidades"}]}`;
+    }
 
     const genBody = {
       contents: [{ parts: [{ text: prompt }, { fileData: { mimeType: 'application/pdf', fileUri } }] }],
@@ -97,12 +120,14 @@ Responde SOLO JSON con esta forma exacta:
     }
     const out = await gen.json();
     const txt = out?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    let items: any[] = [];
+    let parsed: any = {};
     try {
-      items = JSON.parse(txt).items || [];
+      parsed = JSON.parse(txt);
     } catch {
       return NextResponse.json({ error: 'Gemini devolvió formato inesperado' }, { status: 500 });
     }
+    const items: any[] = parsed.items || [];
+    const enriquecidos: any[] = parsed.enriquecidos || [];
 
     // Limpiar: borrar el PDF temporal del storage
     supabase.storage.from(bucket).remove([path]).catch(() => {});
@@ -116,6 +141,11 @@ Responde SOLO JSON con esta forma exacta:
         especificaciones: String(it.especificaciones ?? '').trim(),
         cantidad: String(it.cantidad ?? '').trim(),
         unidad: String(it.unidad ?? '').trim(),
+      })),
+      enriquecidos: enriquecidos.map((e: any) => ({
+        numero: String(e.numero ?? '').trim(),
+        busqueda: String(e.busqueda ?? '').trim(),
+        agregado: String(e.agregado ?? '').trim(),
       })),
     });
   } catch (e: any) {

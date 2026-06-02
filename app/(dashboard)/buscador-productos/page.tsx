@@ -162,9 +162,9 @@ const ModalBases = ({ items, onClose }: {
         <div className="flex justify-between items-center p-5 border-b">
           <div>
             <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
-              <Sparkles size={16} className="text-violet-600" /> Ítems detectados en las bases
+              <Sparkles size={16} className="text-violet-600" /> Cómo se buscará cada ítem
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">{items.length} ítems leídos por IA · {enlazados} enlazados a tu Excel (verde)</p>
+            <p className="text-xs text-slate-400 mt-0.5">{items.length} ítems · {enlazados} completados con specs de las bases (verde)</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
         </div>
@@ -173,23 +173,21 @@ const ModalBases = ({ items, onClose }: {
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
                 <th className="pb-2 pr-3 font-semibold">Ítem</th>
-                <th className="pb-2 pr-3 font-semibold">Producto</th>
-                <th className="pb-2 pr-3 font-semibold">Especificación detectada</th>
-                <th className="pb-2 pr-3 font-semibold text-center">Cant.</th>
-                <th className="pb-2 font-semibold text-center">Enlace Excel</th>
+                <th className="pb-2 pr-3 font-semibold">En tu Excel</th>
+                <th className="pb-2 pr-3 font-semibold">Se buscará (mejorado por IA)</th>
+                <th className="pb-2 font-semibold">Specs agregadas</th>
               </tr>
             </thead>
             <tbody>
               {items.map((it, i) => (
                 <tr key={i} className={`border-b border-slate-50 ${it._excel ? 'bg-emerald-50/40' : ''}`}>
-                  <td className="py-2 pr-3 text-slate-500 text-xs">{it.item}</td>
-                  <td className="py-2 pr-3 text-slate-800 font-medium max-w-[200px]">{it.nombre}</td>
-                  <td className="py-2 pr-3 text-slate-600 text-xs max-w-sm">{it.especificaciones || <span className="text-slate-300">—</span>}</td>
-                  <td className="py-2 pr-3 text-center text-slate-500 text-xs">{it.cantidad} {it.unidad}</td>
-                  <td className="py-2 text-center">
-                    {it._excel
-                      ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">#{it._excel}</span>
-                      : <span className="text-[10px] text-slate-300">sin enlace</span>}
+                  <td className="py-2 pr-3 text-slate-500 text-xs align-top">{it.item}</td>
+                  <td className="py-2 pr-3 text-slate-500 text-xs max-w-[200px] align-top">{it.nombre}</td>
+                  <td className="py-2 pr-3 text-slate-800 text-xs font-medium max-w-sm align-top">{it.especificaciones}</td>
+                  <td className="py-2 text-xs align-top">
+                    {it.cantidad
+                      ? <span className="text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">+ {it.cantidad}</span>
+                      : <span className="text-slate-300">ya estaba completo</span>}
                   </td>
                 </tr>
               ))}
@@ -280,39 +278,41 @@ export default function MonitorMasivoICA() {
       const { error: upErr } = await supabase.storage.from(u.bucket).uploadToSignedUrl(u.path, u.token, file);
       if (upErr) throw new Error(`Error subiendo PDF: ${upErr.message}`);
 
-      // 3) Gemini lee y extrae los ítems con especificaciones
+      // 3) Gemini lee el PDF + los ítems del Excel y COMPLETA lo que falta a cada uno
+      const itemsExcelPayload = productosExcel.map(pe => ({ numero: String(pe.numero), detalle: pe.nombre }));
       const leerRes = await fetch('/api/leer-bases', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bucket: u.bucket, path: u.path }),
+        body: JSON.stringify({ bucket: u.bucket, path: u.path, itemsExcel: itemsExcelPayload }),
       });
       const data = await leerRes.json();
       if (!leerRes.ok || !data.ok) throw new Error(data.error || 'No se pudo leer el PDF');
 
-      const itemsBases: Array<{ item: string; nombre: string; especificaciones: string; cantidad: string; unidad: string; _excel?: string }> = data.items || [];
+      const itemsBases = data.items || [];
+      const enriquecidos: Array<{ numero: string; busqueda: string; agregado: string }> = data.enriquecidos || [];
 
-      // 4) Asociar especificaciones a cada ítem del Excel por similitud de nombre
+      // 4) Construir el mapa numero → búsqueda mejorada (lo que se usará al cotizar)
       const mapa = new Map<string, string>();
-      if (productosExcel.length) {
-        productosExcel.forEach(pe => {
-          const toksExcel = new Set(norm(pe.nombre).split(/\s+/).filter(w => w.length > 2));
-          let mejorIb: any = null; let mejorScore = 0;
-          itemsBases.forEach(ib => {
-            const toksBase = norm(ib.nombre).split(/\s+/).filter(w => w.length > 2);
-            const comunes = toksBase.filter(w => toksExcel.has(w)).length;
-            const sc = toksBase.length ? comunes / toksBase.length : 0;
-            if (sc > mejorScore) { mejorScore = sc; mejorIb = ib; }
-          });
-          if (mejorScore >= 0.4 && mejorIb?.especificaciones) {
-            mapa.set(String(pe.numero), mejorIb.especificaciones);
-            mejorIb._excel = String(pe.numero); // marcar enlace para el modal
-          }
+      const detalleOriginal = new Map(productosExcel.map(pe => [String(pe.numero), pe.nombre]));
+      const filasModal = enriquecidos
+        .filter(e => e.busqueda)
+        .map(e => {
+          mapa.set(e.numero, e.busqueda);
+          return {
+            item: e.numero,
+            nombre: detalleOriginal.get(e.numero) || '',
+            especificaciones: e.busqueda,        // búsqueda mejorada
+            cantidad: e.agregado || '',          // qué se completó
+            unidad: '',
+            _excel: e.agregado ? e.numero : undefined, // verde si se completó algo
+          };
         });
-      }
+
       setEspecPorItem(mapa);
-      setBasesItems(itemsBases);
+      setBasesItems(filasModal.length ? filasModal : itemsBases);
       setBasesInfo({ total: itemsBases.length });
-      setShowBasesModal(true); // mostrar lo que encontró para revisar
-      notify(`Bases leídas: ${itemsBases.length} ítems · ${mapa.size} enlazados a tu Excel`, 'success');
+      setShowBasesModal(true);
+      const completados = enriquecidos.filter(e => e.agregado).length;
+      notify(`Bases leídas: ${itemsBases.length} ítems · ${completados} ítems completados con specs`, 'success');
     } catch (e: any) {
       notify(`Error con las bases: ${e.message}`, 'error');
     } finally {
@@ -409,9 +409,9 @@ export default function MonitorMasivoICA() {
     conversion = 'unidad'
   ): Promise<ItemLista> => {
     try {
-      // Enriquecer con la especificación de las bases (si se cargó el PDF) para este ítem
-      const espec = especPorItem.get(String(numero));
-      const productoBuscar = espec ? `${producto} ${espec}`.slice(0, 200) : producto;
+      // Si Gemini generó una búsqueda mejorada para este ítem (con las bases), usarla
+      const mejorada = especPorItem.get(String(numero));
+      const productoBuscar = mejorada ? mejorada.slice(0, 200) : producto;
 
       // El backend hace la expansión inteligente con IA (términos vagos → variantes)
       // usando el contexto del rubro. Pasamos el producto + specs de bases + contexto.
