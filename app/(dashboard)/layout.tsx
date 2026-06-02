@@ -117,12 +117,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // ─── Marca ─────────────────────────────────────────────────────────────────
   const Brand = ({ dark = true }: { dark?: boolean }) => (
     <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1D4ED8] to-[#06B6D4] flex items-center justify-center shadow-lg shadow-blue-900/30">
+      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-lg shadow-blue-900/30">
         <Sparkles className="w-5 h-5 text-white" />
       </div>
       <div className="leading-tight">
         <p className={`font-black text-[15px] tracking-tight ${dark ? "text-white" : "text-slate-800"}`}>
-          Comercial <span className="text-[#06B6D4]">MP</span>
+          Comercial <span className="text-[#10B981]">MP</span>
         </p>
         <p className={`text-[9px] font-bold tracking-[0.35em] ${dark ? "text-slate-400" : "text-slate-400"}`}>WORKSPACE</p>
       </div>
@@ -136,32 +136,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="absolute bottom-full mb-2 left-0 right-0 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#1D4ED8]" /> Privilegios
+              <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" /> Privilegios
             </span>
             <button onClick={() => setShowPerms(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
           </div>
           <div className="mb-2">
             <span className="text-[9px] text-slate-400">Rol</span>
-            <p className="text-xs font-bold text-[#1D4ED8]">{userRol ? (ROL_LABEL[userRol] || userRol) : "—"}</p>
+            <p className="text-xs font-bold text-[#059669]">{userRol ? (ROL_LABEL[userRol] || userRol) : "—"}</p>
           </div>
           <div className="space-y-1">
             {permActivos.length ? permActivos.map(([k]) => (
               <div key={k} className="flex items-center gap-2 text-[11px] text-slate-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#06B6D4]" /> {PERM_LABELS[k] || k}
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> {PERM_LABELS[k] || k}
               </div>
             )) : <p className="text-[11px] text-slate-400">Privilegios estándar de su rol.</p>}
           </div>
         </div>
       )}
       <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1D4ED8] to-[#06B6D4] flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-blue-900/40">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-blue-900/40">
           {userName.substring(0, 2).toUpperCase()}
         </div>
         <button onClick={() => setShowPerms(s => !s)} className="flex-1 overflow-hidden text-left">
           <p className="text-xs font-bold text-white truncate">{userName}</p>
           <p className="text-[9px] text-slate-400 truncate">{userEmail}</p>
           {userRol && (
-            <span className="inline-flex items-center gap-1 mt-0.5 text-[8px] font-bold uppercase text-[#06B6D4]">
+            <span className="inline-flex items-center gap-1 mt-0.5 text-[8px] font-bold uppercase text-[#10B981]">
               <ShieldCheck className="w-2.5 h-2.5" /> {ROL_LABEL[userRol] || userRol}
             </span>
           )}
@@ -176,7 +176,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // ─── Vista restringida (solo productos) ──────────────────────────────────────
   if (isOnlyProductsUser) {
     return (
-      <div className="flex min-h-screen bg-[#F8FAFC]">
+      <div className="flex min-h-screen bg-[#F3F4F6]">
         <main className="flex-1 p-6 md:p-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
@@ -195,9 +195,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // ─── Layout completo ─────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC]">
+    <div className="flex min-h-screen bg-[#F3F4F6]">
       {/* SIDEBAR */}
-      <aside className="w-64 fixed h-full z-20 flex flex-col bg-gradient-to-b from-[#0F172A] to-[#1E293B] border-r border-white/5">
+      <aside className="w-64 fixed h-full z-20 flex flex-col bg-gradient-to-b from-[#111827] to-[#1F2937] border-r border-white/5">
         <div className="px-5 py-6 border-b border-white/5"><Brand /></div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
@@ -208,13 +208,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {section.items.map((item) => {
                   const isActive = pathname === item.path || pathname?.startsWith(item.path + "/");
                   const cls = `group flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all relative ${
-                    isActive ? "bg-gradient-to-r from-[#1D4ED8]/25 to-transparent text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
+                    isActive ? "bg-gradient-to-r from-[#059669]/25 to-transparent text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
                   }`;
                   const content = (
                     <>
-                      {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#06B6D4]" />}
+                      {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#10B981]" />}
                       <span className="flex items-center gap-3">
-                        <item.icon className={`w-[18px] h-[18px] transition-colors ${isActive ? "text-[#06B6D4]" : "text-slate-500 group-hover:text-[#06B6D4]"}`} />
+                        <item.icon className={`w-[18px] h-[18px] transition-colors ${isActive ? "text-[#10B981]" : "text-slate-500 group-hover:text-[#10B981]"}`} />
                         {item.name}
                       </span>
                       {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-600" />}
@@ -238,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* HEADER con identificador de vista */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-7">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[10px] font-bold tracking-wider text-white bg-gradient-to-r from-[#1D4ED8] to-[#06B6D4] px-2.5 py-1 rounded-md shadow-sm">
+              <span className="font-mono text-[10px] font-bold tracking-wider text-white bg-gradient-to-r from-[#059669] to-[#10B981] px-2.5 py-1 rounded-md shadow-sm">
                 {meta.id}
               </span>
               <div>

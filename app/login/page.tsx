@@ -64,19 +64,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#0B1F3A] to-[#1E293B] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#1F2937] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Glows decorativos */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#1D4ED8]/20 blur-[120px] rounded-full" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#06B6D4]/20 blur-[120px] rounded-full" />
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#059669]/20 blur-[120px] rounded-full" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#10B981]/20 blur-[120px] rounded-full" />
 
       <div className="relative bg-white/95 backdrop-blur-xl p-10 md:p-12 rounded-3xl w-full max-w-md shadow-[0_30px_80px_rgba(0,0,0,0.55)] border border-white/20">
 
         <header className="mb-10 text-center">
-          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#1D4ED8] to-[#06B6D4] flex items-center justify-center shadow-xl shadow-blue-900/30">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-xl shadow-blue-900/30">
             <Sparkles className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-black tracking-tight leading-none mb-2 text-slate-800">
-            Comercial <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1D4ED8] to-[#06B6D4]">MP</span>
+            Comercial <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#059669] to-[#10B981]">MP</span>
           </h1>
           <p className="text-[10px] font-black uppercase tracking-[0.45em] text-slate-400">Workspace</p>
         </header>
@@ -90,26 +90,26 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="relative group">
-            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#1D4ED8] transition-colors" />
+            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#059669] transition-colors" />
             <input
               type="email"
               placeholder="Correo electrónico"
               required
               disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#1D4ED8]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#059669]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
           </div>
 
           <div className="relative group">
-            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#1D4ED8] transition-colors" />
+            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#059669] transition-colors" />
             <input
               type="password"
               placeholder="Contraseña"
               required
               disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#1D4ED8]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#059669]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
               value={password}
               onChange={e => setPassword(e.target.value)}
             />
@@ -118,7 +118,7 @@ export default function LoginPage() {
           <div className="flex justify-end px-1">
             <Link
               href="/forgot-password"
-              className="text-[11px] font-bold text-slate-400 hover:text-[#1D4ED8] transition-colors uppercase tracking-wider"
+              className="text-[11px] font-bold text-slate-400 hover:text-[#059669] transition-colors uppercase tracking-wider"
             >
               ¿Olvidaste tu clave?
             </Link>
@@ -127,7 +127,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-[#1D4ED8] to-[#06B6D4] hover:shadow-[0_10px_30px_rgba(29,78,216,0.45)] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
+            className="w-full bg-gradient-to-r from-[#059669] to-[#10B981] hover:shadow-[0_10px_30px_rgba(29,78,216,0.45)] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
