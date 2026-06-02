@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { 
-  ClipboardCheck, MessageSquare, Calendar, Bell, Cake, 
-  Clock, Loader2, ArrowRight, CheckCircle2, 
+import {
+  ClipboardCheck, MessageSquare, Calendar, Bell, Cake,
+  Clock, Loader2, ArrowRight, CheckCircle2,
   GraduationCap, Building,
-  Gift, Smile, Heart, Users, Package, AlertCircle
+  Gift, Smile, Heart, Users, Package, AlertCircle,
+  Sparkles, TrendingUp, AlertTriangle, X, ChevronRight
 } from "lucide-react";
 
 // Definir tipos para mejor seguridad
@@ -50,6 +51,7 @@ export default function HomePage() {
   const [userRole, setUserRole] = useState("");
   const [perfilId, setPerfilId] = useState("");
   const [empleadoId, setEmpleadoId] = useState<string | null>(null);
+  const [alertasOcultas, setAlertasOcultas] = useState<string[]>([]);
 
   // 📊 DATOS GLOBALES
   const [cumpleañosProximos, setCumpleañosProximos] = useState<Cumpleaños[]>([]);
@@ -85,7 +87,7 @@ export default function HomePage() {
   const cargarDatos = async () => {
     try {
       setLoading(true);
-      
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push("/login");
@@ -116,12 +118,12 @@ export default function HomePage() {
       // ============================================
       // 📊 DATOS GLOBALES - CUMPLEAÑOS CORREGIDO
       // ============================================
-      
+
       const { data: todosPerfiles, error: perfilesError } = await supabase
         .from('perfiles')
         .select('id, nombre, apellido, fecha_nacimiento, cargo, rol, activo')
         .eq('activo', true);
-      
+
       if (perfilesError) {
         console.error("Error cargando perfiles:", perfilesError);
       }
@@ -131,26 +133,26 @@ export default function HomePage() {
 
       // Procesar cumpleaños - AHORA MUESTRA TODOS SIN LÍMITE
       const cumpleañosArray: Cumpleaños[] = [];
-      
+
       for (const p of (todosPerfiles || [])) {
         if (!p.fecha_nacimiento) {
           console.log(`Perfil ${p.nombre} sin fecha_nacimiento`);
           continue;
         }
-        
+
         try {
           const fechaNac = new Date(p.fecha_nacimiento);
           if (isNaN(fechaNac.getTime())) {
             console.log(`Fecha inválida para ${p.nombre}: ${p.fecha_nacimiento}`);
             continue;
           }
-          
+
           const proxCumple = new Date(hoy.getFullYear(), fechaNac.getMonth(), fechaNac.getDate());
-          
+
           if (proxCumple < hoy) {
             proxCumple.setFullYear(proxCumple.getFullYear() + 1);
           }
-          
+
           const dias = Math.ceil((proxCumple.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
           // ✅ CORREGIDO: Mostrar TODOS los próximos cumpleaños (sin límite de días)
@@ -171,13 +173,13 @@ export default function HomePage() {
           console.error(`Error procesando fecha para ${p.nombre}:`, error);
         }
       }
-      
+
       // Ordenar por días faltantes (más cercanos primero)
       cumpleañosArray.sort((a, b) => a.diasFaltantes - b.diasFaltantes);
-      
+
       // ✅ CORREGIDO: Mostrar TODOS los cumpleaños, sin limitar a 6
       const cumpleañosProximosFiltrados = cumpleañosArray;
-      
+
       console.log("Cumpleaños próximos encontrados (TODOS):", cumpleañosProximosFiltrados.length);
       setCumpleañosProximos(cumpleañosProximosFiltrados);
 
@@ -189,7 +191,7 @@ export default function HomePage() {
         .eq('activo', true)
         .order('fecha_inicio', { ascending: true })
         .limit(5);
-      
+
       if (capsError) console.error("Error capacitaciones:", capsError);
       setCapacitacionesProximas(capacitaciones || []);
 
@@ -198,7 +200,7 @@ export default function HomePage() {
         .from('perfiles')
         .select('id', { count: 'exact', head: true })
         .eq('activo', true);
-      
+
       if (totalError) console.error("Error total:", totalError);
       setTotalEmpleados(total || 0);
 
@@ -207,7 +209,7 @@ export default function HomePage() {
         .from('proveedores')
         .select('id', { count: 'exact', head: true })
         .eq('activo', true);
-      
+
       if (provError) console.error("Error proveedores:", provError);
       setProveedoresActivos(proveedores || 0);
 
@@ -226,26 +228,26 @@ export default function HomePage() {
 
       // 1. Mis tareas pendientes
       console.log("Buscando tareas para perfil_id:", perfil.id);
-      
+
       const { data: tareasUsuario, error: tareasError } = await supabase
         .from('tareas')
         .select('*')
         .eq('asignado_a', perfil.id);
-      
+
       if (tareasError) {
         console.error("Error cargando tareas:", tareasError);
         setMisTareas([]);
       } else {
         console.log("Tareas encontradas (total):", tareasUsuario?.length);
-        
+
         // Filtramos las pendientes
         const pendientes = (tareasUsuario || []).filter((t: any) => {
-          return t.estado === 'pendiente' || 
-                 t.estado === 'Pendiente' || 
-                 t.completado === false || 
+          return t.estado === 'pendiente' ||
+                 t.estado === 'Pendiente' ||
+                 t.completado === false ||
                  t.status === 'pending';
         });
-        
+
         // Ordenar por fecha_limite de forma segura
         pendientes.sort((a: any, b: any) => {
           if (!a.fecha_limite && !b.fecha_limite) return 0;
@@ -253,7 +255,7 @@ export default function HomePage() {
           if (!b.fecha_limite) return -1;
           return new Date(a.fecha_limite).getTime() - new Date(b.fecha_limite).getTime();
         });
-        
+
         console.log("Tareas pendientes encontradas:", pendientes.length);
         setMisTareas(pendientes); // guardar TODAS para que el conteo sea real
       }
@@ -264,7 +266,7 @@ export default function HomePage() {
         .select('*', { count: 'exact', head: true })
         .eq('receptor_id', session.user.id)
         .eq('leido', false);
-      
+
       if (msgError) console.error("Error mensajes:", msgError);
       setMisMensajes(mensajes || 0);
 
@@ -274,14 +276,14 @@ export default function HomePage() {
         .select('*', { count: 'exact', head: true })
         .eq('usuario_id', perfil.id)
         .eq('leida', false);
-      
+
       if (notError) console.error("Error notificaciones:", notError);
       setMisNotificaciones(notificaciones || 0);
 
       // 4. Mis próximas capacitaciones
       if (perfil.empleado_id) {
         console.log("Buscando capacitaciones para empleado_id:", perfil.empleado_id);
-        
+
         const { data: misCaps, error: capsPersonalesError } = await supabase
           .from('empleados_capacitaciones')
           .select(`
@@ -290,24 +292,24 @@ export default function HomePage() {
             fecha_inscripcion,
             capacitacion_id,
             capacitaciones!inner (
-              id, 
-              nombre, 
-              fecha_inicio, 
-              fecha_fin, 
-              modalidad, 
+              id,
+              nombre,
+              fecha_inicio,
+              fecha_fin,
+              modalidad,
               horas_total,
               activo
             )
           `)
           .eq('empleado_id', perfil.empleado_id)
           .eq('completado', false);
-        
+
         if (capsPersonalesError) {
           console.error("Error capacitaciones personales:", capsPersonalesError);
           setMisProximasCapacitaciones([]);
         } else if (misCaps && misCaps.length > 0) {
           console.log("Capacitaciones personales encontradas:", misCaps.length);
-          
+
           const capsFiltradas = misCaps
             .map((item: any) => item.capacitaciones)
             .filter((cap: any) => {
@@ -322,7 +324,7 @@ export default function HomePage() {
               return new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime();
             })
             .slice(0, 3);
-          
+
           setMisProximasCapacitaciones(capsFiltradas);
         } else {
           setMisProximasCapacitaciones([]);
@@ -362,153 +364,203 @@ export default function HomePage() {
     }
   };
 
+  const rolLabel =
+    userRole === 'admin' ? 'Administrador' :
+    userRole === 'superuser' ? 'Super Usuario' :
+    userRole === 'vendedor' ? 'Vendedor' :
+    userRole === 'rrhh' ? 'Recursos Humanos' :
+    userRole === 'jefe' ? 'Jefatura' : 'Usuario';
+
+  // ── Alertas modernas contextuales (derivadas del estado, sin queries extra) ──
+  const tareasAlta = misTareas.filter((t) => (t.prioridad || '').toLowerCase() === 'alta').length;
+  const cumpleHoy = cumpleañosProximos.filter((c) => c.diasFaltantes === 0);
+
+  type Alerta = { id: string; tipo: 'error' | 'warning' | 'success' | 'info'; icon: any; texto: string; accion?: () => void; cta?: string };
+  const alertas: Alerta[] = [];
+  if (tareasAlta > 0)
+    alertas.push({ id: 'tareas-alta', tipo: 'error', icon: AlertTriangle, texto: `Tienes ${tareasAlta} tarea${tareasAlta > 1 ? 's' : ''} de prioridad alta pendiente${tareasAlta > 1 ? 's' : ''}.`, accion: () => router.push('/tareas'), cta: 'Ver tareas' });
+  if (productosSinStock > 0)
+    alertas.push({ id: 'sin-stock', tipo: 'warning', icon: Package, texto: `${productosSinStock.toLocaleString('es-CL')} producto${productosSinStock > 1 ? 's' : ''} sin stock en catálogo.`, accion: () => router.push('/obuma-productos'), cta: 'Revisar' });
+  if (cumpleHoy.length > 0)
+    alertas.push({ id: 'cumple-hoy', tipo: 'success', icon: Cake, texto: `🎉 Hoy cumple${cumpleHoy.length > 1 ? 'n' : ''} ${cumpleHoy.map((c) => c.nombre).join(', ')}. ¡No olvides saludar!` });
+  if (miProximoCumpleaños?.dias === 0)
+    alertas.push({ id: 'mi-cumple', tipo: 'success', icon: Gift, texto: '¡Feliz cumpleaños! Hoy es tu día especial 🎂' });
+  const alertasVisibles = alertas.filter((a) => !alertasOcultas.includes(a.id));
+
+  const alertStyles: Record<string, string> = {
+    error: 'bg-rose-50 border-[#EF4444] text-rose-800',
+    warning: 'bg-amber-50 border-[#F59E0B] text-amber-800',
+    success: 'bg-emerald-50 border-[#22C55E] text-emerald-800',
+    info: 'bg-slate-50 border-slate-300 text-slate-700',
+  };
+  const alertIconColor: Record<string, string> = {
+    error: 'text-[#EF4444]', warning: 'text-[#F59E0B]', success: 'text-[#22C55E]', info: 'text-slate-500',
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
-        <Loader2 className="w-12 h-12 animate-spin text-[#00338d] mb-4" />
-        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Cargando tu espacio...</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center">
+        <div className="relative mb-5">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-lg shadow-emerald-900/20">
+            <Sparkles className="w-7 h-7 text-white" />
+          </div>
+          <Loader2 className="w-20 h-20 animate-spin text-[#059669]/30 absolute -top-3 -left-3" />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Cargando tu espacio…</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8">
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-800">
-            Hola, <span className="text-[#00338d]">{userName}</span>
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">{fechaActual}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full text-xs font-bold">
-            {userRole === 'admin' ? 'Administrador' : userRole === 'superuser' ? 'Super Usuario' : userRole === 'vendedor' ? 'Vendedor' : 'Usuario'}
+    <div className="max-w-[1600px] mx-auto space-y-6">
+
+      {/* ── Banner de bienvenida ─────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#111827] p-6 md:p-8 shadow-xl shadow-slate-900/20">
+        <div className="absolute -top-20 -right-10 w-72 h-72 bg-[#10B981]/20 blur-[100px] rounded-full" />
+        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-[#059669]/10 blur-[100px] rounded-full" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#D1FAE5] text-[#059669] px-2.5 py-1 rounded-full">
+              <Sparkles className="w-3 h-3" /> Comercial MP Workspace
+            </span>
+            <h1 className="text-2xl md:text-3xl font-black text-white mt-3 leading-tight">
+              Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10B981] to-[#34D399]">{userName}</span> 👋
+            </h1>
+            <p className="text-slate-400 text-sm mt-1 capitalize">{fechaActual}</p>
+          </div>
+          <div className="flex items-center gap-2 self-start md:self-center">
+            <span className="bg-white/10 backdrop-blur border border-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold">
+              {rolLabel}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Tarjetas rápidas personales */}
+      {/* ── Alertas modernas ─────────────────────────────────────────────── */}
+      {alertasVisibles.length > 0 && (
+        <div className="space-y-2.5">
+          {alertasVisibles.map((a) => (
+            <div key={a.id} className={`flex items-center gap-3 border-l-4 rounded-2xl px-4 py-3 shadow-sm animate-in fade-in slide-in-from-top-1 ${alertStyles[a.tipo]}`}>
+              <a.icon className={`w-5 h-5 flex-shrink-0 ${alertIconColor[a.tipo]}`} />
+              <p className="text-sm font-semibold flex-1">{a.texto}</p>
+              {a.accion && (
+                <button onClick={a.accion} className="text-xs font-bold flex items-center gap-1 hover:underline whitespace-nowrap">
+                  {a.cta} <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button onClick={() => setAlertasOcultas((s) => [...s, a.id])} className="opacity-40 hover:opacity-100 transition-opacity">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Tarjetas rápidas personales ──────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div onClick={() => router.push('/tareas')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
-          <div className="flex items-center justify-between">
-            <ClipboardCheck className="text-blue-500 mb-2" size={28} />
-            <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+        {[
+          { icon: ClipboardCheck, val: misTareas.length, label: 'Tareas pendientes', tint: 'bg-[#D1FAE5] text-[#059669]', ring: 'group-hover:text-[#059669]', ruta: '/tareas' },
+          { icon: MessageSquare, val: misMensajes, label: 'Mensajes nuevos', tint: 'bg-sky-100 text-sky-600', ring: 'group-hover:text-sky-600', ruta: '/chat' },
+          { icon: Bell, val: misNotificaciones, label: 'Notificaciones', tint: 'bg-amber-100 text-amber-600', ring: 'group-hover:text-amber-600', ruta: '/notificaciones' },
+          { icon: GraduationCap, val: misProximasCapacitaciones.length, label: 'Capacitaciones', tint: 'bg-violet-100 text-violet-600', ring: 'group-hover:text-violet-600', ruta: '/capacitaciones' },
+        ].map((c, i) => (
+          <div key={i} onClick={() => router.push(c.ruta)}
+            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all group">
+            <div className="flex items-center justify-between">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.tint}`}>
+                <c.icon size={22} />
+              </div>
+              <ArrowRight size={16} className={`text-slate-300 transition-colors ${c.ring}`} />
+            </div>
+            <p className="text-3xl font-black text-[#111827] mt-3">{c.val}</p>
+            <p className="text-xs text-slate-500 font-medium">{c.label}</p>
           </div>
-          <p className="text-3xl font-black text-slate-800 mt-2">{misTareas.length}</p>
-          <p className="text-xs text-slate-500">Tareas pendientes</p>
-        </div>
-        
-        <div onClick={() => router.push('/chat')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
-          <div className="flex items-center justify-between">
-            <MessageSquare className="text-emerald-500 mb-2" size={28} />
-            <ArrowRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
-          </div>
-          <p className="text-3xl font-black text-slate-800 mt-2">{misMensajes}</p>
-          <p className="text-xs text-slate-500">Mensajes nuevos</p>
-        </div>
-        
-        <div onClick={() => router.push('/notificaciones')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
-          <div className="flex items-center justify-between">
-            <Bell className="text-amber-500 mb-2" size={28} />
-            <ArrowRight size={16} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
-          </div>
-          <p className="text-3xl font-black text-slate-800 mt-2">{misNotificaciones}</p>
-          <p className="text-xs text-slate-500">Notificaciones</p>
-        </div>
-        
-        <div onClick={() => router.push('/capacitaciones')} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md transition-all group">
-          <div className="flex items-center justify-between">
-            <GraduationCap className="text-purple-500 mb-2" size={28} />
-            <ArrowRight size={16} className="text-slate-300 group-hover:text-purple-500 transition-colors" />
-          </div>
-          <p className="text-3xl font-black text-slate-800 mt-2">{misProximasCapacitaciones.length}</p>
-          <p className="text-xs text-slate-500">Capacitaciones pendientes</p>
-        </div>
+        ))}
       </div>
 
-      {/* SECCIÓN DE TAREAS PENDIENTES */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <ClipboardCheck size={18} className="text-blue-500" />
-          ✅ Mis Tareas Pendientes
+      {/* ── Mis Tareas Pendientes ────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+        <h2 className="font-bold text-[#111827] mb-4 flex items-center gap-2">
+          <span className="w-8 h-8 rounded-lg bg-[#D1FAE5] text-[#059669] flex items-center justify-center"><ClipboardCheck size={17} /></span>
+          Mis Tareas Pendientes
           {misTareas.length > 0 && (
-            <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+            <span className="ml-auto text-xs bg-[#D1FAE5] text-[#059669] px-2.5 py-1 rounded-full font-bold">
               {misTareas.length} pendientes
             </span>
           )}
         </h2>
         {misTareas.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {misTareas.slice(0, 8).map((tarea) => (
-              <div 
-                key={tarea.id} 
+              <div
+                key={tarea.id}
                 onClick={() => router.push(`/tareas/${tarea.id}`)}
-                className="flex items-center justify-between p-3 bg-blue-50 rounded-xl cursor-pointer hover:bg-blue-100 transition-all group"
+                className="flex items-center justify-between p-3 bg-slate-50 hover:bg-[#D1FAE5]/40 rounded-xl cursor-pointer transition-all group border border-transparent hover:border-[#059669]/20"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800">{tarea.titulo || tarea.nombre || 'Tarea sin título'}</p>
+                    <p className="font-semibold text-slate-800">{tarea.titulo || tarea.nombre || 'Tarea sin título'}</p>
                     {tarea.prioridad && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        tarea.prioridad === 'alta' ? 'bg-red-100 text-red-700' :
-                        tarea.prioridad === 'media' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${
+                        tarea.prioridad === 'alta' ? 'bg-rose-100 text-[#EF4444]' :
+                        tarea.prioridad === 'media' ? 'bg-amber-100 text-[#F59E0B]' :
+                        'bg-emerald-100 text-[#059669]'
                       }`}>
                         {tarea.prioridad}
                       </span>
                     )}
                   </div>
                   {tarea.fecha_limite && (
-                    <p className="text-xs text-slate-500 mt-1">
-                      📅 Límite: {formatearFecha(tarea.fecha_limite)}
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                      <Calendar size={12} /> Límite: {formatearFecha(tarea.fecha_limite)}
                     </p>
                   )}
                 </div>
-                <Clock size={16} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Clock size={16} className="text-[#059669] opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             ))}
           </div>
         ) : (
           <div className="text-center py-8 text-slate-400">
-            <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-            <p>¡No tienes tareas pendientes!</p>
+            <CheckCircle2 size={32} className="mx-auto mb-2 text-[#22C55E] opacity-50" />
+            <p className="font-medium">¡No tienes tareas pendientes!</p>
             <p className="text-xs mt-1">Todo al día ✨</p>
           </div>
         )}
       </div>
 
-      {/* DATOS GLOBALES */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Próximos Cumpleaños - AHORA MUESTRA TODOS */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Cake size={18} className="text-amber-500" />
-            🎂 Próximos Cumpleaños
+      {/* ── Datos globales (3 columnas) ──────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* Próximos Cumpleaños */}
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+          <h2 className="font-bold text-[#111827] mb-4 flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center"><Cake size={17} /></span>
+            Próximos Cumpleaños
             {cumpleañosProximos.length > 0 && (
-              <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+              <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-bold">
                 {cumpleañosProximos.length} {cumpleañosProximos.length === 1 ? 'persona' : 'personas'}
               </span>
             )}
           </h2>
           {cumpleañosProximos.length > 0 ? (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
               {cumpleañosProximos.map((p) => (
-                <div key={p.id} className="flex items-center justify-between p-2 border-b border-slate-100 hover:bg-slate-50 rounded-lg transition-colors">
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">{p.nombre_completo}</p>
-                    <p className="text-xs text-slate-400">{p.cargo || 'Colaborador'}</p>
-                    <p className="text-[10px] text-slate-300 mt-0.5">
-                      {p.dia}/{p.mes}
-                    </p>
+                <div key={p.id} className="flex items-center justify-between p-2.5 border border-slate-100 hover:bg-slate-50 rounded-xl transition-colors">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center text-[11px] font-bold flex-shrink-0">
+                      {p.nombre.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm leading-tight">{p.nombre_completo}</p>
+                      <p className="text-[11px] text-slate-400">{p.cargo || 'Colaborador'} · {p.dia}/{p.mes}</p>
+                    </div>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${
+                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
                     p.diasFaltantes === 0 ? 'bg-amber-500 text-white animate-pulse' :
                     p.diasFaltantes <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                   }`}>
-                    {p.diasFaltantes === 0 ? '🎉 ¡HOY! 🎉' : `${p.diasFaltantes} ${p.diasFaltantes === 1 ? 'día' : 'días'}`}
+                    {p.diasFaltantes === 0 ? '🎉 ¡HOY!' : `${p.diasFaltantes} ${p.diasFaltantes === 1 ? 'día' : 'días'}`}
                   </span>
                 </div>
               ))}
@@ -516,28 +568,28 @@ export default function HomePage() {
           ) : (
             <div className="text-center py-8 text-slate-400">
               <Smile size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No hay cumpleaños registrados</p>
+              <p className="font-medium">No hay cumpleaños registrados</p>
               <p className="text-xs mt-1">Pronto celebraremos a alguien 🎉</p>
             </div>
           )}
         </div>
 
-        {/* Próximas Capacitaciones Globales */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <GraduationCap size={18} className="text-blue-500" />
-            📚 Capacitaciones Programadas
+        {/* Capacitaciones Programadas */}
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+          <h2 className="font-bold text-[#111827] mb-4 flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center"><GraduationCap size={17} /></span>
+            Capacitaciones Programadas
           </h2>
           {capacitacionesProximas.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {capacitacionesProximas.map((cap) => (
-                <div key={cap.id} className="p-2 border-b border-slate-100">
-                  <p className="font-medium text-slate-800">{cap.nombre}</p>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-slate-400">
-                      {formatearFecha(cap.fecha_inicio)}
+                <div key={cap.id} className="p-3 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                  <p className="font-semibold text-slate-800 text-sm">{cap.nombre}</p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-xs text-slate-400 flex items-center gap-1">
+                      <Calendar size={12} /> {formatearFecha(cap.fecha_inicio)}
                     </p>
-                    <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
                       {cap.modalidad === 'presencial' ? '📌 Presencial' : cap.modalidad === 'online' ? '💻 Online' : '🎓 Mixto'}
                     </span>
                   </div>
@@ -547,22 +599,22 @@ export default function HomePage() {
           ) : (
             <div className="text-center py-6 text-slate-400">
               <Calendar size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No hay capacitaciones próximas</p>
-              <p className="text-xs mt-1">Pronto se agregarán nuevas capacitaciones</p>
+              <p className="font-medium">No hay capacitaciones próximas</p>
+              <p className="text-xs mt-1">Pronto se agregarán nuevas</p>
             </div>
           )}
         </div>
 
-        {/* Mi Cumpleaños Personal */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Heart size={18} className="text-rose-500" />
-            🎯 Mi Fecha Especial
+        {/* Mi Fecha Especial */}
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+          <h2 className="font-bold text-[#111827] mb-4 flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-rose-100 text-rose-500 flex items-center justify-center"><Heart size={17} /></span>
+            Mi Fecha Especial
           </h2>
           {miProximoCumpleaños ? (
-            <div className={`flex items-center justify-between p-4 rounded-xl transition-all ${miProximoCumpleaños.dias === 0 ? 'bg-amber-100 border-2 border-amber-400 animate-pulse' : 'bg-amber-50'}`}>
+            <div className={`flex items-center justify-between p-4 rounded-xl transition-all ${miProximoCumpleaños.dias === 0 ? 'bg-amber-100 border-2 border-amber-400 animate-pulse' : 'bg-amber-50 border border-amber-100'}`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${miProximoCumpleaños.dias === 0 ? 'bg-amber-500' : 'bg-amber-200'}`}>
+                <div className={`p-2.5 rounded-full ${miProximoCumpleaños.dias === 0 ? 'bg-amber-500' : 'bg-amber-200'}`}>
                   <Gift size={20} className={miProximoCumpleaños.dias === 0 ? 'text-white' : 'text-amber-600'} />
                 </div>
                 <div>
@@ -575,70 +627,70 @@ export default function HomePage() {
                 </div>
               </div>
               <span className={`text-sm font-bold ${miProximoCumpleaños.dias === 0 ? 'text-amber-700 text-base' : 'text-amber-600'}`}>
-                {miProximoCumpleaños.dias === 0 ? '🎊 FELICIDADES 🎊' : `en ${miProximoCumpleaños.dias} ${miProximoCumpleaños.dias === 1 ? 'día' : 'días'}`}
+                {miProximoCumpleaños.dias === 0 ? '🎊' : `en ${miProximoCumpleaños.dias} ${miProximoCumpleaños.dias === 1 ? 'día' : 'días'}`}
               </span>
             </div>
           ) : (
             <div className="text-center py-6 text-slate-400">
               <AlertCircle size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No hay fecha de nacimiento registrada</p>
-              <p className="text-xs mt-1">Contacta a recursos humanos para actualizar tu perfil</p>
+              <p className="font-medium">Sin fecha de nacimiento</p>
+              <p className="text-xs mt-1">Contacta a RR.HH. para actualizar tu perfil</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Estadísticas globales */}
+      {/* ── Estadísticas globales ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white">
-          <Users size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{totalEmpleados}</p>
-          <p className="text-xs opacity-80">Colaboradores activos</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 text-white">
-          <Building size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{proveedoresActivos}</p>
-          <p className="text-xs opacity-80">Proveedores activos</p>
-        </div>
-        
-        <div onClick={() => router.push('/obuma-productos')} className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white cursor-pointer hover:shadow-lg transition-all">
-          <Package size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{totalProductos.toLocaleString('es-CL')}</p>
-          <p className="text-xs opacity-80">Productos en catálogo</p>
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#059669] to-[#047857] rounded-2xl p-5 text-white shadow-lg shadow-emerald-900/10">
+          <Users size={22} className="mb-3 opacity-90" />
+          <p className="text-3xl font-black">{totalEmpleados}</p>
+          <p className="text-xs opacity-80 mt-0.5">Colaboradores activos</p>
         </div>
 
-        <div onClick={() => router.push('/obuma-productos')} className={`rounded-2xl p-5 text-white cursor-pointer hover:shadow-lg transition-all ${productosSinStock > 0 ? 'bg-gradient-to-br from-rose-500 to-rose-600' : 'bg-gradient-to-br from-slate-400 to-slate-500'}`}>
-          <AlertCircle size={24} className="mb-2 opacity-80" />
-          <p className="text-2xl font-black">{productosSinStock.toLocaleString('es-CL')}</p>
-          <p className="text-xs opacity-80">Productos sin stock</p>
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#111827] to-[#374151] rounded-2xl p-5 text-white shadow-lg shadow-slate-900/10">
+          <Building size={22} className="mb-3 opacity-90" />
+          <p className="text-3xl font-black">{proveedoresActivos}</p>
+          <p className="text-xs opacity-80 mt-0.5">Proveedores activos</p>
+        </div>
+
+        <div onClick={() => router.push('/obuma-productos')} className="relative overflow-hidden bg-gradient-to-br from-[#0F766E] to-[#0D9488] rounded-2xl p-5 text-white cursor-pointer hover:shadow-xl hover:-translate-y-0.5 transition-all shadow-lg shadow-teal-900/10">
+          <Package size={22} className="mb-3 opacity-90" />
+          <p className="text-3xl font-black">{totalProductos.toLocaleString('es-CL')}</p>
+          <p className="text-xs opacity-80 mt-0.5">Productos en catálogo</p>
+        </div>
+
+        <div onClick={() => router.push('/obuma-productos')} className={`relative overflow-hidden rounded-2xl p-5 text-white cursor-pointer hover:shadow-xl hover:-translate-y-0.5 transition-all shadow-lg ${productosSinStock > 0 ? 'bg-gradient-to-br from-[#EF4444] to-[#DC2626]' : 'bg-gradient-to-br from-slate-400 to-slate-500'}`}>
+          {productosSinStock > 0 ? <AlertTriangle size={22} className="mb-3 opacity-90" /> : <CheckCircle2 size={22} className="mb-3 opacity-90" />}
+          <p className="text-3xl font-black">{productosSinStock.toLocaleString('es-CL')}</p>
+          <p className="text-xs opacity-80 mt-0.5">Productos sin stock</p>
         </div>
       </div>
 
-      {/* Mis Capacitaciones Pendientes */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <GraduationCap size={18} className="text-blue-500" />
-          📖 Mis Capacitaciones Pendientes
+      {/* ── Mis Capacitaciones Pendientes ────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+        <h2 className="font-bold text-[#111827] mb-4 flex items-center gap-2">
+          <span className="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center"><GraduationCap size={17} /></span>
+          Mis Capacitaciones Pendientes
         </h2>
         {misProximasCapacitaciones.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {misProximasCapacitaciones.map((cap, idx) => (
-              <div key={cap.id || idx} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
+              <div key={cap.id || idx} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-violet-50 rounded-xl transition-colors">
                 <div>
-                  <p className="font-medium text-slate-800">{cap.nombre}</p>
-                  <p className="text-xs text-slate-500">
-                    {formatearFecha(cap.fecha_inicio)} • {cap.horas_total || 0} horas
+                  <p className="font-semibold text-slate-800 text-sm">{cap.nombre}</p>
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                    <Calendar size={12} /> {formatearFecha(cap.fecha_inicio)} · {cap.horas_total || 0} horas
                   </p>
                 </div>
-                <Clock size={16} className="text-blue-500" />
+                <Clock size={16} className="text-violet-500" />
               </div>
             ))}
           </div>
         ) : (
           <div className="text-center py-8 text-slate-400">
-            <CheckCircle2 size={32} className="mx-auto mb-2 opacity-30" />
-            <p>No tienes capacitaciones pendiente</p>
+            <CheckCircle2 size={32} className="mx-auto mb-2 text-[#22C55E] opacity-50" />
+            <p className="font-medium">No tienes capacitaciones pendientes</p>
             <p className="text-xs mt-1">¡Buen trabajo! 🎉</p>
           </div>
         )}
