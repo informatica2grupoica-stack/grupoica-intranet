@@ -290,25 +290,10 @@ export default function MonitorMasivoICA() {
     conversion = 'unidad'
   ): Promise<ItemLista> => {
     try {
-      // NO agregar la unidad de conversión a la query — solo pasarla al backend para scoring
-      let consultaFinal = producto;
-
-      // Enriquecer con contexto IA solo si hay contexto definido
-      if (contexto.trim()) {
-        try {
-          const r = await fetch('/api/enriquecer-consulta', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ producto: consultaFinal, contexto }),
-          });
-          if (r.ok) {
-            const d = await r.json();
-            if (d.usado_ia && d.consulta_optimizada) consultaFinal = d.consulta_optimizada;
-          }
-        } catch { /* usar original */ }
-      }
-
-      const url = `/api/buscar-productos?producto=${encodeURIComponent(consultaFinal)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}`;
+      // El backend hace la expansión inteligente con IA (términos vagos → variantes)
+      // usando el contexto del rubro. Pasamos el producto ORIGINAL + contexto.
+      const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(producto)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -445,23 +430,28 @@ export default function MonitorMasivoICA() {
     notify(`Generando Excel (${nombreModo[modo] || modo})...`, 'success');
 
     try {
-      // Releer el archivo original fresco → preserva fórmulas y formato intactos
+      // ExcelJS preserva colores, formato y fórmulas EXACTOS del archivo original
+      const ExcelJS = (await import('exceljs')).default;
       const buf = await archivoExcel.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellStyles: true });
-      const ws = wb.Sheets[sheetNameActual];
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf);
+      const ws = wb.getWorksheet(sheetNameActual) || wb.worksheets[0];
       if (!ws) { notify('No se encontró la pestaña', 'error'); return; }
 
-      // Detectar fila de encabezados y columnas
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as any[][];
+      // Detectar fila de encabezados y columnas (1-indexado en ExcelJS)
       let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
-      for (let i = 0; i < Math.min(25, aoa.length); i++) {
-        const up = (aoa[i] || []).map((c: any) => String(c || '').toUpperCase().trim());
-        if (up.some(h => h === 'ITEM' || h.includes('ITEM'))) {
-          headerRow = i;
-          up.forEach((h, j) => {
-            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = j;
-            else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
-            else if (h.startsWith('LINK') && colLink < 0) colLink = j;
+      for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
+        const cells: string[] = [];
+        ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
+          cells[cn] = String(cell.value ?? '').toUpperCase().trim();
+        });
+        if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
+          headerRow = rn;
+          cells.forEach((h, cn) => {
+            if (!h) return;
+            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
+            else if (h.includes('VALOR') && h.includes('IVA')) colValor = cn;
+            else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
           });
           break;
         }
@@ -469,31 +459,34 @@ export default function MonitorMasivoICA() {
       if (headerRow < 0 || colItem < 0) { notify('No se encontró columna ITEM en la pestaña', 'error'); return; }
       if (colValor < 0) { notify('No se encontró columna VALOR C/IVA', 'error'); return; }
 
-      const range = XLSX.utils.decode_range(ws['!ref'] as string);
-      const colTienda = range.e.c + 1;
-      const colMatch = range.e.c + 2;
-      ws[XLSX.utils.encode_cell({ r: headerRow, c: colTienda })] = { t: 's', v: 'TIENDA COTIZADA' };
-      ws[XLSX.utils.encode_cell({ r: headerRow, c: colMatch })] = { t: 's', v: '% COINCIDENCIA' };
+      const colTienda = ws.columnCount + 1;
+      const colMatch = ws.columnCount + 2;
+      ws.getRow(headerRow).getCell(colTienda).value = 'TIENDA COTIZADA';
+      ws.getRow(headerRow).getCell(colMatch).value = '% COINCIDENCIA';
 
       const mapa = new Map(seleccionados.map(s => [s.numero, s]));
       let filled = 0;
-      for (let r = headerRow + 1; r < aoa.length; r++) {
-        const itemVal = aoa[r]?.[colItem];
+      for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
+        const itemVal = ws.getRow(rn).getCell(colItem).value;
         if (itemVal == null) continue;
         const dato = mapa.get(String(itemVal).trim());
         if (!dato) continue;
-        ws[XLSX.utils.encode_cell({ r, c: colValor })] = { t: 'n', v: dato.precio };
-        if (colLink >= 0 && dato.link) ws[XLSX.utils.encode_cell({ r, c: colLink })] = { t: 's', v: dato.link };
-        ws[XLSX.utils.encode_cell({ r, c: colTienda })] = { t: 's', v: dato.tienda };
-        ws[XLSX.utils.encode_cell({ r, c: colMatch })] = { t: 's', v: `${dato.match}%` };
+        ws.getRow(rn).getCell(colValor).value = dato.precio; // las fórmulas F-M recalculan solas
+        if (colLink > 0 && dato.link) ws.getRow(rn).getCell(colLink).value = dato.link;
+        ws.getRow(rn).getCell(colTienda).value = dato.tienda;
+        ws.getRow(rn).getCell(colMatch).value = `${dato.match}%`;
         filled++;
       }
-      range.e.c = Math.max(range.e.c, colMatch);
-      ws['!ref'] = XLSX.utils.encode_range(range);
-
       if (!filled) { notify('No se encontraron ítems para rellenar', 'warning'); return; }
-      XLSX.writeFile(wb, `COSTEO_${nombreModo[modo] || modo}_${new Date().toISOString().split('T')[0]}.xlsx`, { bookType: 'xlsx' });
-      notify(`${filled} ítems exportados (${nombreModo[modo] || modo})`, 'success');
+
+      const out = await wb.xlsx.writeBuffer();
+      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `COSTEO_${nombreModo[modo] || modo}_${new Date().toISOString().split('T')[0]}.xlsx`,
+      });
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      notify(`${filled} ítems exportados (${nombreModo[modo] || modo}) — colores y fórmulas intactos`, 'success');
     } catch (e: any) {
       notify(`Error generando Excel: ${e.message}`, 'error');
     }
