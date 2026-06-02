@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
 import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X,
@@ -162,6 +163,9 @@ export default function MonitorMasivoICA() {
   const abortRef = useRef(false);
 
   const [productosExcel, setProductosExcel]   = useState<ProductoExcel[]>([]);
+  const [especPorItem, setEspecPorItem]       = useState<Map<string, string>>(new Map());
+  const [cargandoBases, setCargandoBases]     = useState(false);
+  const [basesInfo, setBasesInfo]             = useState<{ total: number } | null>(null);
   const [sheetNameActual, setSheetNameActual] = useState('COSTEO');
   const [showModal, setShowModal]             = useState(false);
   const [pestanas, setPestanas]               = useState<string[]>([]);
@@ -201,6 +205,58 @@ export default function MonitorMasivoICA() {
       else if (!l.trim().match(/^\d+$/)) acc.push({ numero: String(acc.length + 1), nombre: l.trim() });
       return acc;
     }, []);
+
+  // ─── Cargar BASES (PDF) → Gemini extrae specs → match con ítems del Excel ─────
+  const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const cargarBases = async (file: File) => {
+    if (cargandoBases) return;
+    setCargandoBases(true);
+    setBasesInfo(null);
+    notify('Subiendo bases y leyendo con IA (puede tardar ~30s)...', 'success');
+    try {
+      // 1) URL firmada de subida
+      const urlRes = await fetch('/api/bases-upload-url', { method: 'POST' });
+      const u = await urlRes.json();
+      if (!urlRes.ok || !u.token) throw new Error(u.error || 'No se pudo preparar la subida');
+
+      // 2) Subir el PDF directo a Supabase Storage (sin límite de Vercel)
+      const { error: upErr } = await supabase.storage.from(u.bucket).uploadToSignedUrl(u.path, u.token, file);
+      if (upErr) throw new Error(`Error subiendo PDF: ${upErr.message}`);
+
+      // 3) Gemini lee y extrae los ítems con especificaciones
+      const leerRes = await fetch('/api/leer-bases', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket: u.bucket, path: u.path }),
+      });
+      const data = await leerRes.json();
+      if (!leerRes.ok || !data.ok) throw new Error(data.error || 'No se pudo leer el PDF');
+
+      const itemsBases: Array<{ nombre: string; especificaciones: string }> = data.items || [];
+
+      // 4) Asociar especificaciones a cada ítem del Excel por similitud de nombre
+      const mapa = new Map<string, string>();
+      if (productosExcel.length) {
+        productosExcel.forEach(pe => {
+          const toksExcel = new Set(norm(pe.nombre).split(/\s+/).filter(w => w.length > 2));
+          let mejor = ''; let mejorScore = 0;
+          itemsBases.forEach(ib => {
+            const toksBase = norm(ib.nombre).split(/\s+/).filter(w => w.length > 2);
+            const comunes = toksBase.filter(w => toksExcel.has(w)).length;
+            const sc = toksBase.length ? comunes / toksBase.length : 0;
+            if (sc > mejorScore) { mejorScore = sc; mejor = ib.especificaciones; }
+          });
+          if (mejorScore >= 0.4 && mejor) mapa.set(String(pe.numero), mejor);
+        });
+      }
+      setEspecPorItem(mapa);
+      setBasesInfo({ total: itemsBases.length });
+      notify(`Bases leídas: ${itemsBases.length} ítems detectados, ${mapa.size} enlazados a tu Excel`, 'success');
+    } catch (e: any) {
+      notify(`Error con las bases: ${e.message}`, 'error');
+    } finally {
+      setCargandoBases(false);
+    }
+  };
 
   // ─── Cargar Excel ─────────────────────────────────────────────────────────────
   const cargarExcel = (file: File) => {
@@ -290,10 +346,14 @@ export default function MonitorMasivoICA() {
     conversion = 'unidad'
   ): Promise<ItemLista> => {
     try {
+      // Enriquecer con la especificación de las bases (si se cargó el PDF) para este ítem
+      const espec = especPorItem.get(String(numero));
+      const productoBuscar = espec ? `${producto} ${espec}`.slice(0, 200) : producto;
+
       // El backend hace la expansión inteligente con IA (términos vagos → variantes)
-      // usando el contexto del rubro. Pasamos el producto ORIGINAL + contexto.
+      // usando el contexto del rubro. Pasamos el producto + specs de bases + contexto.
       const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
-      const url = `/api/buscar-productos?producto=${encodeURIComponent(producto)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}`;
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -677,6 +737,20 @@ export default function MonitorMasivoICA() {
             </button>
             <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden"
               onChange={e => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
+
+            {/* Subir bases PDF (Gemini lee las especificaciones) */}
+            <button onClick={() => document.getElementById('bases-input')?.click()}
+              disabled={cargandoBases}
+              className="mt-2 w-full bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+              {cargandoBases ? <><Loader2 size={15} className="animate-spin" /> Leyendo bases…</> : <><Sparkles size={15} /> Subir bases (PDF)</>}
+            </button>
+            <input id="bases-input" type="file" accept="application/pdf,.pdf" className="hidden"
+              onChange={e => e.target.files?.[0] && cargarBases(e.target.files[0])} />
+            {basesInfo && (
+              <p className="mt-2 text-[10px] text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-2 py-1.5">
+                📄 Bases leídas: {basesInfo.total} ítems · {especPorItem.size} con especificaciones enlazadas a tu Excel
+              </p>
+            )}
 
             {pestanas.length > 1 && (
               <div className="mt-3">
