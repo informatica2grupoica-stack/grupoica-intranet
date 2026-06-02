@@ -255,7 +255,7 @@ export default function HomePage() {
         });
         
         console.log("Tareas pendientes encontradas:", pendientes.length);
-        setMisTareas(pendientes.slice(0, 5));
+        setMisTareas(pendientes); // guardar TODAS para que el conteo sea real
       }
 
       // 2. Mis mensajes no leídos
@@ -441,7 +441,7 @@ export default function HomePage() {
         </h2>
         {misTareas.length > 0 ? (
           <div className="space-y-3">
-            {misTareas.map((tarea) => (
+            {misTareas.slice(0, 8).map((tarea) => (
               <div 
                 key={tarea.id} 
                 onClick={() => router.push(`/tareas/${tarea.id}`)}
