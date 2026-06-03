@@ -226,7 +226,7 @@ confianza 0-100. motivo máx 80 chars en español.`;
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 25000);
     const r = await fetch(
-      `${GEMINI_BASE}/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      `${GEMINI_BASE}/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         signal: ctrl.signal,

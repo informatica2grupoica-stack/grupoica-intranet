@@ -15,8 +15,14 @@ const supabase = createClient(
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
 
-// Modelos en orden de preferencia
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+// Modelos en orden de preferencia (actualizado junio 2026)
+// Retirados: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro
+const GEMINI_MODELS = [
+  'gemini-3.5-flash',   // Actual estable — mejor para PDFs largos
+  'gemini-2.5-flash',   // Fallback rápido
+  'gemini-2.5-pro',     // Fallback con mayor contexto
+  'gemini-2.5-flash-lite', // Fallback ligero
+];
 
 // ─── Subir PDF a Gemini (con reintentos) ─────────────────────────────────────
 
@@ -122,28 +128,46 @@ async function llamarGemini(
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), 90000);
   try {
-    const res = await fetch(
-      `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(genBody) }
-    );
+    const url = `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(genBody),
+    });
     clearTimeout(tid);
 
-    if (res.status === 429) { await new Promise((r) => setTimeout(r, 5000)); return null; }
-    if (!res.ok) { const t = await res.text().catch(() => ''); console.warn(`[leer-bases] ${model} HTTP ${res.status}: ${t.slice(0, 120)}`); return null; }
+    if (res.status === 429) {
+      console.warn(`[leer-bases] ${model} 429 rate-limit, esperando 8s...`);
+      await new Promise((r) => setTimeout(r, 8000));
+      return null;
+    }
+    if (res.status === 403) {
+      const t = await res.text().catch(() => '');
+      console.warn(`[leer-bases] ${model} 403 sin acceso (API key o región): ${t.slice(0, 200)}`);
+      return null;
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      console.warn(`[leer-bases] ${model} HTTP ${res.status}: ${t.slice(0, 300)}`);
+      return null;
+    }
 
     const out = await res.json().catch(() => ({}));
     const txt: string = out?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!txt || txt.trim().length < 20) {
       const reason = out?.candidates?.[0]?.finishReason || '';
-      const block = out?.promptFeedback?.blockReason || '';
-      console.warn(`[leer-bases] ${model} forceJson=${forceJson} vacío — reason=${reason} block=${block}`);
+      const block  = out?.promptFeedback?.blockReason || '';
+      const safety = JSON.stringify(out?.candidates?.[0]?.safetyRatings || []);
+      console.warn(`[leer-bases] ${model} forceJson=${forceJson} respuesta vacía — reason=${reason} block=${block} safety=${safety}`);
       return null;
     }
     return txt;
   } catch (e: unknown) {
     clearTimeout(tid);
-    console.warn(`[leer-bases] ${model} excepción: ${(e as Error)?.message?.slice(0, 100)}`);
+    const msg = (e as Error)?.message || String(e);
+    console.warn(`[leer-bases] ${model} excepción (forceJson=${forceJson}): ${msg.slice(0, 200)}`);
     return null;
   }
 }
@@ -151,25 +175,35 @@ async function llamarGemini(
 // ─── Generar con Gemini: estrategia dual + fallback de modelos ───────────────
 
 async function generarConGemini(prompt: string, fileUri: string): Promise<string> {
+  console.log(`[leer-bases] Intentando con modelos: ${GEMINI_MODELS.join(', ')}`);
+
   for (const model of GEMINI_MODELS) {
+    console.log(`[leer-bases] → Probando ${model} (JSON-mode)...`);
+
     // Intento A: CON responseMimeType=json (respuesta limpia)
     const txtJson = await llamarGemini(model, prompt, fileUri, true);
     if (txtJson && txtJson.trim().length > 30) {
-      console.log(`[leer-bases] ${model} JSON-mode OK — ${txtJson.length} chars`);
+      console.log(`[leer-bases] ✅ ${model} JSON-mode OK — ${txtJson.length} chars`);
       return txtJson;
     }
+
+    console.log(`[leer-bases] → Probando ${model} (texto-libre)...`);
 
     // Intento B: SIN responseMimeType (texto libre con JSON dentro)
     const txtLibre = await llamarGemini(model, prompt, fileUri, false);
     if (txtLibre && txtLibre.trim().length > 30) {
-      console.log(`[leer-bases] ${model} texto-libre OK — ${txtLibre.length} chars`);
+      console.log(`[leer-bases] ✅ ${model} texto-libre OK — ${txtLibre.length} chars`);
       return txtLibre;
     }
 
-    console.warn(`[leer-bases] ${model} falló ambos intentos, probando siguiente modelo...`);
+    console.warn(`[leer-bases] ❌ ${model} falló ambos intentos, probando siguiente modelo...`);
   }
 
-  throw new Error('Ningún modelo de Gemini pudo procesar el PDF. Verifica la API key y el tipo de PDF.');
+  throw new Error(
+    `Ningún modelo de Gemini pudo procesar el PDF. ` +
+    `Modelos probados: ${GEMINI_MODELS.join(', ')}. ` +
+    `Verifica que la API key tenga acceso a estos modelos en https://aistudio.google.com`
+  );
 }
 
 // ─── Parser JSON ultra-tolerante ─────────────────────────────────────────────
@@ -348,7 +382,7 @@ Devuelve SOLO este JSON:
 
 IMPORTANTE: Responde ÚNICAMENTE el JSON, sin texto antes ni después.`;
 
-  for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash']) {
+  for (const model of ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 45000);
