@@ -89,6 +89,9 @@ export default function ComprasPage() {
   const [modalOC, setModalOC] = useState<{ visible: boolean; loading: boolean; data: any }>({
     visible: false, loading: false, data: null,
   });
+  const [modalDTE, setModalDTE] = useState<{ visible: boolean; loading: boolean; data: any }>({
+    visible: false, loading: false, data: null,
+  });
 
   // ─── Cargar cache proveedores ────────────────────────────────────────────────
   useEffect(() => {
@@ -218,9 +221,26 @@ export default function ComprasPage() {
     try {
       const res = await fetch(`/api/obuma/oc/${id}`);
       const data = await res.json();
-      setModalOC({ visible: true, loading: false, data: res.ok ? data : null });
+      if (!res.ok) { setModalOC({ visible: true, loading: false, data: null }); return; }
+      // Enriquecer proveedor desde cache si no viene en el detalle
+      if (data.proveedor && !data.proveedor.razon_social && data.proveedor.id) {
+        data.proveedor.razon_social = provCache[String(data.proveedor.id)] || `ID: ${data.proveedor.id}`;
+      }
+      setModalOC({ visible: true, loading: false, data });
     } catch {
       setModalOC({ visible: true, loading: false, data: null });
+    }
+  };
+
+  // ─── Ver detalle DTE ────────────────────────────────────────────────────────
+  const verDetalleDTE = async (id: string) => {
+    setModalDTE({ visible: true, loading: true, data: null });
+    try {
+      const res = await fetch(`/api/obuma/compras-dte/${id}`);
+      const data = await res.json();
+      setModalDTE({ visible: true, loading: false, data: res.ok ? data : null });
+    } catch {
+      setModalDTE({ visible: true, loading: false, data: null });
     }
   };
 
@@ -440,10 +460,16 @@ export default function ComprasPage() {
         <td className="px-5 py-3.5 text-center">
           {r.s3_link ? (
             <a href={r.s3_link} target="_blank" rel="noopener noreferrer"
-              className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 transition-all inline-flex" title="Ver XML">
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 transition-all inline-flex" title="Descargar XML">
               <ExternalLink size={14} />
             </a>
           ) : "—"}
+        </td>
+        <td className="px-5 py-3.5 text-center">
+          <button onClick={() => verDetalleDTE(r.dte_id)}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#D1FAE5] text-slate-500 hover:text-[#059669] transition-all">
+            <Eye size={14} />
+          </button>
         </td>
       </tr>
     ));
@@ -474,7 +500,7 @@ export default function ComprasPage() {
   const colHeaders: Record<TabType, string[]> = {
     oc: ["Folio", "Fecha", "Proveedor", "Forma Pago", "Items", "Total", "Estado", "Ver"],
     compras: ["ID", "Tipo/Folio", "Fecha", "Proveedor / Período", "Total", "Pagado", "Por Pagar", "Estado"],
-    dte: ["Tipo/Folio", "Emisor (Proveedor)", "Fecha DTE", "Período", "Total", "Neto", "Compra Vinculada", "XML"],
+    dte: ["Tipo/Folio", "Emisor (Proveedor)", "Fecha DTE", "Período", "Total", "Neto", "Compra Vinculada", "XML", "Ver"],
     pagos: ["ID", "Fecha Pago", "Período", "Origen", "Forma Pago", "Total", "Por Pagar", "Compra ID"],
   };
 
@@ -756,6 +782,120 @@ export default function ComprasPage() {
 
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
               <button onClick={() => setModalOC({ visible: false, loading: false, data: null })}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal detalle DTE ─────────────────────────────────────────── */}
+      {modalDTE.visible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Receipt className="text-blue-600" size={18} /> Detalle DTE Recibido
+                </h2>
+                {modalDTE.data && (
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                    {tipoLabel(modalDTE.data.dte_tipo)} #{modalDTE.data.dte_folio} · {modalDTE.data.dte_razonsocial_emisor}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setModalDTE({ visible: false, loading: false, data: null })}
+                className="p-2 hover:bg-slate-100 rounded-xl"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {modalDTE.loading ? (
+                <div className="flex justify-center py-16"><Loader2 className="animate-spin text-blue-500" size={36} /></div>
+              ) : modalDTE.data ? (
+                <div className="space-y-4">
+                  {/* Emisor */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">Emisor (Proveedor)</p>
+                    <p className="font-bold text-slate-800 text-lg">{modalDTE.data.dte_razonsocial_emisor || "—"}</p>
+                    <p className="text-xs font-mono text-slate-400">{modalDTE.data.dte_rut_emisor}</p>
+                    {modalDTE.data.dte_email_emisor && <p className="text-xs text-[#059669] mt-1">{modalDTE.data.dte_email_emisor}</p>}
+                  </div>
+
+                  {/* Datos tributarios */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      ["Tipo DTE", `${tipoLabel(modalDTE.data.dte_tipo)} (${modalDTE.data.dte_tipo})`],
+                      ["Folio", `#${modalDTE.data.dte_folio}`],
+                      ["Fecha DTE", modalDTE.data.dte_fecha || "—"],
+                      ["Período", modalDTE.data.dte_periodo_tributario || "—"],
+                      ["Recep. XML", fmtFecha(modalDTE.data.dte_fecharecepcion_xml)],
+                      ["Traspaso Libro", modalDTE.data.dte_traspasolibro === "1" ? "Sí" : "Pendiente"],
+                      ["XML válido", modalDTE.data.xml_valido === "1" ? "✅ Sí" : "❌ No"],
+                      ["Compra vinculada", modalDTE.data.rel_compra_id !== "0" ? `#${modalDTE.data.rel_compra_id}` : "Sin vincular"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="bg-slate-50 rounded-xl px-3 py-2">
+                        <p className="text-[9px] font-bold uppercase text-slate-400">{k}</p>
+                        <p className="text-xs font-bold text-slate-700">{v}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Montos */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      ["Neto", modalDTE.data.dte_total_neto, "text-blue-600"],
+                      ["IVA", modalDTE.data.dte_total_iva, "text-amber-600"],
+                      ["Exento", modalDTE.data.dte_total_exento, "text-slate-500"],
+                      ["TOTAL", modalDTE.data.dte_total, "text-emerald-600"],
+                    ].map(([k, v, c]) => (
+                      <div key={k as string} className="bg-slate-50 rounded-xl p-3 text-center">
+                        <p className="text-[9px] font-bold uppercase text-slate-400">{k as string}</p>
+                        <p className={`text-xl font-black ${c as string}`}>{fmt(v as string)}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Estados de respuesta */}
+                  {(modalDTE.data.dte_respuesta_documento || modalDTE.data.dte_respuesta_mercaderia || modalDTE.data.dte_respuestacomercial) && (
+                    <div className="bg-amber-50 rounded-xl p-4 space-y-1">
+                      <p className="text-[10px] font-bold uppercase text-amber-600 mb-2">Respuestas SII</p>
+                      {modalDTE.data.dte_respuesta_documento && <p className="text-xs text-amber-700"><strong>Documento:</strong> {modalDTE.data.dte_respuesta_documento}</p>}
+                      {modalDTE.data.dte_respuesta_mercaderia && <p className="text-xs text-amber-700"><strong>Mercadería:</strong> {modalDTE.data.dte_respuesta_mercaderia}</p>}
+                      {modalDTE.data.dte_respuestacomercial && <p className="text-xs text-amber-700"><strong>Comercial:</strong> {modalDTE.data.dte_respuestacomercial}</p>}
+                    </div>
+                  )}
+
+                  {/* XML */}
+                  {modalDTE.data.s3_link && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl">
+                      <FileText size={16} className="text-blue-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold text-blue-600 uppercase">Archivo XML</p>
+                        <p className="text-[9px] text-slate-500 truncate">{modalDTE.data.s3_link}</p>
+                      </div>
+                      <a href={modalDTE.data.s3_link} target="_blank" rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                        <ExternalLink size={12} /> Descargar
+                      </a>
+                    </div>
+                  )}
+
+                  {/* ID Único */}
+                  <div className="text-center">
+                    <p className="text-[9px] text-slate-300 font-mono">{modalDTE.data.dte_id_unico}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-16">
+                  <AlertCircle size={36} className="mx-auto text-rose-300 mb-3" />
+                  <p className="text-slate-500">No se pudo cargar el detalle del DTE.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button onClick={() => setModalDTE({ visible: false, loading: false, data: null })}
                 className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all">
                 Cerrar
               </button>

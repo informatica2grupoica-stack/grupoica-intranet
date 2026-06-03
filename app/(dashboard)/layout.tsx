@@ -3,8 +3,9 @@
 import { supabase } from "@/lib/supabase";
 import {
   Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
-  Users, Building2, Database, FileText, Package, ShoppingCart, Server,
-  Laptop, LogOut, ChevronRight, ExternalLink, ShieldCheck, Sparkles, X
+  Users, Building2, Database, FileText, Package, ShoppingCart,
+  Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
+  BookOpen, CreditCard, Receipt, Briefcase
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,7 +15,7 @@ import { ToastContainer } from "@/components/Toast";
 
 // ─── Identidad y metadatos de cada vista (identificador por vista) ────────────
 const VIEW_META: Record<string, { id: string; label: string }> = {
-  "/":                    { id: "MP-00", label: "Inicio" },
+  "/":                    { id: "MP-00",  label: "Inicio" },
   "/chat":                { id: "MP-CHT", label: "Chat Interno" },
   "/tareas":              { id: "MP-TAR", label: "Tareas" },
   "/dashboard":           { id: "MP-DSH", label: "Dashboard de Análisis" },
@@ -24,7 +25,9 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/proveedores":         { id: "MP-PRV", label: "Mis Proveedores" },
   "/obuma-proveedores":   { id: "MP-OPV", label: "Proveedores Obuma" },
   "/obuma-productos":     { id: "MP-PRD", label: "Productos Obuma" },
-  "/compras":             { id: "MP-OC",  label: "Órdenes de Compra" },
+  "/compras":             { id: "MP-OC",  label: "Compras & Órdenes" },
+  "/ventas":              { id: "MP-VTA", label: "Ventas" },
+  "/contabilidad":        { id: "MP-CTB", label: "Contabilidad" },
   "/usuarios":            { id: "MP-USR", label: "Usuarios" },
   "/dispositivos":        { id: "MP-DEV", label: "Dispositivos" },
 };
@@ -105,18 +108,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ],
     },
     {
-      title: "CRM",
+      title: "CRM & CLIENTES",
       items: [
         { name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" },
+      ],
+    },
+    {
+      title: "VENTAS",
+      items: [
+        { name: "Ventas / Cotizaciones", icon: TrendingUp, path: "/ventas" },
       ],
     },
     {
       title: "INVENTARIO & COMPRAS",
       items: [
         { name: "Productos Obuma", icon: Package, path: "/obuma-productos" },
-        { name: "Órdenes de Compra", icon: ShoppingCart, path: "/compras" },
+        { name: "Compras & Órdenes (OC)", icon: ShoppingCart, path: "/compras" },
         { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
         { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
+      ],
+    },
+    {
+      title: "FINANZAS",
+      items: [
+        { name: "Contabilidad", icon: BookOpen, path: "/contabilidad" },
       ],
     },
     {
