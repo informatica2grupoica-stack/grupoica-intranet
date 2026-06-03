@@ -1,18 +1,15 @@
-// app/api/obuma/oc/route.ts
+// app/api/obuma/compras-dte/route.ts — DTE recibidos
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Construir query string con todos los filtros soportados por la API de Obuma
     const filtros: Record<string, string> = {};
     const campos = [
-      'id_dcto_desde', 'folio_dcto', 'mes', 'ano',
-      'fecha', 'fecha_desde', 'fecha_hasta',
-      'total', 'proveedor', 'sucursal', 'bodega',
-      'estado', 'forma_pago', 'metodo_despacho',
-      'moneda', 'centro_costo', 'concepto_gasto',
+      'id_dcto', 'id_dcto_desde', 'tipo_dcto', 'folio_dcto',
+      'mes_contable', 'ano_contable',
+      'total', 'proveedor', 'id_proveedor', 'rut_proveedor', 'id_compra',
     ];
     campos.forEach((c) => {
       const v = searchParams.get(c);
@@ -20,7 +17,7 @@ export async function GET(request: NextRequest) {
     });
 
     const qs = new URLSearchParams(filtros).toString();
-    const url = `${process.env.OBUMA_API_URL}/comprasOc.list.json${qs ? `?${qs}` : ''}`;
+    const url = `${process.env.OBUMA_API_URL}/comprasDte.list.json${qs ? `?${qs}` : ''}`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -35,16 +32,15 @@ export async function GET(request: NextRequest) {
 
     if (result.success === false || result.status === false) {
       return NextResponse.json(
-        { error: result.message || 'Error al consultar OC en Obuma', details: result },
+        { error: result.message || 'Error al consultar DTE', details: result },
         { status: 400 }
       );
     }
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Error Crítico OC list:', error);
     return NextResponse.json(
-      { error: 'Fallo en la comunicación con el servidor', details: error.message },
+      { error: 'Error al obtener DTE', details: error.message },
       { status: 500 }
     );
   }
