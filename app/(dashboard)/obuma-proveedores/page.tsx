@@ -1,23 +1,25 @@
 // app/(dashboard)/obuma-proveedores/page.tsx
 'use client';
-import { useState } from 'react';
-import { 
-  Building2, Search, Loader2, MapPin, X, Phone, 
+import { useState, useMemo } from 'react';
+import {
+  Building2, Search, Loader2, MapPin, X, Phone,
   Edit3, Plus, CheckCircle2, AlertCircle,
-  Mail, Globe, ChevronDown, ChevronUp, Briefcase, 
-  Smartphone, RefreshCw, Users
+  Mail, Globe, ChevronDown, ChevronUp, Briefcase,
+  Smartphone, RefreshCw, Users, Download, Filter
 } from 'lucide-react';
 import { useObumaProveedores, ObumaProveedor } from '@/hooks/useObumaProveedores';
 import Paginacion from '@/components/Paginacion';
+import * as XLSX from 'xlsx';
 
 type VistaType = 'grid' | 'lista';
 
 export default function ObumaProveedoresPage() {
-  const { 
-    proveedores,
-    loading, 
-    error, 
-    estadisticas, 
+  const {
+    proveedores: proveedoresPaginados,
+    todosProveedores,
+    loading,
+    error,
+    estadisticas,
     busqueda,
     setBusqueda,
     currentPage,
@@ -30,6 +32,8 @@ export default function ObumaProveedoresPage() {
   
   const [vista, setVista] = useState<VistaType>('lista');
   const [showForm, setShowForm] = useState(false);
+  const [filtroRegion, setFiltroRegion] = useState('TODAS');
+  const [filtroConEmail, setFiltroConEmail] = useState('todos');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [seleccionado, setSeleccionado] = useState<ObumaProveedor | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
@@ -123,6 +127,46 @@ export default function ObumaProveedoresPage() {
       showAlert(result.error || "Error al actualizar proveedor", "error");
     }
     setEnviando(false);
+  };
+
+  // Proveedores filtrados con region/email (sobre todos, no solo paginados)
+  const proveedoresFiltrados = useMemo(() => {
+    const base = (filtroRegion !== 'TODAS' || filtroConEmail !== 'todos')
+      ? todosProveedores
+      : proveedoresPaginados;
+    return base.filter((p) => {
+      const matchRegion = filtroRegion === 'TODAS' || p.proveedor_region === filtroRegion;
+      const matchEmail = filtroConEmail === 'todos' ||
+        (filtroConEmail === 'si' ? !!p.proveedor_email : !p.proveedor_email);
+      return matchRegion && matchEmail;
+    });
+  }, [proveedoresPaginados, todosProveedores, filtroRegion, filtroConEmail]);
+
+  const proveedores = filtroRegion !== 'TODAS' || filtroConEmail !== 'todos'
+    ? proveedoresFiltrados
+    : proveedoresPaginados;
+
+  const exportarExcel = () => {
+    const rows = (todosProveedores.length ? todosProveedores : proveedores).map((p) => ({
+      'RUT': p.proveedor_rut,
+      'Razón Social': p.proveedor_razon_social,
+      'Giro Comercial': p.proveedor_giro_comercial || '—',
+      'Contacto': p.proveedor_contacto || '—',
+      'Teléfono': p.proveedor_telefono || '—',
+      'Celular': p.proveedor_celular || '—',
+      'Email': p.proveedor_email || '—',
+      'Sitio Web': p.proveedor_website || '—',
+      'Dirección': p.proveedor_direccion || '—',
+      'Comuna': p.proveedor_comuna || '—',
+      'Región': getRegionNombre(p.proveedor_region || ''),
+      'País': p.proveedor_pais || 'Chile',
+      'Observaciones': p.proveedor_observacion || '—',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Proveedores Obuma');
+    ws['!cols'] = [15, 40, 25, 20, 14, 14, 30, 30, 40, 20, 20, 12, 40].map((w) => ({ wch: w }));
+    XLSX.writeFile(wb, `Proveedores_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const getInitials = (nombre: string = '') => {
@@ -335,20 +379,52 @@ export default function ObumaProveedoresPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
+              <input
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar por nombre, RUT, contacto o email..." 
+                placeholder="Buscar por nombre, RUT, contacto o email..."
                 className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#059669] focus:border-transparent"
               />
             </div>
 
-            <button 
-              onClick={() => setShowForm(!showForm)}
+            {/* Filtro región */}
+            <select
+              value={filtroRegion}
+              onChange={(e) => setFiltroRegion(e.target.value)}
+              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]"
+            >
+              <option value="TODAS">Todas las regiones</option>
+              {[['01','Tarapacá'],['02','Antofagasta'],['03','Atacama'],['04','Coquimbo'],['05','Valparaíso'],
+                ['06',"O'Higgins"],['07','Maule'],['08','Biobío'],['09','Araucanía'],['10','Los Lagos'],
+                ['11','Aysén'],['12','Magallanes'],['13','Metropolitana'],['14','Los Ríos'],
+                ['15','Arica y Parinacota'],['16','Ñuble']
+              ].map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+            </select>
+
+            {/* Filtro email */}
+            <select
+              value={filtroConEmail}
+              onChange={(e) => setFiltroConEmail(e.target.value)}
+              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]"
+            >
+              <option value="todos">Con / Sin email</option>
+              <option value="si">Con email</option>
+              <option value="no">Sin email</option>
+            </select>
+
+            <button
+              onClick={exportarExcel}
               className="bg-[#059669] hover:bg-[#047857] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
             >
+              <Download size={16} /> Excel
+            </button>
+
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="bg-slate-900 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
+            >
               {showForm ? <X size={18} /> : <Plus size={18} />}
-              {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
+              {showForm ? 'Cerrar' : 'Nuevo'}
             </button>
           </div>
         </div>

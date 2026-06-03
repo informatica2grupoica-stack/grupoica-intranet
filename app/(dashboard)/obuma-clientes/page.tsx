@@ -1,7 +1,8 @@
 'use client';
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Search, Loader2, Edit3, ChevronLeft, ChevronRight, ListIcon, Plus, Mail, Phone, MapPin, Users, Building, CheckCircle, XCircle, RefreshCcw } from "lucide-react";
+import { Search, Loader2, Edit3, ChevronLeft, ChevronRight, ListIcon, Plus, Mail, Phone, MapPin, Users, Building, CheckCircle, XCircle, RefreshCcw, Download, Filter, Globe } from "lucide-react";
 import Link from "next/link";
+import * as XLSX from "xlsx";
 
 interface Cliente {
   id: string;
@@ -29,6 +30,8 @@ export default function ObumaClientesListado() {
   const [itemsPerPage, setItemsPerPage] = useState(30);
   const [stats, setStats] = useState<any>(null);
   const [filtroEstado, setFiltroEstado] = useState<'activo' | 'inactivo' | 'todos'>('todos');
+  const [filtroExtranjero, setFiltroExtranjero] = useState<'todos' | 'si' | 'no'>('todos');
+  const [filtroCiudad, setFiltroCiudad] = useState("TODAS");
   const [error, setError] = useState<string | null>(null);
 
   const fetchClientes = useCallback(async (forceRefresh = false) => {
@@ -87,14 +90,48 @@ export default function ObumaClientesListado() {
     fetchClientes();
   }, [fetchClientes]);
 
+  // Ciudades únicas para filtro
+  const ciudadesUnicas = useMemo(() => {
+    const set = new Set(clientes.map((c) => c.ciudad).filter(Boolean));
+    return Array.from(set as Set<string>).sort();
+  }, [clientes]);
+
   const filteredClientes = useMemo(() => {
     const term = search.toLowerCase();
-    return clientes.filter(c => 
-      c.razon_social?.toLowerCase().includes(term) ||
-      c.rut?.toLowerCase().includes(term) ||
-      c.email?.toLowerCase().includes(term)
-    );
-  }, [clientes, search]);
+    return clientes.filter(c => {
+      const matchText = !term ||
+        c.razon_social?.toLowerCase().includes(term) ||
+        c.rut?.toLowerCase().includes(term) ||
+        c.email?.toLowerCase().includes(term) ||
+        c.comuna?.toLowerCase().includes(term) ||
+        c.ciudad?.toLowerCase().includes(term);
+      const matchExt = filtroExtranjero === 'todos' ||
+        (filtroExtranjero === 'si' ? c.es_extranjero : !c.es_extranjero);
+      const matchCiudad = filtroCiudad === 'TODAS' || c.ciudad === filtroCiudad;
+      return matchText && matchExt && matchCiudad;
+    });
+  }, [clientes, search, filtroExtranjero, filtroCiudad]);
+
+  const exportarExcel = () => {
+    const rows = filteredClientes.map((c) => ({
+      "Razón Social": c.razon_social,
+      "RUT": c.rut,
+      "Email": c.email || "—",
+      "Teléfono": c.telefono || "—",
+      "Dirección": c.direccion || "—",
+      "Comuna": c.comuna || "—",
+      "Ciudad": c.ciudad || "—",
+      "Estado": c.estado ? "Activo" : "Inactivo",
+      "Extranjero": c.es_extranjero ? "Sí" : "No",
+      "Contactos": c.total_contactos,
+      "Direcciones": c.total_direcciones,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+    ws["!cols"] = [35, 15, 30, 15, 35, 20, 20, 10, 12, 10, 12].map((w) => ({ wch: w }));
+    XLSX.writeFile(wb, `Clientes_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const totalPages = Math.ceil(filteredClientes.length / itemsPerPage);
   const currentItems = useMemo(() => {
@@ -197,10 +234,36 @@ export default function ObumaClientesListado() {
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value as any)}
           >
-            <option value="todos">📋 Todos</option>
-            <option value="activo">✅ Activos</option>
-            <option value="inactivo">❌ Inactivos</option>
+            <option value="todos">Todos</option>
+            <option value="activo">Activos</option>
+            <option value="inactivo">Inactivos</option>
           </select>
+
+          <select
+            className="bg-slate-50 border border-slate-100 rounded-2xl px-3 py-3 md:py-4 text-xs font-bold outline-none"
+            value={filtroExtranjero}
+            onChange={(e) => setFiltroExtranjero(e.target.value as any)}
+          >
+            <option value="todos">Nacional + Extranjero</option>
+            <option value="no">Solo Nacionales</option>
+            <option value="si">Solo Extranjeros</option>
+          </select>
+
+          <select
+            className="bg-slate-50 border border-slate-100 rounded-2xl px-3 py-3 md:py-4 text-xs font-bold outline-none max-w-[180px]"
+            value={filtroCiudad}
+            onChange={(e) => setFiltroCiudad(e.target.value)}
+          >
+            <option value="TODAS">Todas las ciudades</option>
+            {ciudadesUnicas.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <button
+            onClick={exportarExcel}
+            className="bg-[#059669] hover:bg-[#047857] text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 text-xs font-bold"
+          >
+            <Download size={16} /> Excel
+          </button>
 
           <button
             onClick={refreshClientes}

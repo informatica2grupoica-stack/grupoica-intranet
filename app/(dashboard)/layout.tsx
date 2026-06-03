@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ChatBot from "@/components/ChatBot";
+import { ToastContainer } from "@/components/Toast";
 
 // ─── Identidad y metadatos de cada vista (identificador por vista) ────────────
 const VIEW_META: Record<string, { id: string; label: string }> = {
@@ -84,31 +85,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [isLoading, isOnlyProductsUser, pathname, router]);
 
   const sections = [
-    { title: "PRINCIPAL", items: [{ name: "Inicio", icon: Home, path: "/" }] },
-    { title: "COMUNICACIÓN", items: [
-      { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
-      { name: "Tareas", icon: CheckSquare, path: "/tareas" },
-    ]},
-    { title: "ANÁLISIS", items: [
-      { name: "Dashboard Análisis", icon: BarChart3, path: "/dashboard" },
-      { name: "Buscador Productos", icon: Box, path: "/buscador-productos" },
-      { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
-    ]},
-    { title: "CRM", items: [{ name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" }] },
-    { title: "LOGÍSTICA", items: [
-      { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
-      { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
-    ]},
-    { title: "OBUMA", items: [
-      { name: "Documentos (DTE)", icon: FileText, path: "/dte", hasSub: true },
-      { name: "Productos", icon: Package, path: "/obuma-productos" },
-      { name: "Órdenes de Compras", icon: ShoppingCart, path: "/compras" },
-      { name: "API Obuma", icon: Server, path: "/obuma-api", hasSub: true },
-    ]},
-    { title: "ADMINISTRACIÓN", items: [
-      { name: "Usuarios", icon: Users, path: "/usuarios" },
-      { name: "Dispositivos", icon: Laptop, path: "/dispositivos" },
-    ]},
+    {
+      title: "PRINCIPAL",
+      items: [{ name: "Inicio", icon: Home, path: "/" }],
+    },
+    {
+      title: "COMUNICACIÓN",
+      items: [
+        { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
+        { name: "Tareas", icon: CheckSquare, path: "/tareas" },
+      ],
+    },
+    {
+      title: "ANÁLISIS & PRECIOS",
+      items: [
+        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
+        { name: "Buscador de Productos", icon: Box, path: "/buscador-productos" },
+        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
+      ],
+    },
+    {
+      title: "CRM",
+      items: [
+        { name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" },
+      ],
+    },
+    {
+      title: "INVENTARIO & COMPRAS",
+      items: [
+        { name: "Productos Obuma", icon: Package, path: "/obuma-productos" },
+        { name: "Órdenes de Compra", icon: ShoppingCart, path: "/compras" },
+        { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
+        { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
+      ],
+    },
+    {
+      title: "ADMINISTRACIÓN",
+      items: [
+        { name: "Usuarios", icon: Users, path: "/usuarios" },
+        { name: "Dispositivos TI", icon: Laptop, path: "/dispositivos" },
+      ],
+    },
   ];
 
   const meta = VIEW_META[pathname] || { id: "MP-··", label: (pathname.split("/").filter(Boolean).pop() || "inicio").replace(/-/g, " ") };
@@ -189,6 +206,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
         <ChatBot />
+        <ToastContainer />
       </div>
     );
   }
@@ -254,6 +272,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
 
       <ChatBot />
+      <ToastContainer />
     </div>
   );
 }
