@@ -2,15 +2,14 @@
 "use client";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import {
-  ShoppingBag, Search, ChevronLeft, ChevronRight,
-  Eye, Package, X, Loader2, Building2, Calendar, DollarSign,
-  AlertCircle, Download, Filter, Hash, CheckCircle2,
-  FileText, CreditCard, RefreshCcw, Banknote, TrendingUp,
-  ShoppingCart, Receipt
+  Search, ChevronLeft, ChevronRight,
+  Eye, Package, X, Loader2, Building2, DollarSign,
+  AlertCircle, Download, Filter, CheckCircle2,
+  FileText, CreditCard, RefreshCcw,
+  ShoppingCart, Receipt, ExternalLink, Hash
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
-// ─── Tipos ─────────────────────────────────────────────────────────────────────
 type TabType = "oc" | "compras" | "dte" | "pagos";
 
 interface Filtros {
@@ -29,38 +28,51 @@ const FILTROS_INICIAL: Filtros = {
 };
 
 const MESES = [
-  "", "01-Enero", "02-Febrero", "03-Marzo", "04-Abril", "05-Mayo", "06-Junio",
-  "07-Julio", "08-Agosto", "09-Septiembre", "10-Octubre", "11-Noviembre", "12-Diciembre",
+  { v: "", l: "Todos los meses" },
+  { v: "01", l: "01 - Enero" }, { v: "02", l: "02 - Febrero" }, { v: "03", l: "03 - Marzo" },
+  { v: "04", l: "04 - Abril" }, { v: "05", l: "05 - Mayo" }, { v: "06", l: "06 - Junio" },
+  { v: "07", l: "07 - Julio" }, { v: "08", l: "08 - Agosto" }, { v: "09", l: "09 - Septiembre" },
+  { v: "10", l: "10 - Octubre" }, { v: "11", l: "11 - Noviembre" }, { v: "12", l: "12 - Diciembre" },
 ];
 
 const AÑOS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
+const ESTADOS_OC = ["", "EMITIDA", "APROBADA", "ENVIADA", "RECEPCIONADA", "FACTURADA", "ANULADA", "PENDIENTE", "SOLICITADA"];
 
-const ESTADOS_OC = ["", "SOLICITADA", "APROBADA", "ENVIADA", "RECEPCIONADA", "FACTURADA", "ANULADA", "PENDIENTE"];
+// Tipos de DTE chilenos
+const TIPO_DTE: Record<string, string> = {
+  "33": "Factura", "34": "Fact. Exenta", "39": "Boleta",
+  "41": "Boleta Exenta", "52": "Guía Despacho", "56": "Nota Débito",
+  "61": "Nota Crédito", "110": "Fact. Exportación", "111": "Liq. Factura",
+};
 
 const estadoColor = (e: string) => {
   const m: Record<string, string> = {
     FACTURADA: "bg-emerald-50 text-emerald-700 border-emerald-200",
     APROBADA: "bg-blue-50 text-blue-700 border-blue-200",
     ENVIADA: "bg-sky-50 text-sky-700 border-sky-200",
+    EMITIDA: "bg-indigo-50 text-indigo-700 border-indigo-200",
     RECEPCIONADA: "bg-teal-50 text-teal-700 border-teal-200",
     ANULADA: "bg-rose-50 text-rose-700 border-rose-200",
     SOLICITADA: "bg-amber-50 text-amber-700 border-amber-200",
     PENDIENTE: "bg-amber-50 text-amber-700 border-amber-200",
+    ACTIVA: "bg-green-50 text-green-700 border-green-200",
   };
   return m[e?.toUpperCase()] || "bg-slate-50 text-slate-600 border-slate-200";
 };
 
 const fmt = (n: number | string) => `$${Number(n || 0).toLocaleString("es-CL")}`;
-const fmtFecha = (raw: string | null) => {
-  if (!raw) return "—";
-  const d = raw.split(" ")[0]; // "yyyy-mm-dd" o "dd-mm-yyyy"
+
+const fmtFecha = (raw: string | null | undefined) => {
+  if (!raw || raw.startsWith("0000")) return "—";
+  const d = raw.split(" ")[0];
   const parts = d.split("-");
   if (parts.length !== 3) return raw;
-  if (parts[0].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`; // yyyy→dd/mm/yyyy
+  if (parts[0].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`;
   return `${parts[0]}-${parts[1]}-${parts[2]}`;
 };
 
-// ─── Componente principal ───────────────────────────────────────────────────────
+const tipoLabel = (tipo: string) => TIPO_DTE[tipo] || `Tipo ${tipo}`;
+
 export default function ComprasPage() {
   const [tab, setTab] = useState<TabType>("oc");
   const [datos, setDatos] = useState<any[]>([]);
@@ -68,23 +80,46 @@ export default function ComprasPage() {
   const [error, setError] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Filtros>({ ...FILTROS_INICIAL });
   const [pag, setPag] = useState(1);
-  const POR_PAG = 20;
   const [debugMode, setDebugMode] = useState(false);
+  // Cache proveedores para lookup por rel_proveedor_id
+  const [provCache, setProvCache] = useState<Record<string, string>>({});
 
-  // Modal detalle OC
+  const POR_PAG = 20;
+
   const [modalOC, setModalOC] = useState<{ visible: boolean; loading: boolean; data: any }>({
     visible: false, loading: false, data: null,
   });
 
-  // ─── Construir params para la API ──────────────────────────────────────────
+  // ─── Cargar cache proveedores ────────────────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/obuma/proveedores")
+      .then((r) => r.json())
+      .then((j) => {
+        const lista = j.data || j.proveedores || [];
+        const map: Record<string, string> = {};
+        lista.forEach((p: any) => {
+          if (p.proveedor_id) map[String(p.proveedor_id)] = p.proveedor_razon_social || p.proveedor_rut;
+        });
+        setProvCache(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  const getProvNombre = (id: string) => provCache[String(id)] || `ID: ${id}`;
+
+  // ─── Construir query string ─────────────────────────────────────────────────
   const buildParams = useCallback(() => {
     const p: Record<string, string> = {};
-    if (filtros.fechaDesde) p.fecha_desde = filtros.fechaDesde.split("-").reverse().join("-"); // dd-mm-yyyy
+    // Convertir fecha HTML (yyyy-mm-dd) a formato Obuma (dd-mm-yyyy)
+    if (filtros.fechaDesde) p.fecha_desde = filtros.fechaDesde.split("-").reverse().join("-");
     if (filtros.fechaHasta) p.fecha_hasta = filtros.fechaHasta.split("-").reverse().join("-");
-    if (filtros.mes) p.mes = filtros.mes.split("-")[0];
+    if (filtros.mes) {
+      p.mes = filtros.mes;
+      if (tab === "compras") p.mes_contable = filtros.mes;
+      if (tab === "dte") p.mes_contable = filtros.mes;
+    }
     if (filtros.ano) {
-      if (tab === "oc") p.ano = filtros.ano;
-      else if (tab === "compras") p.ano_contable = filtros.ano;
+      if (tab === "compras") p.ano_contable = filtros.ano;
       else if (tab === "dte") p.ano_contable = filtros.ano;
       else p.ano = filtros.ano;
     }
@@ -93,7 +128,7 @@ export default function ComprasPage() {
     return new URLSearchParams(p).toString();
   }, [filtros, tab]);
 
-  // ─── Cargar datos ────────────────────────────────────────────────────────────
+  // ─── Cargar datos ─────────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -101,13 +136,13 @@ export default function ComprasPage() {
     setPag(1);
     try {
       const qs = buildParams();
-      const endpoints: Record<TabType, string> = {
+      const urls: Record<TabType, string> = {
         oc: `/api/obuma/oc${qs ? `?${qs}` : ""}`,
         compras: `/api/obuma/compras${qs ? `?${qs}` : ""}`,
         dte: `/api/obuma/compras-dte${qs ? `?${qs}` : ""}`,
         pagos: `/api/obuma/compras-pagos${qs ? `?${qs}` : ""}`,
       };
-      const res = await fetch(endpoints[tab]);
+      const res = await fetch(urls[tab]);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al cargar datos");
       const rows = json.data || json.docs || (Array.isArray(json) ? json : []);
@@ -125,24 +160,22 @@ export default function ComprasPage() {
   const datosFiltrados = useMemo(() => {
     if (!filtros.texto) return datos;
     const t = filtros.texto.toLowerCase();
-    return datos.filter((row) =>
-      JSON.stringify(row).toLowerCase().includes(t)
-    );
+    return datos.filter((row) => JSON.stringify(row).toLowerCase().includes(t));
   }, [datos, filtros.texto]);
 
   const totalPags = Math.ceil(datosFiltrados.length / POR_PAG);
   const pagActual = datosFiltrados.slice((pag - 1) * POR_PAG, pag * POR_PAG);
 
-  // ─── KPIs dinámicos ─────────────────────────────────────────────────────────
+  // ─── KPIs ─────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (tab === "oc") {
       const monto = datosFiltrados.reduce((s, r) => s + Number(r.compra_oc_total || 0), 0);
       const fac = datosFiltrados.filter((r) => r.compra_oc_estado === "FACTURADA").length;
-      const ap = datosFiltrados.filter((r) => r.compra_oc_estado === "APROBADA").length;
+      const emit = datosFiltrados.filter((r) => r.compra_oc_estado === "EMITIDA").length;
       return [
         { label: "Total OC", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: ShoppingCart },
         { label: "Facturadas", value: fac, color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
-        { label: "Aprobadas", value: ap, color: "text-blue-600", bg: "bg-blue-100", icon: Receipt },
+        { label: "Emitidas", value: emit, color: "text-indigo-600", bg: "bg-indigo-100", icon: Receipt },
         { label: "Monto Total", value: fmt(monto), color: "text-[#059669]", bg: "bg-[#D1FAE5]", icon: DollarSign },
       ];
     }
@@ -158,23 +191,26 @@ export default function ComprasPage() {
       ];
     }
     if (tab === "dte") {
-      const monto = datosFiltrados.reduce((s, r) => s + Number(r.total || r.compra_total || 0), 0);
+      const monto = datosFiltrados.reduce((s, r) => s + Number(r.dte_total || 0), 0);
+      const neto = datosFiltrados.reduce((s, r) => s + Number(r.dte_total_neto || 0), 0);
       return [
         { label: "Total DTE", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: FileText },
         { label: "Monto Total", value: fmt(monto), color: "text-[#059669]", bg: "bg-[#D1FAE5]", icon: DollarSign },
-        { label: "Proveedores", value: new Set(datosFiltrados.map((r) => r.proveedor_rut || r.rut_proveedor)).size, color: "text-purple-600", bg: "bg-purple-100", icon: Building2 },
-        { label: "Tipos Dcto.", value: new Set(datosFiltrados.map((r) => r.tipo_dcto)).size, color: "text-amber-600", bg: "bg-amber-100", icon: Hash },
+        { label: "Total Neto", value: fmt(neto), color: "text-blue-600", bg: "bg-blue-100", icon: Hash },
+        { label: "Emisores únicos", value: new Set(datosFiltrados.map((r) => r.dte_rut_emisor)).size, color: "text-purple-600", bg: "bg-purple-100", icon: Building2 },
       ];
     }
-    // pagos
-    const monto = datosFiltrados.reduce((s, r) => s + Number(r.cp_monto || 0), 0);
+    // Pagos — campo correcto: cp_total
+    const monto = datosFiltrados.reduce((s, r) => s + Number(r.cp_total || 0), 0);
+    const pagado = datosFiltrados.reduce((s, r) => s + Number(r.cp_pagado || 0), 0);
+    const porPagar = datosFiltrados.reduce((s, r) => s + Number(r.cp_por_pagar || 0), 0);
     return [
       { label: "Total Pagos", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: CreditCard },
       { label: "Monto Total", value: fmt(monto), color: "text-[#059669]", bg: "bg-[#D1FAE5]", icon: DollarSign },
-      { label: "Orígenes", value: new Set(datosFiltrados.map((r) => r.cp_origen_nombre)).size, color: "text-blue-600", bg: "bg-blue-100", icon: TrendingUp },
-      { label: "Mes/Año", value: `${filtros.mes || "*"}/${filtros.ano}`, color: "text-slate-500", bg: "bg-slate-100", icon: Calendar },
+      { label: "Pagado", value: fmt(pagado), color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
+      { label: "Por Pagar", value: fmt(porPagar), color: "text-rose-500", bg: "bg-rose-100", icon: AlertCircle },
     ];
-  }, [datosFiltrados, tab, filtros]);
+  }, [datosFiltrados, tab]);
 
   // ─── Ver detalle OC ─────────────────────────────────────────────────────────
   const verDetalleOC = async (id: string) => {
@@ -188,64 +224,91 @@ export default function ComprasPage() {
     }
   };
 
-  // ─── Exportar Excel ─────────────────────────────────────────────────────────
+  // ─── Excel ──────────────────────────────────────────────────────────────────
   const exportarExcel = () => {
-    let rows: any[] = [];
     const ts = new Date().toISOString().slice(0, 10);
+    let rows: any[] = [];
 
     if (tab === "oc") {
       rows = datosFiltrados.map((r) => ({
         "Folio": r.compra_oc_folio,
         "Fecha": fmtFecha(r.compra_oc_fecha_ingreso),
         "Estado": r.compra_oc_estado || "—",
-        "Proveedor": r.proveedor_razon_social || "—",
-        "RUT Proveedor": r.proveedor_rut || "—",
+        "Proveedor ID": r.rel_proveedor_id || "—",
+        "Proveedor": getProvNombre(r.rel_proveedor_id),
         "Forma Pago": r.compra_oc_forma_pago || "—",
         "Método Despacho": r.compra_oc_metodo_despacho || "—",
-        "Moneda": r.compra_oc_moneda || "CLP",
         "Centro Costo": r.compra_oc_centro_costo || "—",
-        "Concepto Gasto": r.compra_oc_concepto_gasto || "—",
+        "Concepto": r.compra_oc_concepto || "—",
+        "Items": Number(r.compra_oc_cantidad_items || 0),
         "Subtotal ($)": Number(r.compra_oc_subtotal || 0),
         "Neto ($)": Number(r.compra_oc_neto || 0),
         "IVA ($)": Number(r.compra_oc_iva || 0),
         "Total ($)": Number(r.compra_oc_total || 0),
+        "Pagada": r.compra_oc_pagada === "1" ? "Sí" : "No",
+        "Enviada": r.compra_oc_enviada === "1" ? "Sí" : "No",
         "Observación": r.compra_oc_observacion || "—",
-        "Referencia": r.compra_oc_referencia || "—",
       }));
     } else if (tab === "compras") {
       rows = datosFiltrados.map((r) => ({
         "ID": r.compra_id,
-        "Folio": r.folio_dcto || "—",
-        "Tipo Dcto.": r.tipo_dcto || "—",
-        "Fecha": fmtFecha(r.compra_fecha),
-        "Período": r.compra_periodo_contable || "—",
-        "Proveedor": r.proveedor_razon_social || "—",
-        "RUT": r.proveedor_rut || "—",
-        "Estado": r.compra_estado || "—",
+        "Tipo Dcto.": r.compra_tipo_dcto || "—",
+        "Folio": r.compra_folio || "—",
+        "Fecha": fmtFecha(r.compra_fechaingreso),
+        "Período Contable": `${r.compra_mes_contable || "—"}/${r.compra_ano_contable || "—"}`,
+        "Proveedor ID": r.rel_proveedor_id || "—",
+        "Proveedor": getProvNombre(r.rel_proveedor_id),
+        "Sucursal ID": r.rel_sucursal_id || "—",
+        "Concepto": r.compra_concepto || "—",
+        "Centro Costo": r.compra_centro_costo || "—",
+        "Neto ($)": Number(r.compra_neto || 0),
+        "IVA ($)": Number(r.compra_iva || 0),
         "Total ($)": Number(r.compra_total || 0),
-        "Total Pagado ($)": Number(r.compra_total_pagado || 0),
+        "Pagado ($)": Number(r.compra_total_pagado || 0),
         "Por Pagar ($)": Number(r.compra_total_por_pagar || 0),
+        "Anulada": r.compra_anulada === "1" ? "Sí" : "No",
+        "Nota Crédito": r.compra_notacredito === "1" ? "Sí" : "No",
+        "Observación": r.compra_observacion || "—",
       }));
     } else if (tab === "dte") {
       rows = datosFiltrados.map((r) => ({
-        "ID DTE": r.dte_id || r.id,
-        "Folio": r.folio_dcto || "—",
-        "Tipo Dcto.": r.tipo_dcto || "—",
-        "Proveedor": r.proveedor_razon_social || "—",
-        "RUT Proveedor": r.rut_proveedor || r.proveedor_rut || "—",
-        "Mes Contable": r.mes_contable || "—",
-        "Año Contable": r.ano_contable || "—",
-        "Total ($)": Number(r.total || r.compra_total || 0),
-        "Compra ID": r.id_compra || "—",
+        "ID DTE": r.dte_id,
+        "ID Único": r.dte_id_unico || "—",
+        "Folio": r.dte_folio || "—",
+        "Tipo": tipoLabel(r.dte_tipo),
+        "Código Tipo": r.dte_tipo || "—",
+        "Emisor (Proveedor)": r.dte_razonsocial_emisor || "—",
+        "RUT Emisor": r.dte_rut_emisor || "—",
+        "Email Emisor": r.dte_email_emisor || "—",
+        "Fecha DTE": r.dte_fecha || "—",
+        "Período": r.dte_periodo_tributario || "—",
+        "Neto ($)": Number(r.dte_total_neto || 0),
+        "IVA ($)": Number(r.dte_total_iva || 0),
+        "Exento ($)": Number(r.dte_total_exento || 0),
+        "Total ($)": Number(r.dte_total || 0),
+        "Forma Pago": r.dte_forma_pago || "—",
+        "Compra ID vinculada": r.rel_compra_id || "—",
+        "XML válido": r.xml_valido === "1" ? "Sí" : "No",
+        "Link XML": r.s3_link || "—",
+        "Respuesta Documento": r.dte_respuesta_documento || "—",
+        "Respuesta Mercadería": r.dte_respuesta_mercaderia || "—",
       }));
     } else {
       rows = datosFiltrados.map((r) => ({
         "ID Pago": r.cp_id,
-        "Fecha": fmtFecha(r.cp_fecha_ingreso),
+        "Fecha Pago": r.cp_fecha || "—",
+        "Fecha Ingreso": fmtFecha(r.cp_fecha_ingreso),
         "Mes": r.cp_mes,
         "Año": r.cp_ano,
         "Origen": r.cp_origen_nombre || "—",
-        "Monto ($)": Number(r.cp_monto || 0),
+        "Forma Pago": r.cp_forma_pago || "—",
+        "Total ($)": Number(r.cp_total || 0),
+        "Pagado ($)": Number(r.cp_pagado || 0),
+        "Por Pagar ($)": Number(r.cp_por_pagar || 0),
+        "Compra ID": r.rel_compra_id || "—",
+        "Proveedor ID": r.rel_proveedor_id || "—",
+        "Proveedor": getProvNombre(r.rel_proveedor_id),
+        "Detalle": r.cp_detalle || "—",
       }));
     }
 
@@ -275,25 +338,23 @@ export default function ComprasPage() {
     XLSX.writeFile(wb, `Detalle_OC_${d.folio}.xlsx`);
   };
 
-  // ─── Renderizar tabla según pestaña ────────────────────────────────────────
+  // ─── Tablas por pestaña ─────────────────────────────────────────────────────
   const renderTabla = () => {
     if (loading) return (
-      <tr><td colSpan={8} className="p-16 text-center">
+      <tr><td colSpan={9} className="p-16 text-center">
         <Loader2 className="animate-spin text-[#059669] mx-auto mb-2" size={32} />
         <p className="text-slate-400 text-xs">Consultando API Obuma...</p>
       </td></tr>
     );
     if (error) return (
-      <tr><td colSpan={8} className="p-16 text-center">
+      <tr><td colSpan={9} className="p-16 text-center">
         <AlertCircle className="mx-auto text-rose-400 mb-2" size={32} />
         <p className="text-rose-500 text-sm font-bold">{error}</p>
         <button onClick={cargar} className="mt-2 text-xs text-[#059669] font-bold hover:underline">Reintentar</button>
       </td></tr>
     );
     if (pagActual.length === 0) return (
-      <tr><td colSpan={8} className="p-16 text-center text-slate-400">
-        No hay registros para los filtros aplicados.
-      </td></tr>
+      <tr><td colSpan={9} className="p-16 text-center text-slate-400">No hay registros para los filtros aplicados.</td></tr>
     );
 
     if (tab === "oc") return pagActual.map((r) => (
@@ -301,19 +362,21 @@ export default function ComprasPage() {
         <td className="px-5 py-3.5 font-bold text-[#059669]">#{r.compra_oc_folio}</td>
         <td className="px-5 py-3.5 text-xs text-slate-600">{fmtFecha(r.compra_oc_fecha_ingreso)}</td>
         <td className="px-5 py-3.5">
-          <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{r.proveedor_razon_social || "—"}</p>
-          <p className="text-[9px] font-mono text-slate-400">{r.proveedor_rut || "—"}</p>
+          <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">
+            {provCache[String(r.rel_proveedor_id)] || <span className="text-slate-400 italic text-[10px]">ID:{r.rel_proveedor_id}</span>}
+          </p>
         </td>
-        <td className="px-5 py-3.5 text-xs text-slate-500">{r.compra_oc_forma_pago || "—"}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-500 truncate max-w-[120px]">{r.compra_oc_forma_pago || "—"}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-400">{r.compra_oc_cantidad_items || 0} items</td>
         <td className="px-5 py-3.5 text-right font-black text-slate-800">{fmt(r.compra_oc_total)}</td>
         <td className="px-5 py-3.5 text-center">
           <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border ${estadoColor(r.compra_oc_estado)}`}>
-            {r.compra_oc_estado || "PENDIENTE"}
+            {r.compra_oc_estado || "—"}
           </span>
         </td>
         <td className="px-5 py-3.5 text-center">
           <button onClick={() => verDetalleOC(r.compra_oc_id)}
-            className="p-2 rounded-lg bg-slate-100 hover:bg-[#D1FAE5] text-slate-500 hover:text-[#059669] transition-all" title="Ver detalle">
+            className="p-2 rounded-lg bg-slate-100 hover:bg-[#D1FAE5] text-slate-500 hover:text-[#059669] transition-all">
             <Eye size={15} />
           </button>
         </td>
@@ -322,69 +385,104 @@ export default function ComprasPage() {
 
     if (tab === "compras") return pagActual.map((r, i) => (
       <tr key={r.compra_id || i} className="hover:bg-slate-50/50 transition-colors">
-        <td className="px-5 py-3.5 font-bold text-slate-700">{r.compra_id || "—"}</td>
-        <td className="px-5 py-3.5 text-[10px] font-bold text-slate-500 bg-slate-50 rounded-md">{r.tipo_dcto || "—"} {r.folio_dcto || ""}</td>
-        <td className="px-5 py-3.5 text-xs text-slate-600">{fmtFecha(r.compra_fecha)}</td>
+        <td className="px-5 py-3.5 font-mono text-xs text-slate-500">{r.compra_id}</td>
         <td className="px-5 py-3.5">
-          <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{r.proveedor_razon_social || "—"}</p>
-          <p className="text-[9px] font-mono text-slate-400">{r.proveedor_rut || "—"}</p>
+          <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded mr-1">
+            {tipoLabel(r.compra_tipo_dcto)}
+          </span>
+          <span className="text-xs font-bold text-slate-700">#{r.compra_folio || "—"}</span>
+        </td>
+        <td className="px-5 py-3.5 text-xs text-slate-600">{fmtFecha(r.compra_fechaingreso)}</td>
+        <td className="px-5 py-3.5">
+          <p className="text-xs font-bold text-slate-700 truncate max-w-[160px]">
+            {provCache[String(r.rel_proveedor_id)] || <span className="text-slate-400 italic text-[10px]">ID:{r.rel_proveedor_id}</span>}
+          </p>
+          <p className="text-[9px] text-slate-400">{r.compra_mes_contable}/{r.compra_ano_contable}</p>
         </td>
         <td className="px-5 py-3.5 text-right font-black text-slate-800">{fmt(r.compra_total)}</td>
         <td className="px-5 py-3.5 text-right text-emerald-600 font-bold text-xs">{fmt(r.compra_total_pagado)}</td>
         <td className="px-5 py-3.5 text-right text-rose-500 font-bold text-xs">{fmt(r.compra_total_por_pagar)}</td>
         <td className="px-5 py-3.5 text-center">
-          <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border ${estadoColor(r.compra_estado)}`}>
-            {r.compra_estado || "—"}
-          </span>
+          {r.compra_anulada === "1" ? (
+            <span className="px-2.5 py-1 rounded-full text-[9px] font-bold border bg-rose-50 text-rose-700 border-rose-200">Anulada</span>
+          ) : r.compra_notacredito === "1" ? (
+            <span className="px-2.5 py-1 rounded-full text-[9px] font-bold border bg-purple-50 text-purple-700 border-purple-200">N.Crédito</span>
+          ) : (
+            <span className="px-2.5 py-1 rounded-full text-[9px] font-bold border bg-green-50 text-green-700 border-green-200">Activa</span>
+          )}
         </td>
       </tr>
     ));
 
     if (tab === "dte") return pagActual.map((r, i) => (
-      <tr key={r.dte_id || r.id || i} className="hover:bg-slate-50/50 transition-colors">
-        <td className="px-5 py-3.5 font-mono text-[10px] text-slate-500">{r.dte_id || r.id || "—"}</td>
+      <tr key={r.dte_id || i} className="hover:bg-slate-50/50 transition-colors">
         <td className="px-5 py-3.5">
-          <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{r.tipo_dcto || "—"}</span>
-          <span className="ml-1.5 text-xs font-bold text-slate-700">#{r.folio_dcto || "—"}</span>
+          <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+            {tipoLabel(r.dte_tipo)}
+          </span>
+          <p className="text-xs font-bold text-slate-700 mt-0.5">#{r.dte_folio}</p>
         </td>
         <td className="px-5 py-3.5">
-          <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{r.proveedor_razon_social || "—"}</p>
-          <p className="text-[9px] font-mono text-slate-400">{r.rut_proveedor || r.proveedor_rut || "—"}</p>
+          <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">{r.dte_razonsocial_emisor || "—"}</p>
+          <p className="text-[9px] font-mono text-slate-400">{r.dte_rut_emisor || "—"}</p>
         </td>
-        <td className="px-5 py-3.5 text-xs text-slate-500">{r.mes_contable || "—"}/{r.ano_contable || "—"}</td>
-        <td className="px-5 py-3.5 text-right font-black text-slate-800">{fmt(r.total || r.compra_total)}</td>
-        <td className="px-5 py-3.5 text-center text-[10px] text-slate-400">{r.id_compra || "—"}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-600">{r.dte_fecha || "—"}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-500">{r.dte_periodo_tributario || "—"}</td>
+        <td className="px-5 py-3.5 text-right font-black text-slate-800">{fmt(r.dte_total)}</td>
+        <td className="px-5 py-3.5 text-right text-xs text-slate-500">{fmt(r.dte_total_neto)}</td>
+        <td className="px-5 py-3.5 text-center">
+          {r.rel_compra_id !== "0" ? (
+            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">Vinculada #{r.rel_compra_id}</span>
+          ) : (
+            <span className="text-[9px] text-slate-300 font-bold">Sin vincular</span>
+          )}
+        </td>
+        <td className="px-5 py-3.5 text-center">
+          {r.s3_link ? (
+            <a href={r.s3_link} target="_blank" rel="noopener noreferrer"
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 transition-all inline-flex" title="Ver XML">
+              <ExternalLink size={14} />
+            </a>
+          ) : "—"}
+        </td>
       </tr>
     ));
 
-    // Pagos
+    // Pagos — campo correcto: cp_total
     return pagActual.map((r, i) => (
       <tr key={r.cp_id || i} className="hover:bg-slate-50/50 transition-colors">
         <td className="px-5 py-3.5 font-mono text-[10px] text-slate-500">{r.cp_id}</td>
-        <td className="px-5 py-3.5 text-xs text-slate-600">{fmtFecha(r.cp_fecha_ingreso)}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-600">{r.cp_fecha || "—"}</td>
         <td className="px-5 py-3.5 text-xs text-slate-500">{r.cp_mes}/{r.cp_ano}</td>
         <td className="px-5 py-3.5">
           <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded uppercase">
             {r.cp_origen_nombre || "—"}
           </span>
         </td>
-        <td className="px-5 py-3.5 text-right font-black text-emerald-600">{fmt(r.cp_monto)}</td>
+        <td className="px-5 py-3.5 text-xs text-slate-500 truncate max-w-[120px]">{r.cp_forma_pago || "—"}</td>
+        <td className="px-5 py-3.5 text-right font-black text-emerald-600">{fmt(r.cp_total)}</td>
+        <td className="px-5 py-3.5 text-right text-xs text-rose-500">{fmt(r.cp_por_pagar)}</td>
+        <td className="px-5 py-3.5 text-center">
+          {r.rel_compra_id && r.rel_compra_id !== "0" ? (
+            <span className="text-[9px] font-mono text-slate-400">#{r.rel_compra_id}</span>
+          ) : "—"}
+        </td>
       </tr>
     ));
   };
 
   const colHeaders: Record<TabType, string[]> = {
-    oc: ["Folio", "Fecha", "Proveedor", "Forma Pago", "Total", "Estado", "Ver"],
-    compras: ["ID", "Tipo/Folio", "Fecha", "Proveedor", "Total", "Pagado", "Por Pagar", "Estado"],
-    dte: ["ID", "Tipo/Folio", "Proveedor", "Período", "Total", "Compra ID"],
-    pagos: ["ID", "Fecha", "Período", "Origen", "Monto"],
+    oc: ["Folio", "Fecha", "Proveedor", "Forma Pago", "Items", "Total", "Estado", "Ver"],
+    compras: ["ID", "Tipo/Folio", "Fecha", "Proveedor / Período", "Total", "Pagado", "Por Pagar", "Estado"],
+    dte: ["Tipo/Folio", "Emisor (Proveedor)", "Fecha DTE", "Período", "Total", "Neto", "Compra Vinculada", "XML"],
+    pagos: ["ID", "Fecha Pago", "Período", "Origen", "Forma Pago", "Total", "Por Pagar", "Compra ID"],
   };
 
   const TABS = [
-    { id: "oc" as TabType, label: "Órdenes de Compra", icon: ShoppingCart, desc: "OC / comprasOc" },
-    { id: "compras" as TabType, label: "Compras / Facturas", icon: FileText, desc: "Facturas registradas" },
-    { id: "dte" as TabType, label: "DTE Recibidos", icon: Receipt, desc: "Documentos tributarios" },
-    { id: "pagos" as TabType, label: "Pagos", icon: CreditCard, desc: "Pagos realizados" },
+    { id: "oc" as TabType, label: "Órdenes de Compra", icon: ShoppingCart },
+    { id: "compras" as TabType, label: "Compras / Facturas", icon: FileText },
+    { id: "dte" as TabType, label: "DTE Recibidos", icon: Receipt },
+    { id: "pagos" as TabType, label: "Pagos", icon: CreditCard },
   ];
 
   return (
@@ -393,14 +491,14 @@ export default function ComprasPage() {
       {/* ── Tabs ─────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => { setTab(t.id); setDatos([]); setFiltros({ ...FILTROS_INICIAL }); }}
+          <button key={t.id}
+            onClick={() => { setTab(t.id); setDatos([]); setFiltros({ ...FILTROS_INICIAL }); setDebugMode(false); }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wide transition-all ${
               tab === t.id
                 ? "bg-[#059669] text-white shadow-md shadow-emerald-900/20"
                 : "bg-white text-slate-500 border border-slate-200 hover:border-[#059669] hover:text-[#059669]"
             }`}>
-            <t.icon size={14} />
-            {t.label}
+            <t.icon size={14} /> {t.label}
           </button>
         ))}
       </div>
@@ -421,8 +519,7 @@ export default function ComprasPage() {
       {/* ── Filtros ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Búsqueda local */}
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-[200px] flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input type="text" placeholder="Buscar en resultados..."
               value={filtros.texto}
@@ -430,7 +527,6 @@ export default function ComprasPage() {
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#059669]/20" />
           </div>
 
-          {/* Estado (solo OC) */}
           {tab === "oc" && (
             <select value={filtros.estado}
               onChange={(e) => setFiltros((f) => ({ ...f, estado: e.target.value }))}
@@ -439,17 +535,17 @@ export default function ComprasPage() {
             </select>
           )}
 
-          {/* RUT Proveedor */}
-          <input type="text" placeholder="RUT proveedor"
-            value={filtros.proveedorRut}
-            onChange={(e) => setFiltros((f) => ({ ...f, proveedorRut: e.target.value }))}
-            className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none w-36" />
+          {(tab === "compras" || tab === "dte") && (
+            <input type="text" placeholder="RUT emisor / proveedor"
+              value={filtros.proveedorRut}
+              onChange={(e) => setFiltros((f) => ({ ...f, proveedorRut: e.target.value }))}
+              className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none w-40" />
+          )}
 
-          {/* Mes / Año */}
           <select value={filtros.mes}
             onChange={(e) => setFiltros((f) => ({ ...f, mes: e.target.value }))}
             className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none">
-            {MESES.map((m) => <option key={m} value={m.split("-")[0]}>{m || "Todos los meses"}</option>)}
+            {MESES.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
 
           <select value={filtros.ano}
@@ -458,26 +554,26 @@ export default function ComprasPage() {
             {AÑOS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
 
-          {/* Fechas */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 font-bold">Desde</span>
-            <input type="date" value={filtros.fechaDesde}
-              onChange={(e) => setFiltros((f) => ({ ...f, fechaDesde: e.target.value }))}
-              className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs outline-none" />
-            <span className="text-[10px] text-slate-400 font-bold">Hasta</span>
-            <input type="date" value={filtros.fechaHasta}
-              onChange={(e) => setFiltros((f) => ({ ...f, fechaHasta: e.target.value }))}
-              className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs outline-none" />
-          </div>
+          {tab !== "pagos" && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 font-bold">Desde</span>
+              <input type="date" value={filtros.fechaDesde}
+                onChange={(e) => setFiltros((f) => ({ ...f, fechaDesde: e.target.value }))}
+                className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs outline-none" />
+              <span className="text-[10px] text-slate-400 font-bold">Hasta</span>
+              <input type="date" value={filtros.fechaHasta}
+                onChange={(e) => setFiltros((f) => ({ ...f, fechaHasta: e.target.value }))}
+                className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 text-xs outline-none" />
+            </div>
+          )}
 
-          {/* Acciones */}
           <div className="flex items-center gap-2 ml-auto">
-            <button onClick={() => { setFiltros({ ...FILTROS_INICIAL }); }}
+            <button onClick={() => setFiltros({ ...FILTROS_INICIAL })}
               className="px-3 py-2.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-xl flex items-center gap-1.5 hover:bg-slate-200 transition-all">
               <Filter size={13} /> Limpiar
             </button>
             <button onClick={cargar} disabled={loading}
-              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#059669] transition-all">
+              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#059669] transition-all disabled:opacity-50">
               <RefreshCcw size={13} className={loading ? "animate-spin" : ""} /> Buscar en API
             </button>
             <button onClick={exportarExcel}
@@ -485,51 +581,45 @@ export default function ComprasPage() {
               <Download size={13} /> Excel
             </button>
             <button onClick={() => setDebugMode((d) => !d)}
-              className={`px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all ${debugMode ? "bg-amber-400 text-white" : "bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600"}`}
+              className={`px-3 py-2.5 text-xs font-bold rounded-xl transition-all ${debugMode ? "bg-amber-400 text-white" : "bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600"}`}
               title="Ver campos reales de la API">
               {} Debug
             </button>
           </div>
         </div>
-
         {!loading && (
           <p className="text-[10px] text-slate-400 mt-2.5 font-bold">
-            {datosFiltrados.length} registros · API Obuma
+            {datosFiltrados.length} registros · API Obuma · {Object.keys(provCache).length} proveedores en caché
           </p>
         )}
       </div>
 
-      {/* ── Debug: ver campos reales ─────────────────────────────────── */}
+      {/* ── Debug ─────────────────────────────────────────────────────── */}
       {debugMode && datos.length > 0 && (
         <div className="bg-slate-900 rounded-2xl p-5 text-xs font-mono text-emerald-400 overflow-x-auto">
           <p className="text-slate-400 text-[9px] font-bold uppercase mb-2">
-            🔬 Debug — Campos del primer registro de [{tab}] · {Object.keys(datos[0]).length} campos
+            🔬 Debug — [{tab}] · {Object.keys(datos[0]).length} campos
           </p>
-          <p className="text-amber-400 mb-2 text-[10px]">NOMBRES DE CAMPOS: {Object.keys(datos[0]).join(" | ")}</p>
+          <p className="text-amber-400 mb-2 text-[10px]">CAMPOS: {Object.keys(datos[0]).join(" | ")}</p>
           <pre className="text-[10px] leading-relaxed whitespace-pre-wrap text-slate-300">
             {JSON.stringify(datos[0], null, 2)}
           </pre>
         </div>
       )}
 
-      {/* ── Tabla ────────────────────────────────────────────────────── */}
+      {/* ── Tabla ─────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               <tr>
-                {colHeaders[tab].map((h) => (
-                  <th key={h} className="px-5 py-4">{h}</th>
-                ))}
+                {colHeaders[tab].map((h) => <th key={h} className="px-5 py-4">{h}</th>)}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
-              {renderTabla()}
-            </tbody>
+            <tbody className="divide-y divide-slate-50">{renderTabla()}</tbody>
           </table>
         </div>
 
-        {/* Paginación */}
         {!loading && datosFiltrados.length > POR_PAG && (
           <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
             <p className="text-xs text-slate-400">
@@ -559,8 +649,7 @@ export default function ComprasPage() {
             <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-white flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <ShoppingCart className="text-[#059669]" size={18} />
-                  Detalle Orden de Compra
+                  <ShoppingCart className="text-[#059669]" size={18} /> Detalle Orden de Compra
                 </h2>
                 {modalOC.data && (
                   <p className="text-[10px] text-slate-400 font-mono mt-0.5">
@@ -587,21 +676,14 @@ export default function ComprasPage() {
                 <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#059669]" size={36} /></div>
               ) : modalOC.data ? (
                 <div className="space-y-5">
-                  {/* Proveedor + totales */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="md:col-span-2 bg-slate-50 rounded-xl p-4">
                       <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">Proveedor</p>
                       <p className="font-bold text-slate-800">{modalOC.data.proveedor?.razon_social}</p>
                       <p className="text-xs font-mono text-slate-400">{modalOC.data.proveedor?.rut}</p>
-                      {modalOC.data.proveedor?.direccion && (
-                        <p className="text-xs text-slate-400 mt-1">{modalOC.data.proveedor.direccion}</p>
-                      )}
-                      {modalOC.data.proveedor?.email && (
-                        <p className="text-xs text-[#059669] mt-0.5">{modalOC.data.proveedor.email}</p>
-                      )}
-                      {modalOC.data.proveedor?.telefono && (
-                        <p className="text-xs text-slate-500">{modalOC.data.proveedor.telefono}</p>
-                      )}
+                      {modalOC.data.proveedor?.direccion && <p className="text-xs text-slate-400 mt-1">{modalOC.data.proveedor.direccion}</p>}
+                      {modalOC.data.proveedor?.email && <p className="text-xs text-[#059669] mt-0.5">{modalOC.data.proveedor.email}</p>}
+                      {modalOC.data.proveedor?.telefono && <p className="text-xs text-slate-500">{modalOC.data.proveedor.telefono}</p>}
                     </div>
                     <div className="space-y-2">
                       {[
@@ -622,7 +704,6 @@ export default function ComprasPage() {
                     </div>
                   </div>
 
-                  {/* Productos */}
                   <div>
                     <p className="text-xs font-black text-slate-600 uppercase mb-2 flex items-center gap-1.5">
                       <Package size={14} className="text-[#059669]" />
@@ -641,7 +722,7 @@ export default function ComprasPage() {
                           {(modalOC.data.productos || []).map((p: any, i: number) => (
                             <tr key={i} className="hover:bg-slate-50/50">
                               <td className="px-4 py-2.5 font-mono text-[9px] text-slate-400">{p.sku || "—"}</td>
-                              <td className="px-4 py-2.5 font-medium text-slate-700 max-w-[220px]">{p.nombre}</td>
+                              <td className="px-4 py-2.5 font-medium text-slate-700">{p.nombre}</td>
                               <td className="px-4 py-2.5 text-center font-bold">{p.cantidad}</td>
                               <td className="px-4 py-2.5 text-slate-400">{p.unidad}</td>
                               <td className="px-4 py-2.5 text-right">{fmt(p.precio_unitario)}</td>
