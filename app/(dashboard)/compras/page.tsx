@@ -69,6 +69,7 @@ export default function ComprasPage() {
   const [filtros, setFiltros] = useState<Filtros>({ ...FILTROS_INICIAL });
   const [pag, setPag] = useState(1);
   const POR_PAG = 20;
+  const [debugMode, setDebugMode] = useState(false);
 
   // Modal detalle OC
   const [modalOC, setModalOC] = useState<{ visible: boolean; loading: boolean; data: any }>({
@@ -483,6 +484,11 @@ export default function ComprasPage() {
               className="px-4 py-2.5 text-xs font-bold bg-[#059669] text-white rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-[#047857] transition-all">
               <Download size={13} /> Excel
             </button>
+            <button onClick={() => setDebugMode((d) => !d)}
+              className={`px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all ${debugMode ? "bg-amber-400 text-white" : "bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600"}`}
+              title="Ver campos reales de la API">
+              {} Debug
+            </button>
           </div>
         </div>
 
@@ -492,6 +498,19 @@ export default function ComprasPage() {
           </p>
         )}
       </div>
+
+      {/* ── Debug: ver campos reales ─────────────────────────────────── */}
+      {debugMode && datos.length > 0 && (
+        <div className="bg-slate-900 rounded-2xl p-5 text-xs font-mono text-emerald-400 overflow-x-auto">
+          <p className="text-slate-400 text-[9px] font-bold uppercase mb-2">
+            🔬 Debug — Campos del primer registro de [{tab}] · {Object.keys(datos[0]).length} campos
+          </p>
+          <p className="text-amber-400 mb-2 text-[10px]">NOMBRES DE CAMPOS: {Object.keys(datos[0]).join(" | ")}</p>
+          <pre className="text-[10px] leading-relaxed whitespace-pre-wrap text-slate-300">
+            {JSON.stringify(datos[0], null, 2)}
+          </pre>
+        </div>
+      )}
 
       {/* ── Tabla ────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
