@@ -92,6 +92,28 @@ export default function ComprasPage() {
   const [modalDTE, setModalDTE] = useState<{ visible: boolean; loading: boolean; data: any }>({
     visible: false, loading: false, data: null,
   });
+  const [xmlViewer, setXmlViewer] = useState<{ visible: boolean; loading: boolean; content: string; url: string }>({
+    visible: false, loading: false, content: "", url: "",
+  });
+
+  const verXML = async (url: string) => {
+    setXmlViewer({ visible: true, loading: true, content: "", url });
+    try {
+      const res = await fetch(`/api/obuma/compras-dte/xml?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const xml = await res.text();
+      // Formatear XML con indentación básica
+      const formatted = xml
+        .replace(/></g, ">\n<")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join("\n");
+      setXmlViewer({ visible: true, loading: false, content: formatted, url });
+    } catch (e: any) {
+      setXmlViewer({ visible: true, loading: false, content: `Error: ${e.message}`, url });
+    }
+  };
 
   // ─── Cargar cache proveedores ────────────────────────────────────────────────
   useEffect(() => {
@@ -203,15 +225,16 @@ export default function ComprasPage() {
         { label: "Emisores únicos", value: new Set(datosFiltrados.map((r) => r.dte_rut_emisor)).size, color: "text-purple-600", bg: "bg-purple-100", icon: Building2 },
       ];
     }
-    // Pagos — campo correcto: cp_total
-    const monto = datosFiltrados.reduce((s, r) => s + Number(r.cp_total || 0), 0);
-    const pagado = datosFiltrados.reduce((s, r) => s + Number(r.cp_pagado || 0), 0);
-    const porPagar = datosFiltrados.reduce((s, r) => s + Number(r.cp_por_pagar || 0), 0);
+    // Pagos — campos correctos: cp_total, cp_pagado, cp_por_pagar
+    const montoTotal = datosFiltrados.reduce((s, r) => s + Number(r.cp_total || 0), 0);
+    const monPagado = datosFiltrados.reduce((s, r) => s + Number(r.cp_pagado || 0), 0);
+    const monPorPagar = datosFiltrados.reduce((s, r) => s + Number(r.cp_por_pagar || 0), 0);
+    const pagosConSaldo = datosFiltrados.filter(r => Number(r.cp_por_pagar || 0) > 0).length;
     return [
       { label: "Total Pagos", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: CreditCard },
-      { label: "Monto Total", value: fmt(monto), color: "text-[#059669]", bg: "bg-[#D1FAE5]", icon: DollarSign },
-      { label: "Pagado", value: fmt(pagado), color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
-      { label: "Por Pagar", value: fmt(porPagar), color: "text-rose-500", bg: "bg-rose-100", icon: AlertCircle },
+      { label: "Monto Total", value: fmt(montoTotal), color: "text-[#059669]", bg: "bg-[#D1FAE5]", icon: DollarSign },
+      { label: "Total Pagado", value: fmt(monPagado), color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
+      { label: "Por Pagar", value: `${fmt(monPorPagar)} (${pagosConSaldo})`, color: "text-rose-500", bg: "bg-rose-100", icon: AlertCircle },
     ];
   }, [datosFiltrados, tab]);
 
@@ -474,23 +497,40 @@ export default function ComprasPage() {
       </tr>
     ));
 
-    // Pagos — campo correcto: cp_total
+    // Pagos — campos correctos: cp_total, cp_pagado, cp_por_pagar
     return pagActual.map((r, i) => (
       <tr key={r.cp_id || i} className="hover:bg-slate-50/50 transition-colors">
         <td className="px-5 py-3.5 font-mono text-[10px] text-slate-500">{r.cp_id}</td>
-        <td className="px-5 py-3.5 text-xs text-slate-600">{r.cp_fecha || "—"}</td>
-        <td className="px-5 py-3.5 text-xs text-slate-500">{r.cp_mes}/{r.cp_ano}</td>
+        <td className="px-5 py-3.5">
+          <p className="text-xs text-slate-700 font-medium">{r.cp_fecha || "—"}</p>
+          <p className="text-[9px] text-slate-400">{r.cp_mes}/{r.cp_ano}</p>
+        </td>
         <td className="px-5 py-3.5">
           <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded uppercase">
             {r.cp_origen_nombre || "—"}
           </span>
+          {r.cp_forma_pago && <p className="text-[9px] text-slate-400 mt-0.5">{r.cp_forma_pago}</p>}
         </td>
-        <td className="px-5 py-3.5 text-xs text-slate-500 truncate max-w-[120px]">{r.cp_forma_pago || "—"}</td>
-        <td className="px-5 py-3.5 text-right font-black text-emerald-600">{fmt(r.cp_total)}</td>
-        <td className="px-5 py-3.5 text-right text-xs text-rose-500">{fmt(r.cp_por_pagar)}</td>
+        <td className="px-5 py-3.5">
+          {r.rel_proveedor_id && r.rel_proveedor_id !== "0" ? (
+            <p className="text-xs font-bold text-slate-700 truncate max-w-[150px]">
+              {provCache[String(r.rel_proveedor_id)] || <span className="text-slate-400 italic text-[10px]">ID:{r.rel_proveedor_id}</span>}
+            </p>
+          ) : <span className="text-slate-300">—</span>}
+          {r.rel_compra_id && r.rel_compra_id !== "0" && (
+            <p className="text-[9px] font-mono text-slate-400">Compra #{r.rel_compra_id}</p>
+          )}
+        </td>
+        <td className="px-5 py-3.5 text-right font-black text-slate-800">{fmt(r.cp_total)}</td>
+        <td className="px-5 py-3.5 text-right font-bold text-emerald-600">{fmt(r.cp_pagado)}</td>
+        <td className="px-5 py-3.5 text-right font-bold text-rose-500">
+          {Number(r.cp_por_pagar) > 0 ? (
+            <span className="bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">{fmt(r.cp_por_pagar)}</span>
+          ) : <span className="text-slate-300 text-[10px]">$0</span>}
+        </td>
         <td className="px-5 py-3.5 text-center">
-          {r.rel_compra_id && r.rel_compra_id !== "0" ? (
-            <span className="text-[9px] font-mono text-slate-400">#{r.rel_compra_id}</span>
+          {r.cp_detalle ? (
+            <span className="text-[9px] text-slate-500 max-w-[100px] truncate block">{r.cp_detalle}</span>
           ) : "—"}
         </td>
       </tr>
@@ -501,7 +541,7 @@ export default function ComprasPage() {
     oc: ["Folio", "Fecha", "Proveedor", "Forma Pago", "Items", "Total", "Estado", "Ver"],
     compras: ["ID", "Tipo/Folio", "Fecha", "Proveedor / Período", "Total", "Pagado", "Por Pagar", "Estado"],
     dte: ["Tipo/Folio", "Emisor (Proveedor)", "Fecha DTE", "Período", "Total", "Neto", "Compra Vinculada", "XML", "Ver"],
-    pagos: ["ID", "Fecha Pago", "Período", "Origen", "Forma Pago", "Total", "Por Pagar", "Compra ID"],
+    pagos: ["ID", "Fecha / Período", "Origen / Forma Pago", "Proveedor / Compra", "Total", "Pagado", "Por Pagar", "Detalle"],
   };
 
   const TABS = [
@@ -730,47 +770,107 @@ export default function ComprasPage() {
                     </div>
                   </div>
 
+                  {/* Condiciones / observación */}
+                  {(modalOC.data.observacion || modalOC.data.contacto) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {modalOC.data.observacion && (
+                        <div className="bg-amber-50 rounded-xl p-3">
+                          <p className="text-[9px] font-bold uppercase text-amber-600 mb-1">Observación</p>
+                          <p className="text-xs text-amber-700">{modalOC.data.observacion}</p>
+                        </div>
+                      )}
+                      {modalOC.data.contacto && (
+                        <div className="bg-slate-50 rounded-xl p-3">
+                          <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">Contacto OC</p>
+                          <p className="text-xs text-slate-700">{modalOC.data.contacto}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Montos desglosados */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      ["Neto", modalOC.data.neto, "text-blue-600"],
+                      ["IVA", modalOC.data.iva, "text-amber-600"],
+                      ["Descuento", modalOC.data.descuento_pesos, "text-rose-500"],
+                      ["TOTAL", modalOC.data.total, "text-emerald-600"],
+                    ].map(([k, v, c]) => (
+                      <div key={k as string} className="bg-slate-50 rounded-xl p-3 text-center">
+                        <p className="text-[9px] font-bold uppercase text-slate-400">{k as string}</p>
+                        <p className={`text-base font-black ${c as string}`}>{fmt(v as number)}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Productos */}
                   <div>
-                    <p className="text-xs font-black text-slate-600 uppercase mb-2 flex items-center gap-1.5">
-                      <Package size={14} className="text-[#059669]" />
-                      Productos ({(modalOC.data.productos || []).length})
-                    </p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-black text-slate-600 uppercase flex items-center gap-1.5">
+                        <Package size={14} className="text-[#059669]" />
+                        Productos ({(modalOC.data.productos || []).length} / declarados: {modalOC.data.cantidad_items})
+                      </p>
+                      {(modalOC.data.productos || []).length === 0 && (
+                        <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                          Cargando desde API items…
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Debug: campos raw si no hay productos */}
+                    {(modalOC.data.productos || []).length === 0 && modalOC.data._raw_keys && (
+                      <div className="bg-slate-800 rounded-xl p-3 mb-3 text-[9px] font-mono">
+                        <p className="text-amber-400 mb-1">Campos OC findById: {(modalOC.data._raw_keys || []).join(" | ")}</p>
+                        {(modalOC.data._items_raw_keys || []).length > 0 && (
+                          <p className="text-emerald-400">Campos items: {(modalOC.data._items_raw_keys || []).join(" | ")}</p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="rounded-xl border border-slate-100 overflow-hidden">
                       <table className="w-full text-xs">
                         <thead className="bg-slate-50 border-b border-slate-100">
                           <tr>
-                            {["SKU", "Producto", "Cant.", "Und.", "P. Unitario", "Subtotal"].map((h) => (
+                            {["SKU", "Producto", "Cant.", "Und.", "P. Unitario", "Dto %", "Subtotal"].map((h) => (
                               <th key={h} className="px-4 py-2.5 text-left text-[9px] font-bold text-slate-400 uppercase">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {(modalOC.data.productos || []).map((p: any, i: number) => (
+                          {(modalOC.data.productos || []).length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-[11px]">
+                                Sin productos disponibles en esta OC. El API no retornó ítems.
+                              </td>
+                            </tr>
+                          ) : (modalOC.data.productos || []).map((p: any, i: number) => (
                             <tr key={i} className="hover:bg-slate-50/50">
                               <td className="px-4 py-2.5 font-mono text-[9px] text-slate-400">{p.sku || "—"}</td>
-                              <td className="px-4 py-2.5 font-medium text-slate-700">{p.nombre}</td>
+                              <td className="px-4 py-2.5 text-slate-700 max-w-[200px]">
+                                <p className="font-medium">{p.nombre}</p>
+                                {p.descripcion && p.descripcion !== p.nombre && (
+                                  <p className="text-[9px] text-slate-400">{p.descripcion}</p>
+                                )}
+                              </td>
                               <td className="px-4 py-2.5 text-center font-bold">{p.cantidad}</td>
-                              <td className="px-4 py-2.5 text-slate-400">{p.unidad}</td>
+                              <td className="px-4 py-2.5 text-slate-400 text-[10px]">{p.unidad}</td>
                               <td className="px-4 py-2.5 text-right">{fmt(p.precio_unitario)}</td>
-                              <td className="px-4 py-2.5 text-right font-bold">{fmt(p.subtotal)}</td>
+                              <td className="px-4 py-2.5 text-center text-slate-400 text-[10px]">
+                                {p.descuento > 0 ? `${p.descuento}%` : "—"}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-bold text-slate-800">{fmt(p.subtotal)}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot className="bg-slate-50 border-t border-slate-100">
                           <tr>
-                            <td colSpan={5} className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase">Total</td>
+                            <td colSpan={6} className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase">Total OC</td>
                             <td className="px-4 py-2.5 text-right font-black text-emerald-600 text-base">{fmt(modalOC.data.total)}</td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
                   </div>
-
-                  {modalOC.data.observacion && (
-                    <div className="bg-amber-50 rounded-xl p-3">
-                      <p className="text-xs text-amber-700"><strong>Observación:</strong> {modalOC.data.observacion}</p>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="text-center py-16">
@@ -871,13 +971,19 @@ export default function ComprasPage() {
                     <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl">
                       <FileText size={16} className="text-blue-600 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-blue-600 uppercase">Archivo XML</p>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase">Archivo XML DTE</p>
                         <p className="text-[9px] text-slate-500 truncate">{modalDTE.data.s3_link}</p>
                       </div>
-                      <a href={modalDTE.data.s3_link} target="_blank" rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center gap-1">
-                        <ExternalLink size={12} /> Descargar
-                      </a>
+                      <div className="flex gap-2">
+                        <button onClick={() => verXML(modalDTE.data.s3_link)}
+                          className="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-[#059669] flex items-center gap-1">
+                          <FileText size={12} /> Ver XML
+                        </button>
+                        <a href={modalDTE.data.s3_link} target="_blank" rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                          <ExternalLink size={12} /> Descargar
+                        </a>
+                      </div>
                     </div>
                   )}
 
@@ -899,6 +1005,48 @@ export default function ComprasPage() {
                 className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all">
                 Cerrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Visor XML ─────────────────────────────────────────────────── */}
+      {xmlViewer.visible && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-5xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-emerald-400" />
+                <p className="text-sm font-bold text-white">Visor XML — DTE</p>
+                <span className="text-[9px] font-mono text-slate-400 truncate max-w-[300px]">{xmlViewer.url.split("/").pop()}</span>
+              </div>
+              <div className="flex gap-2">
+                <a href={xmlViewer.url} target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg flex items-center gap-1">
+                  <ExternalLink size={12} /> Descargar XML
+                </a>
+                <button onClick={() => setXmlViewer({ visible: false, loading: false, content: "", url: "" })}
+                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4">
+              {xmlViewer.loading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 className="animate-spin text-emerald-400" size={32} />
+                </div>
+              ) : (
+                <pre className="text-[11px] font-mono text-emerald-300 whitespace-pre leading-relaxed">
+                  {xmlViewer.content}
+                </pre>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-slate-700 bg-slate-800">
+              <p className="text-[9px] text-slate-500 font-mono">
+                {xmlViewer.content.split("\n").length} líneas · {new Blob([xmlViewer.content]).size} bytes
+              </p>
             </div>
           </div>
         </div>
