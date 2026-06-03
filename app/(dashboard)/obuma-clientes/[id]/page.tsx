@@ -163,9 +163,9 @@ export default function EditarClientePage() {
 
   if (cargandoDatos) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="animate-spin text-[#00338d] mx-auto mb-4" size={48} />
+          <Loader2 className="animate-spin text-[#059669] mx-auto mb-4" size={48} />
           <p className="text-slate-500 text-sm">Cargando datos del cliente...</p>
         </div>
       </div>
@@ -173,7 +173,7 @@ export default function EditarClientePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6 lg:p-12">
+    <div className="min-h-screen bg-[#F3F4F6] p-4 md:p-6 lg:p-12">
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Header */}
@@ -188,14 +188,14 @@ export default function EditarClientePage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#00338d] transition-all shadow-sm disabled:opacity-50"
+              className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#059669] transition-all shadow-sm disabled:opacity-50"
               title="Recargar datos"
             >
               {refreshing ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
             </button>
             <Link 
               href="/obuma-clientes" 
-              className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#00338d] transition-all shadow-sm"
+              className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#059669] transition-all shadow-sm"
             >
               <ArrowLeft size={20} />
             </Link>
@@ -225,9 +225,9 @@ export default function EditarClientePage() {
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => setMostrarContactos(!mostrarContactos)}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 text-left hover:border-blue-200 transition-all group"
+            className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 text-left hover:border-[#A7F3D0] transition-all group"
           >
-            <Users size={18} className="text-blue-500 mb-1 group-hover:scale-110 transition-transform" />
+            <Users size={18} className="text-[#059669] mb-1 group-hover:scale-110 transition-transform" />
             <div className="text-xl md:text-2xl font-black text-slate-800">{contactos.length}</div>
             <p className="text-[8px] md:text-[9px] text-slate-400 uppercase font-bold">Contactos</p>
           </button>
@@ -257,7 +257,7 @@ export default function EditarClientePage() {
                     <div key={c.cc_id} className="p-3 bg-slate-50 rounded-xl">
                       <p className="font-bold text-slate-700">{c.cc_nombres} {c.cc_apellidos}</p>
                       <p className="text-xs text-slate-500 mt-1">{c.cc_cargo}</p>
-                      <p className="text-xs text-blue-600 mt-1 break-all">{c.cc_email}</p>
+                      <p className="text-xs text-[#059669] mt-1 break-all">{c.cc_email}</p>
                       <p className="text-xs text-slate-500">{c.cc_telefono_movil}</p>
                     </div>
                   ))
@@ -305,7 +305,7 @@ export default function EditarClientePage() {
               </label>
               <input
                 type="text"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.razon_social}
                 onChange={(e) => setForm({...form, razon_social: e.target.value})}
                 required
@@ -331,7 +331,7 @@ export default function EditarClientePage() {
               </label>
               <input
                 type="email"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.email}
                 onChange={(e) => setForm({...form, email: e.target.value})}
                 required
@@ -344,7 +344,7 @@ export default function EditarClientePage() {
               </label>
               <input
                 type="tel"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.telefono}
                 onChange={(e) => setForm({...form, telefono: e.target.value})}
               />
@@ -356,7 +356,7 @@ export default function EditarClientePage() {
               </label>
               <input
                 type="text"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.direccion}
                 onChange={(e) => setForm({...form, direccion: e.target.value})}
               />
@@ -366,7 +366,7 @@ export default function EditarClientePage() {
               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Comuna</label>
               <input
                 type="text"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.comuna}
                 onChange={(e) => setForm({...form, comuna: e.target.value})}
               />
@@ -376,7 +376,7 @@ export default function EditarClientePage() {
               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ciudad</label>
               <input
                 type="text"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#00338d] focus:bg-white transition-all"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
                 value={form.ciudad}
                 onChange={(e) => setForm({...form, ciudad: e.target.value})}
               />
@@ -388,7 +388,7 @@ export default function EditarClientePage() {
                   type="checkbox"
                   checked={form.estado}
                   onChange={(e) => setForm({...form, estado: e.target.checked})}
-                  className="w-4 h-4 rounded border-slate-300 text-[#00338d] focus:ring-[#00338d]"
+                  className="w-4 h-4 rounded border-slate-300 text-[#059669] focus:ring-[#059669]"
                 />
                 <span className="text-xs font-bold text-slate-600">Cliente activo</span>
               </label>
@@ -405,7 +405,7 @@ export default function EditarClientePage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-8 py-3 bg-[#00338d] text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-blue-800 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-8 py-3 bg-[#059669] text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-blue-800 transition-all disabled:opacity-50"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Guardar Cambios

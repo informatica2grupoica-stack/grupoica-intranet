@@ -18,7 +18,7 @@ export default function MetricasTareas({ estadisticas }: MetricasProps) {
       titulo: 'Total Tareas',
       valor: estadisticas.total,
       icono: Calendar,
-      color: 'bg-blue-500',
+      color: 'bg-[#059669]',
       descripcion: 'tareas registradas'
     },
     {

@@ -100,7 +100,7 @@ export default function VistaKanban({ tareas, onTaskUpdate, onTaskClick }: Vista
               ))}
             
             <button
-              className="w-full mt-2 p-2 border border-dashed border-slate-200 rounded-xl text-[9px] font-bold text-slate-400 hover:bg-white hover:border-blue-300 transition-all flex items-center justify-center gap-1"
+              className="w-full mt-2 p-2 border border-dashed border-slate-200 rounded-xl text-[9px] font-bold text-slate-400 hover:bg-white hover:border-[#6EE7B7] transition-all flex items-center justify-center gap-1"
             >
               <Plus size={12} /> Nueva tarea
             </button>

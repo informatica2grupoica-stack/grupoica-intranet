@@ -238,7 +238,7 @@ export default function GestionUsuarios() {
           {(perfilLogueado?.rol === 'admin' || perfilLogueado?.rol === 'superuser') && (
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-[#00338d] hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-100"
+              className="flex items-center gap-2 bg-[#059669] hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-100"
             >
               <UserPlus className="w-4 h-4" /> Nuevo Miembro
             </button>
@@ -267,7 +267,7 @@ export default function GestionUsuarios() {
               {loadingLista ? (
                 <tr>
                   <td colSpan={9} className="py-24 text-center">
-                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-blue-600 mb-2 opacity-20" />
+                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-[#059669] mb-2 opacity-20" />
                     <p className="text-slate-400 text-xs">Cargando usuarios...</p>
                   </td>
                 </tr>
@@ -284,10 +284,10 @@ export default function GestionUsuarios() {
                   const esSoloProductos = tienePermisoSoloProductos(user);
 
                   return (
-                    <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <tr key={user.id} className="hover:bg-[#ECFDF5]/30 transition-colors group">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-500 font-bold text-xs border border-white shadow-sm transition-all ${esSuperUser ? 'bg-indigo-600 text-white' : (esSoloProductos ? 'bg-emerald-600 text-white' : 'bg-slate-100 group-hover:bg-blue-600 group-hover:text-white')}`}>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-500 font-bold text-xs border border-white shadow-sm transition-all ${esSuperUser ? 'bg-[#111827] text-white' : (esSoloProductos ? 'bg-emerald-600 text-white' : 'bg-slate-100 group-hover:bg-[#059669] group-hover:text-white')}`}>
                             {user.nombre?.substring(0, 1)}{user.apellido?.substring(0, 1)}
                           </div>
                           <div>
@@ -317,8 +317,8 @@ export default function GestionUsuarios() {
                        </td>
                       <td className="px-3 py-4 text-center">
                         <span className={`text-[9px] font-black px-2.5 py-1 rounded-full border ${
-                          esSuperUser ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 
-                          user.rol === 'admin' ? 'bg-blue-50 border-blue-100 text-blue-600' : 
+                          esSuperUser ? 'bg-[#ECFDF5] border-indigo-100 text-[#059669]' : 
+                          user.rol === 'admin' ? 'bg-[#ECFDF5] border-[#D1FAE5] text-[#059669]' : 
                           user.rol === 'rrhh' ? 'bg-purple-50 border-purple-100 text-purple-600' :
                           user.rol === 'jefe' ? 'bg-orange-50 border-orange-100 text-orange-600' :
                           'bg-slate-50 border-slate-100 text-slate-500'
@@ -342,7 +342,7 @@ export default function GestionUsuarios() {
                           disabled={esSuperUser || !soyAdminOSuper}
                           onClick={() => toggleEstado(user)}
                           className={`px-3 py-1.5 rounded-xl text-[9px] font-black transition-all ${
-                            esSuperUser ? 'bg-indigo-100 text-indigo-600 cursor-default' :
+                            esSuperUser ? 'bg-[#D1FAE5] text-[#059669] cursor-default' :
                             user.activo 
                             ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white' 
                             : 'bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white'
@@ -355,7 +355,7 @@ export default function GestionUsuarios() {
                         <div className="flex items-center justify-end gap-1">
                           {!esSuperUser && soyAdminOSuper ? (
                             <>
-                              <button onClick={() => prepararEdicion(user)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar">
+                              <button onClick={() => prepararEdicion(user)} className="p-2 text-slate-400 hover:text-[#059669] hover:bg-[#ECFDF5] rounded-xl transition-all" title="Editar">
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button onClick={() => handleEliminar(user)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Eliminar">
@@ -391,14 +391,14 @@ export default function GestionUsuarios() {
             
             <form onSubmit={handleGuardarUsuario} className="p-8 space-y-5 max-h-[70vh] overflow-y-auto">
               {/* INFORMACIÓN PERSONAL */}
-              <div className="bg-blue-50/30 rounded-2xl p-5 space-y-4">
+              <div className="bg-[#ECFDF5]/30 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <UserPlus className="w-4 h-4 text-blue-600" />
-                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-700">Datos Personales</h3>
+                  <UserPlus className="w-4 h-4 text-[#059669]" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#047857]">Datos Personales</h3>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input placeholder="Nombre *" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-blue-500/20" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} required />
-                  <input placeholder="Apellido *" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-blue-500/20" value={formData.apellido} onChange={e => setFormData({...formData, apellido: e.target.value})} required />
+                  <input placeholder="Nombre *" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#059669]/20" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} required />
+                  <input placeholder="Apellido *" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#059669]/20" value={formData.apellido} onChange={e => setFormData({...formData, apellido: e.target.value})} required />
                   <input placeholder="RUT (ej: 12345678-9)" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" value={formData.rut} onChange={e => setFormData({...formData, rut: e.target.value})} />
                   <input type="date" placeholder="Fecha de Nacimiento" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" value={formData.fecha_nacimiento} onChange={e => setFormData({...formData, fecha_nacimiento: e.target.value})} />
                 </div>
@@ -466,7 +466,7 @@ export default function GestionUsuarios() {
                       onClick={() => togglePermiso(p.key)}
                       className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all border ${
                         (formData.permisos as any)[p.key] 
-                        ? 'bg-blue-600 border-blue-400 text-white' 
+                        ? 'bg-[#059669] border-blue-400 text-white' 
                         : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
                       }`}
                     >
@@ -492,7 +492,7 @@ export default function GestionUsuarios() {
                 </div>
               )}
 
-              <button disabled={loadingForm} className="w-full bg-[#00338d] text-white py-4 rounded-xl font-black text-sm hover:bg-blue-900 transition-all uppercase tracking-wider shadow-xl">
+              <button disabled={loadingForm} className="w-full bg-[#059669] text-white py-4 rounded-xl font-black text-sm hover:bg-blue-900 transition-all uppercase tracking-wider shadow-xl">
                 {loadingForm ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (editandoId ? "💾 Guardar Cambios" : "📝 Registrar Miembro")}
               </button>
             </form>

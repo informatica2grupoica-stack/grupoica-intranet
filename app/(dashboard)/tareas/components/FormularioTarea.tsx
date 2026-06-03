@@ -136,7 +136,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Título de la tarea *</label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#059669]"
               placeholder="Ej: Revisar documentación del proyecto"
               value={form.titulo}
               onChange={(e) => setForm({...form, titulo: e.target.value})}
@@ -147,7 +147,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           <div>
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Descripción</label>
             <textarea
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-blue-500 resize-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#059669] resize-none"
               placeholder="Detalla las actividades a realizar..."
               rows={3}
               value={form.descripcion}
@@ -235,7 +235,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             <button
               type="submit"
               disabled={loading}
-              className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 disabled:opacity-50"
+              className="px-8 py-2.5 bg-[#059669] hover:bg-[#047857] text-white rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 disabled:opacity-50"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               {tareaEdit ? 'Actualizar Tarea' : 'Crear Tarea'}

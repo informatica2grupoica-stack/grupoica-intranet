@@ -114,7 +114,7 @@ export default function ComprasPage() {
       {/* Header con Buscador */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm gap-4">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-50 rounded-2xl text-[#00338d]">
+          <div className="p-3 bg-[#ECFDF5] rounded-2xl text-[#059669]">
             <ShoppingBag className="w-6 h-6" />
           </div>
           <div>
@@ -134,7 +134,7 @@ export default function ComprasPage() {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#059669]/20 transition-all"
             />
           </div>
           <button 
@@ -168,7 +168,7 @@ export default function ComprasPage() {
               ) : (
                 currentItems.map((oc: any) => (
                   <tr key={oc.compra_oc_id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-8 py-5 font-bold text-[#00338d]">#{oc.compra_oc_folio}</td>
+                    <td className="px-8 py-5 font-bold text-[#059669]">#{oc.compra_oc_folio}</td>
                     <td className="px-8 py-5 text-sm text-slate-600">
                       {formatearFecha(oc.compra_oc_fecha_ingreso)}
                     </td>
@@ -187,7 +187,7 @@ export default function ComprasPage() {
                     <td className="px-8 py-5 text-center">
                       <button
                         onClick={() => verDetalle(oc.compra_oc_id)}
-                        className="p-2 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 transition-all"
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-[#D1FAE5] text-slate-500 hover:text-[#059669] transition-all"
                         title="Ver productos"
                       >
                         <Eye size={16} />
@@ -255,14 +255,14 @@ export default function ComprasPage() {
             <div className="flex-1 overflow-y-auto p-6">
               {detalleModal.loading ? (
                 <div className="flex justify-center py-20">
-                  <Loader2 className="animate-spin text-blue-600" size={40} />
+                  <Loader2 className="animate-spin text-[#059669]" size={40} />
                 </div>
               ) : detalleModal.data ? (
                 <div className="space-y-6">
                   {/* Información del proveedor */}
                   <div className="bg-slate-50 rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-3">
-                      <Building2 size={18} className="text-blue-600" />
+                      <Building2 size={18} className="text-[#059669]" />
                       <h3 className="font-bold text-slate-800">Proveedor</h3>
                     </div>
                     <p className="font-medium text-slate-800">{detalleModal.data.proveedor.razon_social}</p>
@@ -293,7 +293,7 @@ export default function ComprasPage() {
                   {/* Tabla de productos */}
                   <div>
                     <div className="flex items-center gap-2 mb-4">
-                      <Package size={16} className="text-blue-600" />
+                      <Package size={16} className="text-[#059669]" />
                       <h3 className="font-bold text-slate-800">Productos Comprados</h3>
                       <span className="text-xs text-slate-400">({detalleModal.data.productos.length} items)</span>
                     </div>

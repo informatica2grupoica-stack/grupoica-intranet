@@ -41,7 +41,7 @@ export default function HistorialPreciosPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
         <div>
           <h1 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <TrendingUp className="text-orange-500" size={24} />
+            <TrendingUp className="text-[#059669]" size={24} />
             HISTORIAL DE INTELIGENCIA
           </h1>
           <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
@@ -55,14 +55,14 @@ export default function HistorialPreciosPage() {
             <input 
               type="text"
               placeholder="Buscar por nombre, SKU o tienda..."
-              className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-orange-500/5 focus:bg-white transition-all w-72"
+              className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-[#059669]/5 focus:bg-white transition-all w-72"
               value={filtro}
               onChange={(e) => setFiltro(e.target.value)}
             />
           </div>
           <button 
             onClick={fetchAnalisis}
-            className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-orange-600 transition-all"
+            className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-[#059669] transition-all"
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
           </button>
@@ -73,7 +73,7 @@ export default function HistorialPreciosPage() {
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="h-64 flex flex-col items-center justify-center gap-4">
-            <RefreshCcw size={40} className="animate-spin text-orange-500 opacity-10" />
+            <RefreshCcw size={40} className="animate-spin text-[#059669] opacity-10" />
             <p className="text-slate-400 font-black text-[9px] uppercase tracking-[0.3em]">Cargando base de datos...</p>
           </div>
         ) : filtrados.length === 0 ? (
@@ -114,7 +114,7 @@ export default function HistorialPreciosPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-black text-slate-900 flex items-center gap-1">
-                          <Store size={10} className="text-orange-500" />
+                          <Store size={10} className="text-[#059669]" />
                           {item.tienda}
                         </span>
                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
@@ -167,7 +167,7 @@ export default function HistorialPreciosPage() {
                           href={item.link} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-orange-600 hover:text-white transition-all shadow-sm"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-[#059669] hover:text-white transition-all shadow-sm"
                           title="Ir a la tienda"
                         >
                           <ExternalLink size={14} />

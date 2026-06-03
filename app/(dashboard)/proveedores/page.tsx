@@ -522,7 +522,7 @@ export default function ProveedoresPage() {
         </div>
       )}
       {prov.sitio_web && (
-        <div className="flex items-center gap-2 text-xs text-blue-600">
+        <div className="flex items-center gap-2 text-xs text-[#059669]">
           <Globe size={12} className="flex-shrink-0" />
           <a href={prov.sitio_web} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
             {prov.sitio_web}
@@ -547,7 +547,7 @@ export default function ProveedoresPage() {
         </p>
       )}
       {prov.obuma_id && (
-        <p className="text-[9px] text-blue-500 bg-blue-50 p-1.5 rounded-lg inline-block">
+        <p className="text-[9px] text-[#059669] bg-[#ECFDF5] p-1.5 rounded-lg inline-block">
           🏢 ID Obuma: {prov.obuma_id}
         </p>
       )}
@@ -564,7 +564,7 @@ export default function ProveedoresPage() {
   if (loadingUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={48} />
+        <Loader2 className="animate-spin text-[#059669]" size={48} />
       </div>
     );
   }
@@ -576,7 +576,7 @@ export default function ProveedoresPage() {
         <div className="text-center">
           <ShieldAlert size={48} className="mx-auto text-red-500 mb-4" />
           <p className="text-slate-600">No tienes acceso a esta página</p>
-          <button onClick={() => router.push('/login')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl">
+          <button onClick={() => router.push('/login')} className="mt-4 px-4 py-2 bg-[#059669] text-white rounded-xl">
             Ir al Login
           </button>
         </div>
@@ -608,7 +608,7 @@ export default function ProveedoresPage() {
               </div>
               <div>
                 <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-800 uppercase italic">
-                  Central de <span className="text-blue-600">Proveedores</span>
+                  Central de <span className="text-[#059669]">Proveedores</span>
                 </h1>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
                   Gestión Estratégica de Partners Comerciales
@@ -620,7 +620,7 @@ export default function ProveedoresPage() {
               {/* Badge de rol del usuario */}
               <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1 ${
                 userRole === 'superuser' ? 'bg-purple-100 text-purple-700' : 
-                userRole === 'admin' ? 'bg-blue-100 text-blue-700' : 
+                userRole === 'admin' ? 'bg-[#D1FAE5] text-[#047857]' : 
                 'bg-slate-100 text-slate-500'
               }`}>
                 <Shield size={12} />
@@ -629,13 +629,13 @@ export default function ProveedoresPage() {
               
               <button
                 onClick={() => setVista('lista')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-[#059669] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 📋 Lista
               </button>
               <button
                 onClick={() => setVista('grid')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-[#059669] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 🔲 Grid
               </button>
@@ -650,7 +650,7 @@ export default function ProveedoresPage() {
                 <button
                   onClick={sincronizarProductos}
                   disabled={sincronizando}
-                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all bg-[#111827] text-white hover:bg-[#1F2937] disabled:opacity-50 flex items-center gap-2"
                 >
                   {sincronizando ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
                   Sincronizar Obuma
@@ -667,8 +667,8 @@ export default function ProveedoresPage() {
                   <p className="text-[9px] font-black uppercase text-slate-400">Total</p>
                   <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total.toLocaleString()}</p>
                 </div>
-                <div className="bg-blue-100 p-2 rounded-xl">
-                  <Building2 size={18} className="text-blue-600" />
+                <div className="bg-[#D1FAE5] p-2 rounded-xl">
+                  <Building2 size={18} className="text-[#059669]" />
                 </div>
               </div>
             </div>
@@ -687,10 +687,10 @@ export default function ProveedoresPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">🏢 Obuma</p>
-                  <p className="text-2xl font-black text-indigo-600 mt-1">{estadisticas.obuma.toLocaleString()}</p>
+                  <p className="text-2xl font-black text-[#059669] mt-1">{estadisticas.obuma.toLocaleString()}</p>
                 </div>
-                <div className="bg-indigo-100 p-2 rounded-xl">
-                  <Database size={18} className="text-indigo-600" />
+                <div className="bg-[#D1FAE5] p-2 rounded-xl">
+                  <Database size={18} className="text-[#059669]" />
                 </div>
               </div>
             </div>
@@ -758,7 +758,7 @@ export default function ProveedoresPage() {
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por nombre, RUT o servicio..." 
-                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#059669]"
               />
             </div>
             
@@ -786,7 +786,7 @@ export default function ProveedoresPage() {
             {isAdmin() && (
               <button 
                 onClick={() => setShowForm(!showForm)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
+                className="bg-[#059669] hover:bg-[#047857] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
               >
                 {showForm ? <X size={18} /> : <Plus size={18} />}
                 {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
@@ -805,7 +805,7 @@ export default function ProveedoresPage() {
         {showForm && isAdmin() && (
           <form onSubmit={guardarProveedor} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
-              <Plus size={20} className="text-blue-600" />
+              <Plus size={20} className="text-[#059669]" />
               REGISTRAR NUEVO PROVEEDOR
             </h2>
             
@@ -894,7 +894,7 @@ export default function ProveedoresPage() {
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
               <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-[#059669] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {loading && <Loader2 size={16} className="animate-spin" />}
                 Guardar Proveedor
               </button>
@@ -954,7 +954,7 @@ export default function ProveedoresPage() {
                         </td>
                         <td className="px-6 py-4">
                           {prov.obuma_id ? (
-                            <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-1 rounded-full">🏢 Obuma</span>
+                            <span className="text-[9px] font-bold bg-[#D1FAE5] text-[#059669] px-2 py-1 rounded-full">🏢 Obuma</span>
                           ) : (
                             <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
                           )}
@@ -977,7 +977,7 @@ export default function ProveedoresPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                            <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-[#059669] transition-colors">
                               {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                             {canEdit() && (
@@ -1028,7 +1028,7 @@ export default function ProveedoresPage() {
                         onClick={() => setCurrentPage(pageNum)}
                         className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
                           currentPage === pageNum
-                            ? 'bg-blue-600 text-white shadow-md'
+                            ? 'bg-[#059669] text-white shadow-md'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1087,7 +1087,7 @@ export default function ProveedoresPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Contacto</span>
@@ -1105,7 +1105,7 @@ export default function ProveedoresPage() {
                           <Star key={i} size={12} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
                         ))}
                       </div>
-                      <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-[#059669] hover:text-[#047857] flex items-center gap-1">
                         {expandedCard === prov.id ? 'Ver menos' : 'Ver detalles'}
                         {expandedCard === prov.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </button>
@@ -1145,7 +1145,7 @@ export default function ProveedoresPage() {
                         onClick={() => setCurrentPage(pageNum)}
                         className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
                           currentPage === pageNum
-                            ? 'bg-blue-600 text-white shadow-md'
+                            ? 'bg-[#059669] text-white shadow-md'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1168,7 +1168,7 @@ export default function ProveedoresPage() {
 
         {loading && (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-blue-600" size={48} />
+            <Loader2 className="animate-spin text-[#059669]" size={48} />
           </div>
         )}
       </div>
@@ -1272,7 +1272,7 @@ export default function ProveedoresPage() {
 
             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
               <button onClick={() => setSeleccionado(null)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-[#059669] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {loading && <Loader2 size={16} className="animate-spin" />}
                 Guardar Cambios
               </button>
@@ -1329,7 +1329,7 @@ export default function ProveedoresPage() {
                           <p className="text-[10px] text-slate-400 font-mono">{prov.rut}</p>
                         </div>
                         {prov.telefono && (
-                          <a href={`tel:${prov.telefono}`} className="text-xs text-blue-600 hover:underline">
+                          <a href={`tel:${prov.telefono}`} className="text-xs text-[#059669] hover:underline">
                             <Phone size={14} className="inline mr-1" /> {prov.telefono}
                           </a>
                         )}
@@ -1351,7 +1351,7 @@ export default function ProveedoresPage() {
                         ))}
                       </div>
                       {prov.sitio_web && (
-                        <a href={prov.sitio_web} target="_blank" className="text-[10px] text-blue-500 hover:underline mt-3 inline-flex items-center gap-1">
+                        <a href={prov.sitio_web} target="_blank" className="text-[10px] text-[#059669] hover:underline mt-3 inline-flex items-center gap-1">
                           <ExternalLink size={10} /> Ver sitio web
                         </a>
                       )}

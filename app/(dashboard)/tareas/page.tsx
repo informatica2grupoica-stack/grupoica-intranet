@@ -30,7 +30,7 @@ export default function TareasPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase italic">
-            Gestión de <span className="text-blue-600">Tareas</span>
+            Gestión de <span className="text-[#059669]">Tareas</span>
           </h1>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">
             Organiza, asigna y da seguimiento
@@ -40,21 +40,21 @@ export default function TareasPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setVista('tabla')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'tabla' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'tabla' ? 'bg-[#059669] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
               }`}
           >
             <LayoutList size={14} /> Tabla
           </button>
           <button
             onClick={() => setVista('gantt')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'gantt' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'gantt' ? 'bg-[#059669] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
               }`}
           >
             <GanttChartSquare size={14} /> Gantt
           </button>
           <button
             onClick={() => setVista('kanban')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-2 ${vista === 'kanban' ? 'bg-[#059669] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'
               }`}
           >
             <KanbanSquare size={14} /> Kanban
@@ -69,7 +69,7 @@ export default function TareasPage() {
       {puedeCrear && (
         <button
           onClick={() => setMostrarFormulario(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
+          className="bg-[#059669] hover:bg-[#047857] text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center gap-2"
         >
           + Nueva Tarea
         </button>
@@ -78,7 +78,7 @@ export default function TareasPage() {
       {/* Loading */}
       {loading && (
         <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#059669]"></div>
           <p className="mt-2 text-slate-500">Cargando tareas...</p>
         </div>
       )}
