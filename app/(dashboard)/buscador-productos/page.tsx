@@ -127,7 +127,7 @@ const ModalPreview = ({ productos, onClose, onConfirm }: {
                 <td className="py-2 pr-4 text-slate-800 font-medium max-w-xs truncate">{p.nombre}</td>
                 <td className="py-2 pr-4 text-center">
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                    !p.conversion || p.conversion === 'unidad' ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                    !p.conversion || p.conversion === 'unidad' ? 'bg-slate-100 text-slate-400' : 'bg-[#D1FAE5]/50 text-[#059669] border border-[#059669]/20'
                   }`}>{p.conversion || 'un'}</span>
                 </td>
                 <td className="py-2 pr-4 text-right text-slate-600 text-xs">{p.cantidad}</td>
@@ -142,7 +142,7 @@ const ModalPreview = ({ productos, onClose, onConfirm }: {
       </div>
       <div className="flex justify-end gap-3 p-5 border-t">
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-        <button onClick={onConfirm} className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+        <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
           <Search size={15} /> Iniciar búsqueda ({productos.length})
         </button>
       </div>
@@ -698,11 +698,11 @@ export default function MonitorMasivoICA() {
       <header className="bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-40">
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-slate-900 p-2 rounded-lg"><BarChart3 size={20} className="text-white" /></div>
+            <div className="bg-[#111827] p-2 rounded-lg"><BarChart3 size={20} className="text-white" /></div>
             <div>
               <h1 className="font-bold text-slate-900 text-base leading-tight">
-                MONITOR <span className="text-orange-600">ICA</span>
-                <span className="ml-2 text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">IA + Scrapers</span>
+                MONITOR <span className="text-[#059669]">ICA</span>
+                <span className="ml-2 text-[9px] bg-[#059669] text-white px-1.5 py-0.5 rounded font-bold">IA + Scrapers</span>
               </h1>
               <p className="text-[10px] text-slate-400">Sodimac · Easy · Construmart · Imperial · MercadoLibre</p>
             </div>
@@ -710,7 +710,7 @@ export default function MonitorMasivoICA() {
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Búsqueda rápida */}
-            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 focus-within:ring-2 focus-within:ring-orange-400/30 bg-white">
+            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 focus-within:ring-2 focus-within:ring-[#059669]/25 bg-white">
               <Search size={14} className="text-slate-400" />
               <input
                 className="py-2.5 text-sm outline-none w-64 bg-transparent placeholder:text-slate-400 text-slate-700"
@@ -720,7 +720,7 @@ export default function MonitorMasivoICA() {
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
               />
               <button onClick={buscarUno} disabled={buscandoUno || !inputManual.trim()}
-                className="bg-slate-900 text-white px-2 py-1 rounded text-xs disabled:bg-slate-200 hover:bg-orange-600 transition-colors">
+                className="bg-slate-900 text-white px-2 py-1 rounded text-xs disabled:bg-slate-200 hover:bg-[#059669] transition-colors">
                 {buscandoUno ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
               </button>
             </div>
@@ -728,7 +728,7 @@ export default function MonitorMasivoICA() {
             {/* Menú de descargas */}
             <div className="relative">
               <button onClick={() => setMenuDescarga(v => !v)} disabled={!itemsLista.length}
-                className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-[#111827] hover:bg-[#1F2937] disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
                 <Download size={14} /> Descargar Excel <ChevronDown size={13} />
               </button>
               {menuDescarga && itemsLista.length > 0 && (
@@ -740,9 +740,9 @@ export default function MonitorMasivoICA() {
                     </div>
                     {[
                       { modo: 'mejor_match', label: 'Mejor coincidencia', desc: 'El de mayor % match por ítem', icon: <CheckCircle2 size={14} className="text-emerald-600" />, req: true },
-                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-blue-600" />, req: true },
+                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-[#059669]" />, req: true },
                       { modo: 'equilibrado', label: 'Equilibrado', desc: 'Mejor match sin outliers ni alertas', icon: <Sparkles size={14} className="text-violet-600" />, req: true },
-                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-orange-600" />, req: true },
+                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-[#059669]" />, req: true },
                     ].map(o => (
                       <button key={o.modo} onClick={() => exportarMismoExcel(o.modo)} disabled={!archivoExcel}
                         className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 disabled:opacity-40 text-left transition-colors border-b border-slate-50">
@@ -766,7 +766,7 @@ export default function MonitorMasivoICA() {
                     </button>
                     <button onClick={() => { setMenuDescarga(false); exportarTodos(); }}
                       className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors">
-                      <Download size={14} className="text-blue-600 mt-0.5" />
+                      <Download size={14} className="text-[#059669] mt-0.5" />
                       <span>
                         <span className="block text-xs font-semibold text-slate-700">Lista completa</span>
                         <span className="block text-[10px] text-slate-400">Todos los resultados de cada producto</span>
@@ -834,7 +834,7 @@ export default function MonitorMasivoICA() {
               <div className="mt-3">
                 <label className="text-[10px] text-slate-400 font-medium block mb-1">Pestaña:</label>
                 <select value={sheetNameActual} onChange={e => cambiarPestana(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-slate-300">
+                  className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#059669]/20">
                   {pestanas.map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
@@ -844,7 +844,7 @@ export default function MonitorMasivoICA() {
               <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs text-slate-600 font-medium">{productosExcel.length} productos</span>
-                  <button onClick={() => setShowModal(true)} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1">
+                  <button onClick={() => setShowModal(true)} className="text-[10px] text-[#059669] hover:underline flex items-center gap-1">
                     <Eye size={11} /> Ver
                   </button>
                 </div>
@@ -856,7 +856,7 @@ export default function MonitorMasivoICA() {
                 </div>
                 <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion })))}
                   disabled={procesando}
-                  className="mt-2 w-full bg-orange-600 hover:bg-orange-700 disabled:bg-slate-200 text-white py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                  className="mt-2 w-full bg-[#059669] hover:bg-[#047857] disabled:bg-slate-200 text-white py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
                   <Sparkles size={12} /> Buscar todos
                 </button>
               </div>
@@ -867,18 +867,18 @@ export default function MonitorMasivoICA() {
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">Lista manual</label>
             <textarea
-              className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-slate-300 resize-none"
+              className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]/20 resize-none"
               placeholder={`1\tLetrero de obra\n2\tMadera Pino 2"x3"\n3\tAnticorrosivo`}
               value={inputMasivo} onChange={e => setInputMasivo(e.target.value)} disabled={procesando}
             />
             <button onClick={iniciarTexto} disabled={procesando || !inputMasivo.trim()}
-              className="mt-2 w-full bg-slate-900 hover:bg-orange-600 disabled:bg-slate-200 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+              className="mt-2 w-full bg-slate-900 hover:bg-[#059669] disabled:bg-slate-200 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
               {procesando ? <><Loader2 size={15} className="animate-spin" /> {progreso.actual}/{progreso.total}</> : <><Search size={15} /> Iniciar barrido</>}
             </button>
             {procesando && (
               <div className="mt-2">
                 <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div className="bg-orange-500 h-1.5 rounded-full transition-all" style={{ width: `${progreso.total ? (progreso.actual/progreso.total)*100 : 0}%` }} />
+                  <div className="bg-[#059669] h-1.5 rounded-full transition-all" style={{ width: `${progreso.total ? (progreso.actual/progreso.total)*100 : 0}%` }} />
                 </div>
                 <button onClick={cancelar} className="mt-1 text-xs text-red-500 hover:text-red-700 w-full text-center">Cancelar</button>
               </div>
@@ -892,7 +892,7 @@ export default function MonitorMasivoICA() {
               <div className="flex items-center gap-2">
                 <Settings size={14} className="text-slate-500" />
                 <span className="text-xs font-semibold text-slate-600">Contexto de búsqueda</span>
-                {contexto && <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />}
+                {contexto && <span className="w-2 h-2 rounded-full bg-[#D1FAE5]/500 inline-block" />}
               </div>
               {mostrarConfig ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
             </button>
@@ -901,14 +901,14 @@ export default function MonitorMasivoICA() {
                 <div className="flex flex-wrap gap-1 my-3">
                   {['ferretería construcción','señalética vial','pinturas y químicos','maderas'].map(t => (
                     <button key={t} onClick={() => setContexto(t)}
-                      className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${contexto===t ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-slate-400'}`}>
+                      className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${contexto===t ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-slate-400'}`}>
                       {t}
                     </button>
                   ))}
                 </div>
                 <textarea value={contexto} onChange={e => setContexto(e.target.value)}
                   placeholder="Describe el contexto de los productos..."
-                  className="w-full h-14 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-slate-300" />
+                  className="w-full h-14 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-[#059669]/20" />
                 {contexto && <button onClick={() => setContexto('')} className="text-[10px] text-red-500 mt-1">Limpiar</button>}
               </div>
             )}
@@ -923,7 +923,7 @@ export default function MonitorMasivoICA() {
                   { label: 'Total', val: stats.total, color: 'text-slate-900' },
                   { label: 'Con resultados', val: stats.con, color: 'text-emerald-700' },
                   { label: 'Sin resultados', val: stats.sin, color: stats.sin > 0 ? 'text-red-600' : 'text-slate-400' },
-                  { label: 'Match prom.', val: `${stats.avgPct}%`, color: 'text-blue-700' },
+                  { label: 'Match prom.', val: `${stats.avgPct}%`, color: 'text-[#047857]' },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-50 rounded-lg p-3 text-center">
                     <p className={`font-bold text-xl ${s.color}`}>{s.val}</p>
@@ -967,7 +967,7 @@ export default function MonitorMasivoICA() {
 
                   {/* Header del item */}
                   <div className={`px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b ${
-                    item.procesando ? 'bg-orange-50 border-orange-100'
+                    item.procesando ? 'bg-[#D1FAE5]/60 border-[#059669]/20'
                     : pct >= 85 ? 'bg-emerald-50 border-emerald-100'
                     : pct >= 60 ? 'bg-amber-50 border-amber-100'
                     : item.resultados.length > 0 ? 'bg-red-50 border-red-100'
@@ -981,11 +981,11 @@ export default function MonitorMasivoICA() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-sm text-slate-800 truncate max-w-xl">{item.nombre}</h3>
                           {item.conversion && item.conversion !== 'unidad' && item.conversion !== 'und' && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 border border-blue-200 rounded uppercase flex-shrink-0">{item.conversion}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-[#D1FAE5] text-[#059669] border border-[#059669]/30 rounded uppercase flex-shrink-0">{item.conversion}</span>
                           )}
                         </div>
                         {item.procesando ? (
-                          <span className="text-[10px] text-orange-500 flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] text-[#059669] flex items-center gap-1 mt-0.5">
                             <Loader2 size={10} className="animate-spin" /> Buscando...
                           </span>
                         ) : (
@@ -1058,10 +1058,10 @@ export default function MonitorMasivoICA() {
                             const precioWeb = r.precio_valor || 0;
                             const diff = ref > 0 ? precioWeb - ref : null;
                             return (
-                              <tr key={i} className={`hover:bg-slate-50/60 transition-colors ${isSel ? 'bg-blue-50/40' : ''}`}>
+                              <tr key={i} className={`hover:bg-slate-50/60 transition-colors ${isSel ? 'bg-[#D1FAE5]/40' : ''}`}>
                                 <td className="px-3 py-3 text-center">
                                   <button onClick={() => setSeleccion(prev => { const m = new Map(prev); m.get(item.numero)===r ? m.delete(item.numero) : m.set(item.numero, r); return m; })}
-                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 hover:border-blue-400'}`}>
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-300 hover:border-[#059669]'}`}>
                                     {isSel && <CheckCircle2 size={11} />}
                                   </button>
                                 </td>
@@ -1098,7 +1098,7 @@ export default function MonitorMasivoICA() {
                                 <td className="px-4 py-3 text-center">
                                   {r.link ? (
                                     <a href={r.link} target="_blank" rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition-colors">
+                                      className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:bg-[#111827] hover:text-white transition-colors">
                                       <ExternalLink size={13} />
                                     </a>
                                   ) : <span className="text-slate-200">—</span>}
@@ -1125,7 +1125,7 @@ export default function MonitorMasivoICA() {
                         <p className="text-xs">Intenta con términos más cortos o generales</p>
                       </div>
                       <button onClick={() => buscarProducto(item.nombre, item.numero, item.conversion).then(r => setItemsLista(prev => prev.map(p => p.numero===item.numero ? r : p)))}
-                        className="ml-auto text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 flex-shrink-0">
+                        className="ml-auto text-xs text-[#059669] hover:text-[#065F46] flex items-center gap-1 flex-shrink-0">
                         <RefreshCw size={13} /> Reintentar
                       </button>
                     </div>
