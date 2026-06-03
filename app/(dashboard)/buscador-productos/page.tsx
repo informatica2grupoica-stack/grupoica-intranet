@@ -72,16 +72,108 @@ function crearSemaforo(limite: number) {
   };
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }) => (
-  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all ${
-    type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-    : type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800'
-    : 'bg-red-50 border-red-200 text-red-800'
-  }`}>
-    {type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-    <span className="font-medium text-xs">{message}</span>
-    <button onClick={onClose} className="ml-1 opacity-50 hover:opacity-100"><X size={13} /></button>
+// ─── Sistema de Notificaciones ───────────────────────────────────────────────
+
+type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+interface ToastItem {
+  id: number;
+  message: string;
+  type: ToastType;
+  duration?: number;
+  leaving?: boolean;
+}
+
+const TOAST_CONFIG: Record<ToastType, {
+  bg: string; border: string; text: string; bar: string;
+  icon: React.ReactNode; label: string;
+}> = {
+  success: {
+    bg: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
+    border: 'border-emerald-400/30',
+    text: 'text-white',
+    bar: 'bg-white/30',
+    icon: <CheckCircle2 size={20} className="text-white" />,
+    label: 'Éxito',
+  },
+  error: {
+    bg: 'bg-gradient-to-r from-red-500 to-red-600',
+    border: 'border-red-400/30',
+    text: 'text-white',
+    bar: 'bg-white/30',
+    icon: <AlertCircle size={20} className="text-white" />,
+    label: 'Error',
+  },
+  warning: {
+    bg: 'bg-gradient-to-r from-amber-400 to-orange-500',
+    border: 'border-amber-400/30',
+    text: 'text-white',
+    bar: 'bg-white/30',
+    icon: <AlertCircle size={20} className="text-white" />,
+    label: 'Aviso',
+  },
+  info: {
+    bg: 'bg-gradient-to-r from-blue-500 to-blue-600',
+    border: 'border-blue-400/30',
+    text: 'text-white',
+    bar: 'bg-white/30',
+    icon: <Sparkles size={20} className="text-white" />,
+    label: 'Info',
+  },
+};
+
+const Toast = ({ item, onClose }: { item: ToastItem; onClose: () => void }) => {
+  const cfg = TOAST_CONFIG[item.type];
+  const dur = item.duration ?? 4500;
+
+  return (
+    <div
+      className={`${item.leaving ? 'toast-leave' : 'toast-enter'} relative flex items-start gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border ${cfg.bg} ${cfg.border} overflow-hidden w-[360px] max-w-[calc(100vw-2rem)] cursor-pointer select-none`}
+      onClick={onClose}
+      role="alert"
+    >
+      {/* Icono */}
+      <div className="shrink-0 mt-0.5 p-1.5 rounded-xl bg-white/15">
+        {cfg.icon}
+      </div>
+
+      {/* Contenido */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-[10px] font-bold uppercase tracking-widest ${cfg.text} opacity-75 mb-0.5`}>
+          {cfg.label}
+        </p>
+        <p className={`text-sm font-medium leading-snug ${cfg.text}`}>
+          {item.message}
+        </p>
+      </div>
+
+      {/* Botón cerrar */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        className={`shrink-0 mt-0.5 p-1 rounded-lg bg-white/10 hover:bg-white/25 transition-colors ${cfg.text} opacity-70 hover:opacity-100`}
+      >
+        <X size={14} />
+      </button>
+
+      {/* Barra de progreso */}
+      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
+        <div
+          className={`h-full ${cfg.bar} toast-progress-bar`}
+          style={{ animationDuration: `${dur}ms` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// Contenedor global de toasts (fuera del flujo del documento)
+const ToastContainer = ({ toasts, onClose }: { toasts: ToastItem[]; onClose: (id: number) => void }) => (
+  <div className="fixed bottom-6 right-6 z-[9999] flex flex-col-reverse gap-3 items-end pointer-events-none">
+    {toasts.map((t) => (
+      <div key={t.id} className="pointer-events-auto">
+        <Toast item={t} onClose={() => onClose(t.id)} />
+      </div>
+    ))}
   </div>
 );
 
@@ -324,7 +416,7 @@ export default function MonitorMasivoICA() {
   const [procesando, setProcesando]     = useState(false);
   const [buscandoUno, setBuscandoUno]   = useState(false);
   const [progreso, setProgreso]         = useState({ actual: 0, total: 0 });
-  const [toasts, setToasts]             = useState<Array<{ id: number; message: string; type: 'success' | 'error' | 'warning' }>>([]);
+  const [toasts, setToasts]             = useState<ToastItem[]>([]);
   const abortRef = useRef(false);
 
   const [productosExcel, setProductosExcel]   = useState<ProductoExcel[]>([]);
@@ -359,11 +451,17 @@ export default function MonitorMasivoICA() {
   }, [ordenItem]);
 
   // ─── Notify ──────────────────────────────────────────────────────────────────
-  const notify = useCallback((message: string, type: 'success' | 'error' | 'warning' = 'success') => {
-    const id = Date.now();
-    setToasts(p => [...p, { id, message, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
+  const closeToast = useCallback((id: number) => {
+    // Marcar como "saliendo" para activar animación de salida
+    setToasts(p => p.map(t => t.id === id ? { ...t, leaving: true } : t));
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 370);
   }, []);
+
+  const notify = useCallback((message: string, type: ToastType = 'success', duration = 4500) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p.slice(-4), { id, message, type, duration }]); // máx 5 toasts
+    setTimeout(() => closeToast(id), duration);
+  }, [closeToast]);
 
   // ─── Parsear lista texto ──────────────────────────────────────────────────────
   const parsearLista = (texto: string) =>
@@ -822,9 +920,7 @@ export default function MonitorMasivoICA() {
       )}
 
       {/* Toasts */}
-      <div className="fixed top-20 right-4 z-50 flex flex-col gap-2">
-        {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(p => p.filter(x => x.id !== t.id))} />)}
-      </div>
+      <ToastContainer toasts={toasts} onClose={closeToast} />
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-40">

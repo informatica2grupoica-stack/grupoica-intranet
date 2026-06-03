@@ -16,7 +16,7 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
 
 // Modelos en orden de preferencia — si el primero falla se intenta el siguiente
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
 // ─── Subir PDF a Gemini con timeout y reintentos ────────────────────────────
 
@@ -114,6 +114,8 @@ async function subirAGemini(bytes: ArrayBuffer, size: number): Promise<string> {
 // ─── Llamar a Gemini Generate con fallback de modelo ────────────────────────
 
 async function generarConGemini(prompt: string, fileUri: string): Promise<string> {
+  // SIN responseMimeType — Gemini a veces devuelve vacío cuando se fuerza JSON
+  // Parseamos el JSON manualmente del texto de respuesta (más robusto)
   const genBody = {
     contents: [
       {
@@ -126,14 +128,14 @@ async function generarConGemini(prompt: string, fileUri: string): Promise<string
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 8192,
-      responseMimeType: 'application/json',
+      // Sin responseMimeType: 'application/json' — causa respuestas vacías en PDFs complejos
     },
   };
 
   for (const model of GEMINI_MODELS) {
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 90000); // 90s máximo por modelo
+      const tid = setTimeout(() => ctrl.abort(), 90000);
       const gen = await fetch(
         `${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
         {
@@ -147,50 +149,60 @@ async function generarConGemini(prompt: string, fileUri: string): Promise<string
 
       if (gen.status === 429) {
         console.warn(`[leer-bases] ${model} rate limit (429) — probando siguiente modelo`);
-        await new Promise((r) => setTimeout(r, 3000));
-        continue;
-      }
-      if (gen.status === 503 || gen.status === 500) {
-        console.warn(`[leer-bases] ${model} error ${gen.status} — probando siguiente modelo`);
+        await new Promise((r) => setTimeout(r, 4000));
         continue;
       }
       if (!gen.ok) {
         const t = await gen.text().catch(() => '');
-        console.warn(`[leer-bases] ${model} HTTP ${gen.status}: ${t.slice(0, 120)}`);
+        console.warn(`[leer-bases] ${model} HTTP ${gen.status}: ${t.slice(0, 200)}`);
         continue;
       }
 
       const out = await gen.json().catch(() => ({}));
-      const txt = out?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!txt) {
-        // Puede haber finish_reason SAFETY u otros
-        const reason = out?.candidates?.[0]?.finishReason || 'desconocido';
-        console.warn(`[leer-bases] ${model} respuesta vacía — finishReason: ${reason}`);
-        if (reason === 'SAFETY' || reason === 'RECITATION') continue;
+
+      // Extraer texto de la respuesta (varios formatos posibles)
+      let txt = out?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Si candidates está vacío, puede ser un error de Gemini
+      if (!txt && out?.error) {
+        console.warn(`[leer-bases] ${model} error Gemini: ${JSON.stringify(out.error).slice(0, 150)}`);
+        continue;
       }
+
+      // SIEMPRE continuar al siguiente modelo si txt está vacío — no devolver vacío
+      if (!txt || txt.trim().length < 10) {
+        const reason = out?.candidates?.[0]?.finishReason || 'respuesta_vacía';
+        const promptFeedback = out?.promptFeedback?.blockReason || '';
+        console.warn(`[leer-bases] ${model} sin contenido — finishReason: ${reason}, block: ${promptFeedback}`);
+        continue; // <-- SIEMPRE continuar, no devolver string vacío
+      }
+
       console.log(`[leer-bases] ${model} OK — ${txt.length} chars`);
       return txt;
+
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[leer-bases] ${model} excepción: ${msg}`);
+      console.warn(`[leer-bases] ${model} excepción: ${msg.slice(0, 150)}`);
     }
   }
-  throw new Error('Todos los modelos Gemini fallaron. Intenta de nuevo en unos minutos.');
+
+  throw new Error('No se pudo procesar el PDF con ningún modelo de IA. Intenta de nuevo en unos minutos o verifica que el PDF sea legible.');
 }
 
 // ─── Parsear JSON tolerante a texto extra ────────────────────────────────────
 
 function parsearJSONSeguro(txt: string): Record<string, unknown> {
-  // Gemini a veces devuelve ```json ... ``` o texto antes del JSON
+  if (!txt || txt.trim().length < 2) throw new Error('Gemini no devolvió contenido para analizar');
+
   let limpio = txt.trim();
-  // Quitar markdown code blocks
-  limpio = limpio.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  // Buscar el primer { o [
-  const inicio = limpio.search(/[{[]/);
+  // Quitar markdown code blocks si los hay
+  limpio = limpio.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+  // Buscar el primer { — puede estar precedido de texto explicativo de Gemini
+  const inicio = limpio.search(/\{/);
   if (inicio > 0) limpio = limpio.slice(inicio);
-  // Buscar el último } o ]
-  const fin = Math.max(limpio.lastIndexOf('}'), limpio.lastIndexOf(']'));
-  if (fin > 0) limpio = limpio.slice(0, fin + 1);
+  // Buscar el último } (el cierre del JSON principal)
+  const fin = limpio.lastIndexOf('}');
+  if (fin >= 0) limpio = limpio.slice(0, fin + 1);
 
   try {
     return JSON.parse(limpio);
@@ -310,9 +322,13 @@ Responde SOLO JSON (sin texto antes ni después):
     const enriquecidos: unknown[] = Array.isArray(parsed.enriquecidos) ? parsed.enriquecidos : [];
 
     if (!items.length && !enriquecidos.length) {
-      console.warn('[leer-bases] Gemini no extrajo ítems. Respuesta:', txt.slice(0, 300));
+      console.warn('[leer-bases] Gemini no extrajo ítems. Primeros 500 chars:', txt?.slice(0, 500));
       return NextResponse.json(
-        { error: 'Gemini no encontró ítems en el PDF. Verifica que el documento sea un PDF de bases legible (no escaneado sin OCR).' },
+        {
+          error: 'El PDF no tiene contenido legible o no es un documento de bases técnicas. ' +
+            'Asegúrate de que sea un PDF de texto (no imagen escaneada) con listado de productos.',
+          debug_preview: txt?.slice(0, 200) || 'sin respuesta',
+        },
         { status: 422 }
       );
     }

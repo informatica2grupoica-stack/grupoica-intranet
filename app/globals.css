@@ -379,14 +379,42 @@ p, span, h1, h2, h3, h4, h5, h6, .text-truncate {
 }
 
 @keyframes slideIn {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
 }
-
 .animate-slide-in {
   animation: slideIn 0.3s ease-out;
+}
+
+/* ========================================
+   SISTEMA DE NOTIFICACIONES (TOASTS)
+   ======================================== */
+
+@keyframes toast-enter {
+  0%   { transform: translateX(115%) scale(0.92); opacity: 0; }
+  60%  { transform: translateX(-6px) scale(1.01); opacity: 1; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes toast-leave {
+  0%   { transform: translateX(0) scale(1); opacity: 1; max-height: 120px; margin-bottom: 0.75rem; }
+  40%  { transform: translateX(10px) scale(0.98); opacity: 0.5; }
+  100% { transform: translateX(115%); opacity: 0; max-height: 0; margin-bottom: 0; padding: 0; }
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+.toast-enter {
+  animation: toast-enter 0.42s cubic-bezier(0.175, 0.885, 0.32, 1.15) forwards;
+}
+
+.toast-leave {
+  animation: toast-leave 0.35s ease-in forwards;
+}
+
+.toast-progress-bar {
+  animation: toast-progress linear forwards;
 }
