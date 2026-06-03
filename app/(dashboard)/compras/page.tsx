@@ -9,6 +9,7 @@ import {
   ShoppingCart, Receipt, ExternalLink, Hash
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import DTEViewer from "@/components/DTEViewer";
 
 type TabType = "oc" | "compras" | "dte" | "pagos";
 
@@ -95,6 +96,7 @@ export default function ComprasPage() {
   const [xmlViewer, setXmlViewer] = useState<{ visible: boolean; loading: boolean; content: string; url: string }>({
     visible: false, loading: false, content: "", url: "",
   });
+  const [dteViewerUrl, setDteViewerUrl] = useState<{ url: string; info: any } | null>(null);
 
   const verXML = async (url: string) => {
     setXmlViewer({ visible: true, loading: true, content: "", url });
@@ -966,21 +968,38 @@ export default function ComprasPage() {
                     </div>
                   )}
 
-                  {/* XML */}
+                  {/* XML / DTE */}
                   {modalDTE.data.s3_link && (
-                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl">
-                      <FileText size={16} className="text-blue-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl border border-blue-100">
+                      <FileText size={20} className="text-blue-600 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-blue-600 uppercase">Archivo XML DTE</p>
-                        <p className="text-[9px] text-slate-500 truncate">{modalDTE.data.s3_link}</p>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Documento XML DTE</p>
+                        <p className="text-[9px] text-slate-400 truncate mt-0.5">{modalDTE.data.s3_link.split("/").pop()}</p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => {
+                            setDteViewerUrl({
+                              url: modalDTE.data.s3_link,
+                              info: {
+                                id: modalDTE.data.dte_id,
+                                folio: modalDTE.data.dte_folio,
+                                tipo: modalDTE.data.dte_tipo,
+                                emisor: modalDTE.data.dte_razonsocial_emisor,
+                                total: modalDTE.data.dte_total,
+                              }
+                            });
+                          }}
+                          className="px-3 py-1.5 bg-[#059669] text-white text-xs font-bold rounded-lg hover:bg-[#047857] flex items-center gap-1.5 shadow-sm"
+                        >
+                          <FileText size={12} /> Ver DTE
+                        </button>
                         <button onClick={() => verXML(modalDTE.data.s3_link)}
-                          className="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-[#059669] flex items-center gap-1">
-                          <FileText size={12} /> Ver XML
+                          className="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-600 flex items-center gap-1.5">
+                          &lt;/&gt; Ver XML
                         </button>
                         <a href={modalDTE.data.s3_link} target="_blank" rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center gap-1.5">
                           <ExternalLink size={12} /> Descargar
                         </a>
                       </div>
@@ -1009,7 +1028,16 @@ export default function ComprasPage() {
           </div>
         </div>
       )}
-      {/* ── Visor XML ─────────────────────────────────────────────────── */}
+      {/* ── Visor DTE renderizado ────────────────────────────────────── */}
+      {dteViewerUrl && (
+        <DTEViewer
+          xmlUrl={dteViewerUrl.url}
+          dteInfo={dteViewerUrl.info}
+          onClose={() => setDteViewerUrl(null)}
+        />
+      )}
+
+      {/* ── Visor XML raw ─────────────────────────────────────────────── */}
       {xmlViewer.visible && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-5xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
