@@ -18,6 +18,7 @@ interface Proveedor {
   rut_empresa: string;
   categoria: string;
   tipo_servicio: string;
+  proveedor_giro_comercial?: string;
   nombre_contacto: string;
   email_contacto: string;
   telefono: string;
@@ -260,11 +261,15 @@ export default function ProveedoresPage() {
     // Filtrar por búsqueda
     if (busqueda) {
       const busquedaLower = busqueda.toLowerCase();
-      filtrados = filtrados.filter(p => 
+      filtrados = filtrados.filter(p =>
         p.nombre_empresa?.toLowerCase().includes(busquedaLower) ||
         p.rut_empresa?.includes(busqueda) ||
         p.categoria?.toLowerCase().includes(busquedaLower) ||
-        p.tipo_servicio?.toLowerCase().includes(busquedaLower)
+        p.tipo_servicio?.toLowerCase().includes(busquedaLower) ||
+        p.proveedor_giro_comercial?.toLowerCase().includes(busquedaLower) ||
+        p.email_contacto?.toLowerCase().includes(busquedaLower) ||
+        p.nombre_contacto?.toLowerCase().includes(busquedaLower) ||
+        p.comuna?.toLowerCase().includes(busquedaLower)
       );
     }
     
@@ -509,22 +514,29 @@ export default function ProveedoresPage() {
 
   const DetallesExpandidos = ({ prov }: { prov: Proveedor }) => (
     <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 animate-in slide-in-from-top duration-200">
+      {/* Giro comercial (Obuma) */}
+      {prov.proveedor_giro_comercial && (
+        <div className="flex items-start gap-2 text-xs text-slate-600">
+          <Briefcase size={12} className="text-violet-400 mt-0.5 flex-shrink-0" />
+          <span className="text-slate-500"><strong className="text-slate-700">Giro:</strong> {prov.proveedor_giro_comercial}</span>
+        </div>
+      )}
       {prov.direccion && (
         <div className="flex items-start gap-2 text-xs text-slate-600">
           <MapPin size={12} className="text-slate-400 mt-0.5 flex-shrink-0" />
-          <span>{prov.direccion}, {prov.comuna}, {prov.ciudad}</span>
+          <span>{[prov.direccion, prov.comuna, prov.ciudad].filter(Boolean).join(', ')}</span>
         </div>
       )}
       {prov.email_contacto && (
         <div className="flex items-center gap-2 text-xs text-slate-600">
           <Mail size={12} className="text-slate-400 flex-shrink-0" />
-          <span className="truncate">{prov.email_contacto}</span>
+          <a href={`mailto:${prov.email_contacto}`} className="truncate hover:text-[#059669] hover:underline">{prov.email_contacto}</a>
         </div>
       )}
       {prov.sitio_web && (
         <div className="flex items-center gap-2 text-xs text-[#059669]">
           <Globe size={12} className="flex-shrink-0" />
-          <a href={prov.sitio_web} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
+          <a href={prov.sitio_web.startsWith('http') ? prov.sitio_web : `https://${prov.sitio_web}`} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
             {prov.sitio_web}
           </a>
         </div>
@@ -546,14 +558,14 @@ export default function ProveedoresPage() {
           <strong>Observaciones:</strong> {prov.observaciones}
         </p>
       )}
-      {prov.obuma_id && (
-        <p className="text-[9px] text-[#059669] bg-[#ECFDF5] p-1.5 rounded-lg inline-block">
-          🏢 ID Obuma: {prov.obuma_id}
-        </p>
-      )}
-      <div className="flex items-center justify-between pt-2 text-[9px] text-slate-400">
-        <span>Registrado: {new Date(prov.created_at).toLocaleDateString('es-CL')}</span>
-        <span className={`px-2 py-0.5 rounded-full ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+      <div className="flex items-center gap-2 flex-wrap pt-1">
+        {prov.obuma_id && (
+          <span className="text-[9px] text-[#059669] bg-[#ECFDF5] px-1.5 py-0.5 rounded-lg">
+            🏢 ID Obuma: {prov.obuma_id}
+          </span>
+        )}
+        <span className="text-[9px] text-slate-400">Registrado: {new Date(prov.created_at).toLocaleDateString('es-CL')}</span>
+        <span className={`text-[9px] px-2 py-0.5 rounded-full ${prov.activo !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
           {prov.activo !== false ? 'Activo' : 'Inactivo'}
         </span>
       </div>
@@ -944,8 +956,14 @@ export default function ProveedoresPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">{prov.categoria}</span>
-                          {prov.tipo_servicio && <p className="text-[9px] text-slate-400 mt-1">{prov.tipo_servicio}</p>}
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#047857]' : 'bg-slate-100 text-slate-500'}`}>
+                            {prov.categoria || 'General'}
+                          </span>
+                          {(prov.proveedor_giro_comercial || prov.tipo_servicio) && (
+                            <p className="text-[9px] text-slate-400 mt-1 max-w-[200px] truncate" title={prov.proveedor_giro_comercial || prov.tipo_servicio}>
+                              {prov.proveedor_giro_comercial || prov.tipo_servicio}
+                            </p>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-sm font-medium text-slate-700">{prov.nombre_contacto || '—'}</p>
@@ -1081,10 +1099,17 @@ export default function ProveedoresPage() {
                     </div>
                     
                     <div className="space-y-2 mb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Categoría</span>
-                        <span className="text-xs font-bold text-slate-700">{prov.categoria}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase flex-shrink-0">Categoría</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#047857]' : 'bg-slate-100 text-slate-500'}`}>
+                          {prov.categoria || 'General'}
+                        </span>
                       </div>
+                      {(prov.proveedor_giro_comercial || prov.tipo_servicio) && (
+                        <p className="text-[9px] text-slate-400 truncate" title={prov.proveedor_giro_comercial || prov.tipo_servicio}>
+                          {prov.proveedor_giro_comercial || prov.tipo_servicio}
+                        </p>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
@@ -1203,8 +1228,14 @@ export default function ProveedoresPage() {
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Tipo Servicio</label>
-                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.tipo_servicio} onChange={e => setSeleccionado({...seleccionado, tipo_servicio: e.target.value})} />
+                  <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.tipo_servicio || ''} onChange={e => setSeleccionado({...seleccionado, tipo_servicio: e.target.value})} />
                 </div>
+                {seleccionado.proveedor_giro_comercial && (
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Giro Comercial (Obuma)</label>
+                    <input className="w-full bg-violet-50 rounded-xl p-3 text-sm text-slate-600" value={seleccionado.proveedor_giro_comercial} readOnly title="Este campo viene de Obuma y se sincroniza automáticamente" />
+                  </div>
+                )}
                 <div>
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Contacto</label>
                   <input className="w-full bg-slate-50 rounded-xl p-3 text-sm" value={seleccionado.nombre_contacto} onChange={e => setSeleccionado({...seleccionado, nombre_contacto: e.target.value})} />

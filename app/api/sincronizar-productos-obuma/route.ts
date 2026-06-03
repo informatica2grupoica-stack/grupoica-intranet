@@ -2,6 +2,40 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseAdmin';
 
+// ── Derivar categoría desde el giro comercial de Obuma ───────────────────────
+function derivarCategoria(giro: string | null | undefined, categoriaObuma: string | null | undefined): string {
+  // Priorizar categoría real de Obuma si viene y no es genérica
+  if (categoriaObuma && categoriaObuma.trim() && categoriaObuma !== 'General') return categoriaObuma;
+  if (!giro || !giro.trim()) return 'General';
+
+  const g = giro.toUpperCase();
+
+  if (g.includes('IMPORT') || g.includes('EXPORT')) return 'Importación/Exportación';
+  if (g.includes('CONSTRUCT') || g.includes('OBRA') || g.includes('EDIFICAC') || g.includes('INMOBILI')) return 'Construcción';
+  if (g.includes('TECNOLOG') || g.includes('SOFTWARE') || g.includes('COMPUTAC') || g.includes('INFORMÁTIC') || g.includes('INFORMATIC') || g.includes('TELECOMUNIC')) return 'Tecnología';
+  if (g.includes('ALIMENT') || g.includes('ABASTOS') || g.includes('COMESTIBLE') || g.includes('BEBIDA') || g.includes('SUPERMERCADO')) return 'Alimentos';
+  if (g.includes('TRANSPORT') || g.includes('LOGÍSTIC') || g.includes('LOGISTIC') || g.includes('CARGA') || g.includes('DESPACHO') || g.includes('CORREO')) return 'Transporte y Logística';
+  if (g.includes('ASEO') || g.includes('LIMPIEZA') || g.includes('MANTENC') || g.includes('JARDÍN') || g.includes('JARDINERÍA')) return 'Aseo y Mantención';
+  if (g.includes('ELÉCTR') || g.includes('ELECTRIC') || g.includes('ELECTRODOM') || g.includes('ILUMINAC')) return 'Eléctrico';
+  if (g.includes('FERRET') || g.includes('GASFITERÍA') || g.includes('GASFITERIA') || g.includes('FONTANER')) return 'Ferretería';
+  if (g.includes('CONTAB') || g.includes('AUDITOR') || g.includes('FINANZ') || g.includes('BANCARI')) return 'Finanzas';
+  if (g.includes('SALUD') || g.includes('MÉDIC') || g.includes('MEDIC') || g.includes('FARMAC') || g.includes('CLINIC') || g.includes('DENTAL')) return 'Salud';
+  if (g.includes('CAPACIT') || g.includes('EDUCAC') || g.includes('FORMAC') || g.includes('ENSEÑANZA')) return 'Capacitación';
+  if (g.includes('SEGURIDAD') || g.includes('VIGILANCIA') || g.includes('PREVENC')) return 'Seguridad';
+  if (g.includes('PUBLICIDAD') || g.includes('MARKETING') || g.includes('IMPRENTA') || g.includes('GRÁFIC')) return 'Publicidad';
+  if (g.includes('FABRIC') || g.includes('MANUFAC') || g.includes('INDUSTR') || g.includes('PRODUCCION') || g.includes('PRODUCCIÓN')) return 'Manufactura';
+  if (g.includes('AGRÍC') || g.includes('AGRICOL') || g.includes('GANAD') || g.includes('PESCA') || g.includes('FORESTAL')) return 'Agrícola';
+  if (g.includes('MINERÍA') || g.includes('MINERIA') || g.includes('MINERO')) return 'Minería';
+  if (g.includes('JURÍD') || g.includes('JURIDIC') || g.includes('LEGAL') || g.includes('NOTARI') || g.includes('ABOGAD')) return 'Legal';
+  if (g.includes('ARREND') || g.includes('PROPIEDAD') || g.includes('INMUEBLE')) return 'Inmobiliaria';
+  if (g.includes('VESTUARIO') || g.includes('TEXTIL') || g.includes('ROPA') || g.includes('CONFECCIÓN')) return 'Vestuario';
+  if (g.includes('COMBUSTIBLE') || g.includes('GAS') || g.includes('PETRÓLEO') || g.includes('PETROLEO')) return 'Combustibles';
+  if (g.includes('COMERCIO') || g.includes('DISTRIBUC') || g.includes('VENTA') || g.includes('TIENDA')) return 'Comercio';
+  if (g.includes('SERVICIO')) return 'Servicios';
+
+  return 'General';
+}
+
 interface OrdenCompra {
   compra_oc_id: string;
   compra_oc_folio: string;
@@ -76,6 +110,7 @@ export async function POST(request: Request) {
       const nombreFinal = prov.proveedor_razon_social || prov.proveedor_nombre_fantasia || `Proveedor ${prov.proveedor_id}`;
       const tieneNombre = prov.proveedor_razon_social || prov.proveedor_nombre_fantasia;
       
+      const giroComercial = prov.proveedor_giro_comercial || '';
       proveedoresMap.set(prov.proveedor_id, {
         nombre_empresa: nombreFinal,
         rut_empresa: prov.proveedor_rut || `ID_${prov.proveedor_id}`,
@@ -88,9 +123,10 @@ export async function POST(request: Request) {
         pais: prov.proveedor_pais || 'Chile',
         sitio_web: prov.proveedor_website || '',
         nombre_contacto: prov.proveedor_contacto || '',
-        proveedor_giro_comercial: prov.proveedor_giro_comercial || '',
+        proveedor_giro_comercial: giroComercial,
         observaciones: prov.proveedor_observacion || '',
-        categoria: prov.proveedor_categoria || 'General',
+        // Derivar categoría inteligente del giro comercial
+        categoria: derivarCategoria(giroComercial, prov.proveedor_categoria),
         tiene_nombre_original: !!tieneNombre
       });
     }
@@ -118,41 +154,33 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (existente) {
-        // Verificar si necesita actualización
-        const nombreActual = existente.nombre_empresa || '';
-        const rutActual = existente.rut_empresa || '';
-        const necesitaActualizacion = !nombreActual || 
-                                      nombreActual === '' || 
-                                      nombreActual.startsWith('Proveedor ') ||
-                                      rutActual.startsWith('ID_');
-        
-        if (necesitaActualizacion) {
-          const { error: updateError } = await supabase
-            .from('proveedores')
-            .update({
-              nombre_empresa: datos.nombre_empresa,
-              rut_empresa: datos.rut_empresa,
-              telefono: datos.telefono,
-              email_contacto: datos.email_contacto,
-              direccion: datos.direccion,
-              comuna: datos.comuna,
-              ciudad: datos.ciudad,
-              region: datos.region,
-              pais: datos.pais,
-              sitio_web: datos.sitio_web,
-              nombre_contacto: datos.nombre_contacto,
-              proveedor_giro_comercial: datos.proveedor_giro_comercial,
-              observaciones: datos.observaciones,
-              categoria: datos.categoria,
-            })
-            .eq('id', existente.id);
-          
-          if (!updateError) {
-            proveedoresActualizados++;
-            console.log(`   ✅ Actualizado: ${obumaId} -> "${datos.nombre_empresa}" (${datos.tiene_nombre_original ? 'nombre original' : 'nombre genérico'})`);
-          }
+        // Siempre sincronizar campos provenientes de Obuma.
+        // NO se tocan campos manuales: calificacion, condiciones_pago, banco_*, cuenta_*
+        const { error: updateError } = await supabase
+          .from('proveedores')
+          .update({
+            nombre_empresa: datos.nombre_empresa,
+            rut_empresa: datos.rut_empresa,
+            telefono: datos.telefono || undefined,
+            email_contacto: datos.email_contacto || undefined,
+            direccion: datos.direccion || undefined,
+            comuna: datos.comuna || undefined,
+            ciudad: datos.ciudad || undefined,
+            region: datos.region || undefined,
+            pais: datos.pais || undefined,
+            sitio_web: datos.sitio_web || undefined,
+            nombre_contacto: datos.nombre_contacto || undefined,
+            proveedor_giro_comercial: datos.proveedor_giro_comercial || undefined,
+            tipo_servicio: datos.proveedor_giro_comercial || undefined,
+            observaciones: datos.observaciones || undefined,
+            categoria: datos.categoria,
+          })
+          .eq('id', existente.id);
+
+        if (!updateError) {
+          proveedoresActualizados++;
         } else {
-          console.log(`   ⏭️ Sin cambios: ${obumaId} -> "${nombreActual}"`);
+          console.log(`   ⚠️ Error actualizando ${obumaId}: ${updateError.message}`);
         }
       } else {
         const { error: createError } = await supabase
@@ -171,6 +199,7 @@ export async function POST(request: Request) {
             sitio_web: datos.sitio_web,
             nombre_contacto: datos.nombre_contacto,
             proveedor_giro_comercial: datos.proveedor_giro_comercial,
+            tipo_servicio: datos.proveedor_giro_comercial,
             observaciones: datos.observaciones,
             categoria: datos.categoria,
             activo: true,
