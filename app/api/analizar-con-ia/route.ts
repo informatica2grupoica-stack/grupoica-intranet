@@ -1,14 +1,20 @@
 // app/api/analizar-con-ia/route.ts
+// Filtro IA post-búsqueda: DeepSeek (reranking estructurado) + Gemini (validación semántica).
+// DeepSeek ordena y descarta. Gemini valida los inciertos y los top resultados.
+// Ambos corren en paralelo y sus resultados se fusionan.
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 20;
+export const maxDuration = 55;
 
-// ── Cache con TTL ────────────────────────────────────────────────────────────
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || '';
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
+
 const cacheIA = new Map<string, { resultados: unknown; timestamp: number }>();
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+const CACHE_TTL = 10 * 60 * 1000;
 
-// ── Tipos ────────────────────────────────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface ProductoResultado {
   tienda: string;
@@ -25,6 +31,11 @@ interface ProductoResultado {
   palabras_comunes: string[];
   palabras_faltantes: string[];
   conflicto_medidas: boolean;
+  confianza_ia?: number;
+  confianza_gemini?: number;
+  confianza_deepseek?: number;
+  validado_gemini?: boolean;
+  [key: string]: unknown;
 }
 
 interface AnalisisProducto {
@@ -32,11 +43,7 @@ interface AnalisisProducto {
   nombre_normalizado: string;
   categoria: string;
   palabras_clave: string[];
-  medidas: {
-    tiene_medidas: boolean;
-    detalle: Record<string, unknown>;
-    texto_legible: string;
-  };
+  medidas: { tiene_medidas: boolean; detalle: Record<string, unknown>; texto_legible: string };
   especificaciones_tecnicas: string[];
   unidades_relevantes: string[];
   es_accesorio: boolean;
@@ -51,130 +58,311 @@ interface AnalisisProducto {
   };
 }
 
-// ── Prompt para el analizador / reranker ────────────────────────────────────
+interface EntidadesDetectadas {
+  marca?: string | null;
+  modelo?: string | null;
+  sku?: string | null;
+  specs?: string[];
+}
 
-function construirPromptReranker(
+// ─── Prompt compartido para ambos modelos ─────────────────────────────────────
+
+function construirContextoProducto(
   producto: string,
   analisis: AnalisisProducto,
-  minimoRequerido: number
+  entidades?: EntidadesDetectadas
 ): string {
   const tp = analisis.tipo_producto;
   const medidas = analisis.medidas;
+  const marcaFinal = entidades?.marca || analisis.marca_detectada || 'cualquiera';
+  const modeloFinal = entidades?.modelo || 'no especificado';
+  const skuFinal = entidades?.sku || 'no especificado';
+  const specsExtra = [...(analisis.especificaciones_tecnicas || []), ...(entidades?.specs || [])].filter(Boolean).join(', ');
 
-  let prompt = `Eres RERANK-IA, un sistema de reordenamiento y filtrado de resultados de búsqueda de productos para ferretería y construcción en Chile.
+  let ctx = `PRODUCTO BUSCADO: "${producto}"
+Categoría: ${analisis.categoria}
+Palabras clave: ${analisis.palabras_clave.join(', ')}
+Medidas críticas: ${medidas.texto_legible}${medidas.tiene_medidas ? ' ← VERIFICAR OBLIGATORIO' : ''}
+Especificaciones: ${specsExtra || 'ninguna'}
+Marca: ${marcaFinal} | Modelo: ${modeloFinal} | SKU: ${skuFinal}`;
 
-Tu misión: dado un listado de productos encontrados, ordenarlos del MÁS al MENOS relevante para el producto buscado, y descartar los que claramente no corresponden.
+  if (tp.maquinaria_pesada) ctx += '\nTIPO: Maquinaria pesada — RECHAZAR repuestos, piezas, accesorios.';
+  if (tp.herramienta_electrica) ctx += '\nTIPO: Herramienta eléctrica — RECHAZAR discos, carbones, estuches.';
+  if (tp.material_construccion) ctx += '\nTIPO: Material de construcción — las MEDIDAS son el criterio principal.';
+  if (tp.articulo_pequeno) ctx += '\nTIPO: Artículo pequeño (clavo/tornillo/perno) — medida/calibre OBLIGATORIO.';
+  if (tp.pintura_quimico) ctx += '\nTIPO: Pintura/químico — verificar tipo Y presentación (litros/galones).';
+  if (tp.senaletica_vial) ctx += '\nTIPO: Señalética — verificar que sea el mismo tipo de elemento.';
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PRODUCTO OBJETIVO: "${producto}"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Categoría          : ${analisis.categoria}
-Palabras clave     : ${analisis.palabras_clave.join(', ')}
-Medidas críticas   : ${medidas.texto_legible} ${medidas.tiene_medidas ? '← OBLIGATORIO verificar' : '(no aplica)'}
-Especificaciones   : ${analisis.especificaciones_tecnicas.join(', ') || 'ninguna'}
-Marca buscada      : ${analisis.marca_detectada || 'cualquiera'}
-Mínimo requerido   : ${minimoRequerido} resultados relevantes
-`;
+  return ctx;
+}
 
-  // ── Restricciones según tipo ─────────────────────────────────────────────
-  prompt += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITERIOS DE FILTRADO (aplica en este orden)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`;
+// ─── DEEPSEEK: Reranking estructurado rápido ─────────────────────────────────
 
-  if (tp.maquinaria_pesada) {
-    prompt += `
-1. ELIMINA todo resultado que sea repuesto, accesorio, pieza o recambio de maquinaria.
-2. Conserva SOLO máquinas/equipos completos.
-3. Ordena por coincidencia de capacidad/potencia, luego por precio ascendente.
-`;
-  } else if (tp.herramienta_electrica) {
-    prompt += `
-1. ELIMINA discos, carbones, brocas sueltas, estuches, extensiones, accesorios.
-2. Conserva SOLO herramientas completas con motor o mecanismo principal.
-3. Si el buscado especifica voltaje/potencia, prioriza los que la mencionen.
-`;
-  } else if (tp.material_construccion) {
-    prompt += `
-1. Las MEDIDAS son el filtro principal. Productos con medidas distintas al buscado van al final.
-2. Si un resultado tiene "conflicto_medidas: true" → moverlo al final del ranking.
-3. Verifica que el tipo de material coincida (acero ≠ aluminio, pino ≠ MDF, etc.).
-4. Ordena primero por coincidencia de medidas, luego por coincidencia de tipo, luego precio.
-`;
-  } else if (tp.articulo_pequeno) {
-    prompt += `
-1. La medida/calibre es obligatoria. Si difiere → al final.
-2. Verifica forma del artículo (hexagonal, Phillips, Allen, cabeza plana, etc.).
-3. Verifica material (acero inoxidable, latón, galvanizado, etc.) si está especificado.
-`;
-  } else if (tp.pintura_quimico) {
-    prompt += `
-1. Verifica que el TIPO coincida: látex ≠ esmalte ≠ anticorrosivo ≠ barniz ≠ impermeabilizante.
-2. Verifica la presentación (litros/galones) — penaliza diferencias grandes (ej: 1lt vs 20lt).
-3. Si la marca está especificada, prioriza esa marca.
-`;
-  } else if (tp.senaletica_vial) {
-    prompt += `
-1. Verifica que sea el mismo tipo de elemento vial (letrero ≠ tachas ≠ delineador ≠ paso cebra).
-2. Si hay medidas, verifica que sean compatibles.
-3. Prioriza tiendas especializadas en señalética sobre marketplaces genéricos.
-`;
-  } else {
-    prompt += `
-1. Prioriza resultados donde las palabras clave coincidan con el nombre del producto.
-2. Penaliza resultados con palabras faltantes importantes (campo "palabras_faltantes").
-3. Ordena por score_python descendente como criterio base.
-`;
+async function rerankerDeepSeek(
+  producto: string,
+  analisis: AnalisisProducto,
+  resultados: ProductoResultado[],
+  entidades?: EntidadesDetectadas
+): Promise<{ rankingIds: number[]; descartados: number[]; confianzas: Record<number, number>; calidad: string; observacion: string } | null> {
+  if (!DEEPSEEK_KEY) return null;
+
+  const ctx = construirContextoProducto(producto, analisis, entidades);
+  const payload = resultados.slice(0, 25).map((r, i) => ({
+    id: i,
+    nombre: r.nombre.substring(0, 100),
+    tienda: r.tienda.substring(0, 25),
+    precio: r.precio_valor,
+    score_base: r.score,
+    medidas: r.medidas_encontradas || 'sin medidas',
+    specs: r.specs_encontradas || [],
+    palabras_faltantes: r.palabras_faltantes || [],
+    conflicto_medidas: r.conflicto_medidas || false,
+  }));
+
+  const prompt = `Eres RERANK-IA, experto en productos industriales para Chile.
+
+${ctx}
+
+ESCALA DE CONFIANZA:
+90-100: Producto exacto (mismo nombre, tipo, medidas, specs)
+70-89:  Mismo producto, variación menor (marca diferente, presentación similar)
+50-69:  Misma categoría pero difieren medidas o specs importantes
+25-49:  Producto relacionado pero incorrecto
+0-24:   Completamente diferente o es accesorio cuando se busca el producto completo
+
+PENALIZACIONES:
+-30 repuesto/accesorio cuando se busca el producto completo
+-25 medidas completamente diferentes
+-20 tipo de producto diferente
+-20 material diferente
+-15 presentación muy diferente (1lt vs 20lt, 1kg vs 25kg)
+
+Responde SOLO JSON:
+{
+  "ranking_ids": [2, 0, 5, 1, 3],
+  "ids_descartados": [7, 8],
+  "confianzas": {"0": 85, "1": 42, "2": 92},
+  "calidad_general": "buena|media|baja",
+  "observacion": "máx 100 chars sobre calidad de los resultados"
+}`;
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 18000);
+    const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: `Reordena y filtra estos ${payload.length} resultados:\n${JSON.stringify(payload, null, 2)}` },
+        ],
+        temperature: 0.05,
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+      }),
+    });
+    clearTimeout(tid);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const parsed = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+    const confs: Record<number, number> = {};
+    Object.entries(parsed.confianzas || {}).forEach(([k, v]) => { confs[Number(k)] = Number(v); });
+    return {
+      rankingIds: Array.isArray(parsed.ranking_ids) ? parsed.ranking_ids.map(Number) : [],
+      descartados: Array.isArray(parsed.ids_descartados) ? parsed.ids_descartados.map(Number) : [],
+      confianzas: confs,
+      calidad: parsed.calidad_general || 'media',
+      observacion: parsed.observacion || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── GEMINI: Validación semántica profunda ────────────────────────────────────
+// Gemini es mejor para entender contexto técnico y semántica de producto.
+// Se usa para validar los top 8 resultados y los de confianza media (40-70).
+
+async function validadorGemini(
+  producto: string,
+  analisis: AnalisisProducto,
+  resultados: ProductoResultado[],
+  entidades?: EntidadesDetectadas
+): Promise<Record<number, { confianza: number; correcto: boolean; motivo: string }> | null> {
+  if (!GEMINI_KEY) return null;
+
+  const ctx = construirContextoProducto(producto, analisis, entidades);
+  const top = resultados.slice(0, 8);
+  const payload = top.map((r, i) => ({
+    id: i,
+    nombre: r.nombre.substring(0, 120),
+    tienda: r.tienda.substring(0, 30),
+    medidas: r.medidas_encontradas || 'no indicadas',
+    specs: (r.specs_encontradas || []).join(', '),
+  }));
+
+  const prompt = `Eres un experto técnico en productos industriales, materiales de construcción y ferretería para el mercado chileno.
+
+${ctx}
+
+Tu tarea: para cada producto encontrado, determina si ES o NO ES el producto buscado.
+Analiza semánticamente: nombre completo, especificaciones técnicas, compatibilidad de medidas y tipo de producto.
+
+Sé conservador: un producto "similar" que no tiene las mismas specs NO es correcto.
+
+Responde SOLO JSON:
+{
+  "validaciones": [
+    {"id": 0, "correcto": true, "confianza": 88, "motivo": "Mismo producto, voltaje y potencia coinciden"},
+    {"id": 1, "correcto": false, "confianza": 25, "motivo": "Es accesorio, no el motor completo"}
+  ]
+}
+confianza 0-100. motivo máx 80 chars en español.`;
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 25000);
+    const r = await fetch(
+      `${GEMINI_BASE}/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `${prompt}\n\nProductos a validar:\n${JSON.stringify(payload, null, 2)}`,
+            }],
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 1500,
+            responseMimeType: 'application/json',
+          },
+        }),
+      }
+    );
+    clearTimeout(tid);
+    if (!r.ok) return null;
+    const data = await r.json();
+    const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!txt) return null;
+    const parsed = JSON.parse(txt);
+    const resultado: Record<number, { confianza: number; correcto: boolean; motivo: string }> = {};
+    (parsed.validaciones || []).forEach((v: { id: number; confianza: number; correcto: boolean; motivo: string }) => {
+      if (typeof v.id === 'number') resultado[v.id] = { confianza: v.confianza, correcto: Boolean(v.correcto), motivo: v.motivo || '' };
+    });
+    return resultado;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Fusionar resultados de ambos modelos ─────────────────────────────────────
+
+function fusionarResultados(
+  resultados: ProductoResultado[],
+  deepseek: { rankingIds: number[]; descartados: number[]; confianzas: Record<number, number>; calidad: string; observacion: string } | null,
+  gemini: Record<number, { confianza: number; correcto: boolean; motivo: string }> | null
+): { resultadosFinales: ProductoResultado[]; calidad: string; observacion: string } {
+  // Si ningún modelo respondió → orden local por score
+  if (!deepseek && !gemini) {
+    const ordenados = [...resultados].sort((a, b) => {
+      if (a.conflicto_medidas && !b.conflicto_medidas) return 1;
+      if (!a.conflicto_medidas && b.conflicto_medidas) return -1;
+      return b.score - a.score;
+    });
+    return { resultadosFinales: ordenados, calidad: 'media', observacion: 'Orden local (IA no disponible)' };
   }
 
-  prompt += `
-${medidas.tiene_medidas ? `
-⚠️  REGLA CRÍTICA DE MEDIDAS:
-  - Los resultados con "conflicto_medidas: true" deben quedar en el último tercio del ranking.
-  - Los resultados que NO mencionan medidas cuando el buscado sí las tiene → penaliza su posición.
-  - Los resultados con medidas exactas → priorizar en el top 3.
-` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMATO DE RESPUESTA — SOLO JSON, SIN TEXTO ADICIONAL
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{
-  "ranking_ids": [2, 0, 5, 1, 3, 4],
-  "ids_descartados": [7, 8],
-  "razon_descarte": "Son accesorios/repuestos, no el producto principal",
-  "calidad_general": "buena|media|baja",
-  "observacion": "Texto breve (máx 100 chars) sobre la calidad de los resultados encontrados"
+  // Construir mapa de confianzas fusionadas
+  const confianzaFinal = new Map<number, number>();
+  const motivoFinal = new Map<number, string>();
+  const incorrectoGemini = new Set<number>();
+
+  // Aplicar confianzas de DeepSeek
+  if (deepseek) {
+    Object.entries(deepseek.confianzas).forEach(([k, v]) => confianzaFinal.set(Number(k), v));
+  }
+
+  // Refinar con Gemini (tiene más peso en validación semántica)
+  if (gemini) {
+    Object.entries(gemini).forEach(([k, val]) => {
+      const idx = Number(k);
+      const confDS = confianzaFinal.get(idx) ?? resultados[idx]?.score ?? 0;
+      const confGem = val.confianza;
+      // Gemini tiene 60% de peso, DeepSeek 40% en la confianza final
+      const fusionada = Math.round(confGem * 0.6 + confDS * 0.4);
+      confianzaFinal.set(idx, fusionada);
+      if (val.motivo) motivoFinal.set(idx, val.motivo);
+      if (!val.correcto && confGem < 45) incorrectoGemini.add(idx);
+    });
+  }
+
+  // Determinar descartados: DeepSeek descarta + Gemini invalida con alta confianza
+  const descartados = new Set<number>(deepseek?.descartados ?? []);
+  incorrectoGemini.forEach((idx) => {
+    // Solo descartar si Gemini tiene confianza < 40 (es suficientemente seguro)
+    const gemVal = gemini?.[idx];
+    if (gemVal && gemVal.confianza < 40 && !gemVal.correcto) descartados.add(idx);
+  });
+
+  // Ordenar por ranking DeepSeek primero, luego ajustar con confianza fusionada
+  let rankingIds = deepseek?.rankingIds ?? resultados.map((_, i) => i);
+  rankingIds = rankingIds.filter((id) => !descartados.has(id) && id >= 0 && id < resultados.length);
+
+  // Si no hay ranking IDs válidos, usar todos
+  if (!rankingIds.length) {
+    rankingIds = resultados.map((_, i) => i).filter((i) => !descartados.has(i));
+  }
+
+  const resultadosFinales: ProductoResultado[] = rankingIds.map((id) => {
+    const res = { ...resultados[id] };
+    const conf = confianzaFinal.get(id);
+    if (conf !== undefined) {
+      res.confianza_ia = conf;
+      res.confianza_deepseek = deepseek?.confianzas[id];
+      res.confianza_gemini = gemini?.[id]?.confianza;
+      res.validado_gemini = gemini !== null;
+      // Ajustar score para que coincida con la confianza fusionada
+      if (conf > res.score + 5) res.score = Math.min(100, Math.round((res.score + conf) / 2));
+      if (conf < res.score - 20) res.score = Math.round((res.score + conf) / 2);
+    }
+    if (motivoFinal.has(id)) res.motivo_ia = motivoFinal.get(id);
+    return res;
+  });
+
+  // Re-ordenar por confianza_ia si disponible, si no por score
+  resultadosFinales.sort((a, b) => {
+    const ca = a.confianza_ia ?? a.score;
+    const cb = b.confianza_ia ?? b.score;
+    return cb - ca;
+  });
+
+  return {
+    resultadosFinales,
+    calidad: deepseek?.calidad || 'media',
+    observacion: deepseek?.observacion || '',
+  };
 }
 
-ranking_ids: IDs ordenados de mejor a peor. Incluye TODOS los no descartados.
-ids_descartados: IDs que definitivamente no corresponden al producto buscado.
-`;
+// ─── Fallback local sin IA ────────────────────────────────────────────────────
 
-  return prompt;
-}
-
-// ── Ordenamiento de respaldo (sin IA) ────────────────────────────────────────
-
-function ordenarSinIA(resultados: ProductoResultado[]): ProductoResultado[] {
+function ordenarLocal(resultados: ProductoResultado[]): ProductoResultado[] {
   return [...resultados].sort((a, b) => {
-    // Primero los sin conflicto de medidas
     if (a.conflicto_medidas && !b.conflicto_medidas) return 1;
     if (!a.conflicto_medidas && b.conflicto_medidas) return -1;
-    // Luego por score Python
-    if (b.score !== a.score) return b.score - a.score;
-    // Desempate por precio
-    if (a.precio_valor > 0 && b.precio_valor > 0) return a.precio_valor - b.precio_valor;
-    if (a.precio_valor === 0) return 1;
-    if (b.precio_valor === 0) return -1;
-    return 0;
+    return b.score - a.score;
   });
 }
 
-// ── Handler ──────────────────────────────────────────────────────────────────
+// ─── Handler principal ────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   const startTime = Date.now();
-
   try {
     const body = await req.json();
     const {
@@ -183,21 +371,12 @@ export async function POST(req: Request) {
       minimo_requerido = 9,
       resultados_raw = [],
       analisis_producto = null,
+      entidades_detectadas = null,
       force_refresh = false,
     } = body;
 
-    // ── Validación ──────────────────────────────────────────────────────────
     if (!producto?.trim()) {
-      return NextResponse.json(
-        {
-          error: 'Se requiere nombre del producto',
-          resultados: [],
-          suficientes: false,
-          deficit: minimo_requerido,
-          numero_item,
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Se requiere nombre del producto', resultados: [], suficientes: false, deficit: minimo_requerido, numero_item }, { status: 400 });
     }
 
     // ── Cache ────────────────────────────────────────────────────────────────
@@ -205,186 +384,95 @@ export async function POST(req: Request) {
     if (!force_refresh && cacheIA.has(cacheKey)) {
       const cached = cacheIA.get(cacheKey)!;
       if (Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log(`✅ Cache hit: "${producto}"`);
         return NextResponse.json({ ...(cached.resultados as object), from_cache: true });
       }
       cacheIA.delete(cacheKey);
     }
 
-    console.log(`🔍 [${numero_item}] "${producto}" — mínimo: ${minimo_requerido}, resultados recibidos: ${resultados_raw?.length || 0}`);
-
-    // Usar los resultados que vienen del frontend
     let resultados: ProductoResultado[] = resultados_raw || [];
-    const analisis: AnalisisProducto | null = analisis_producto;
-
-    console.log(`📦 Frontend envió ${resultados.length} resultados para "${producto}"`);
-
-    // ── Reranking con IA (si hay resultados y API Key) ───────────────────
-    let resultadosFinales = resultados;
-    let observacionIA = '';
-    let calidad = 'media';
-
-    if (resultados.length > 3 && process.env.DEEPSEEK_API_KEY) {
-      try {
-        // Crear un análisis por defecto si no vino del frontend
-        const analisisDefault: AnalisisProducto = analisis || {
-          nombre_original: producto,
-          nombre_normalizado: producto.toLowerCase(),
-          categoria: 'ferreteria_general',
-          palabras_clave: producto.toLowerCase().split(' ').filter((p: string) => p.length > 2),
-          medidas: { tiene_medidas: false, detalle: {}, texto_legible: 'sin medidas' },
-          especificaciones_tecnicas: [],
-          unidades_relevantes: [],
-          es_accesorio: false,
-          marca_detectada: null,
-          tipo_producto: {
-            maquinaria_pesada: false,
-            herramienta_electrica: false,
-            material_construccion: false,
-            articulo_pequeno: false,
-            pintura_quimico: false,
-            senaletica_vial: false,
-          },
-        };
-
-        const promptReranker = construirPromptReranker(
-          producto,
-          analisisDefault,
-          minimo_requerido
-        );
-
-        // Payload compacto con tipos explícitos
-        const payloadParaIA = resultados.slice(0, 25).map((r: ProductoResultado, idx: number) => ({
-          id: idx,
-          nombre: (r.nombre || '').substring(0, 100),
-          tienda: (r.tienda || '').substring(0, 25),
-          precio: r.precio_valor || 0,
-          score_python: r.score || 0,
-          medidas: r.medidas_encontradas || 'no indicadas',
-          specs: r.specs_encontradas || [],
-          palabras_en_comun: r.palabras_comunes || [],
-          palabras_faltantes: r.palabras_faltantes || [],
-          conflicto_medidas: r.conflicto_medidas || false,
-        }));
-
-        const iaCtrl = new AbortController();
-        const iaTimeout = setTimeout(() => iaCtrl.abort(), 10000);
-
-        const iaRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          signal: iaCtrl.signal,
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [
-              { role: 'system', content: promptReranker },
-              {
-                role: 'user',
-                content: `Reordena estos ${payloadParaIA.length} resultados:\n\n${JSON.stringify(payloadParaIA, null, 2)}`,
-              },
-            ],
-            temperature: 0.05,
-            max_tokens: 1000,
-            response_format: { type: 'json_object' },
-          }),
-        });
-
-        clearTimeout(iaTimeout);
-
-        if (iaRes.ok) {
-          const iaData = await iaRes.json();
-          const contenido = iaData.choices?.[0]?.message?.content;
-          const parsed = JSON.parse(contenido || '{}');
-
-          const rankingIds: number[] = parsed.ranking_ids || [];
-          const descartados: number[] = parsed.ids_descartados || [];
-          observacionIA = parsed.observacion || '';
-          calidad = parsed.calidad_general || 'media';
-
-          if (rankingIds.length > 0) {
-            // 🔥 CORREGIDO: Tipo explícito para el parámetro 'id'
-            const reordenados = rankingIds
-              .filter((id: number) => !descartados.includes(id) && id >= 0 && id < resultados.length)
-              .map((id: number) => resultados[id]);
-
-            resultadosFinales = reordenados;
-
-            console.log(
-              `✅ Reranking IA: ${reordenados.length} relevantes, ${descartados.length} descartados, calidad: ${calidad}`
-            );
-          }
-        } else {
-          console.warn(`⚠️ IA respondió con error: ${iaRes.status}`);
-          resultadosFinales = ordenarSinIA(resultados);
-        }
-      } catch (iaErr) {
-        const msg = iaErr instanceof Error ? iaErr.message : 'error';
-        console.warn(`⚠️ Reranking IA falló (${msg}) — usando ordenamiento local`);
-        resultadosFinales = ordenarSinIA(resultados);
-      }
-    } else {
-      resultadosFinales = ordenarSinIA(resultados);
+    if (!resultados.length) {
+      return NextResponse.json({ success: true, numero_item, producto, resultados: [], total_encontrados: 0, suficientes: false, deficit: minimo_requerido, tiempo_ms: 0 });
     }
 
-    // ── Construir respuesta final ─────────────────────────────────────────
-    const maxResultados = Math.max(minimo_requerido, 20);
-    resultadosFinales = resultadosFinales.slice(0, maxResultados);
+    console.log(`🔍 [${numero_item}] "${producto}" — ${resultados.length} resultados, IA: DS=${!!DEEPSEEK_KEY} GM=${!!GEMINI_KEY}`);
 
-    const totalFinal = resultadosFinales.length;
-    const suficientes = totalFinal >= minimo_requerido;
+    // ── Análisis por defecto si no viene del frontend ────────────────────────
+    const analisis: AnalisisProducto = analisis_producto ?? {
+      nombre_original: producto,
+      nombre_normalizado: producto.toLowerCase(),
+      categoria: 'ferreteria_general',
+      palabras_clave: producto.toLowerCase().split(' ').filter((p: string) => p.length > 2),
+      medidas: { tiene_medidas: false, detalle: {}, texto_legible: 'sin medidas' },
+      especificaciones_tecnicas: [],
+      unidades_relevantes: [],
+      es_accesorio: false,
+      marca_detectada: null,
+      tipo_producto: { maquinaria_pesada: false, herramienta_electrica: false, material_construccion: false, articulo_pequeno: false, pintura_quimico: false, senaletica_vial: false },
+    };
 
+    const entidades: EntidadesDetectadas = entidades_detectadas || {};
+
+    // ── Si no hay ninguna API → orden local inmediato ────────────────────────
+    if (!DEEPSEEK_KEY && !GEMINI_KEY) {
+      const ordenados = ordenarLocal(resultados);
+      return NextResponse.json({ success: true, numero_item, producto, resultados: ordenados.slice(0, Math.max(minimo_requerido, 20)), total_encontrados: ordenados.length, suficientes: ordenados.length >= minimo_requerido, deficit: Math.max(0, minimo_requerido - ordenados.length), calidad_resultados: 'media', observacion_ia: 'Sin claves IA configuradas', tiempo_ms: Date.now() - startTime, from_cache: false });
+    }
+
+    // ── Ejecutar DeepSeek y Gemini EN PARALELO ───────────────────────────────
+    // DeepSeek hace el reranking completo (rápido).
+    // Gemini valida semánticamente los top 8 (más lento pero más preciso).
+    // El resultado se fusiona dando mayor peso a Gemini en la validación.
+    type DSResult = { rankingIds: number[]; descartados: number[]; confianzas: Record<number, number>; calidad: string; observacion: string } | null;
+    type GMResult = Record<number, { confianza: number; correcto: boolean; motivo: string }> | null;
+    let deepseekOut: DSResult = null;
+    let geminiOut: GMResult = null;
+
+    if (resultados.length >= 2) {
+      const tieneEntidad = Boolean(entidades.marca || entidades.modelo || entidades.sku);
+      const scoreTop = resultados[0]?.score ?? 0;
+      const usarGemini = GEMINI_KEY && (tieneEntidad || scoreTop < 80 || analisis.medidas.tiene_medidas);
+
+      const [dsRes, gmRes] = await Promise.all([
+        DEEPSEEK_KEY ? rerankerDeepSeek(producto, analisis, resultados, entidades) as Promise<DSResult> : Promise.resolve<DSResult>(null),
+        usarGemini ? validadorGemini(producto, analisis, resultados, entidades) as Promise<GMResult> : Promise.resolve<GMResult>(null),
+      ]);
+      deepseekOut = dsRes;
+      geminiOut = gmRes;
+
+      console.log(`✅ DS: ${deepseekOut ? `${deepseekOut.rankingIds.length} rankeados, ${deepseekOut.descartados.length} descartados` : 'no disponible'} | GM: ${geminiOut ? `${Object.keys(geminiOut).length} validados` : 'no usado'}`);
+    }
+
+    // ── Fusionar resultados ──────────────────────────────────────────────────
+    const { resultadosFinales, calidad, observacion } = fusionarResultados(resultados, deepseekOut, geminiOut);
+
+    const maxRes = Math.max(minimo_requerido, 20);
+    const slice = resultadosFinales.slice(0, maxRes);
     const respuesta = {
       success: true,
       numero_item,
       producto,
-      resultados: resultadosFinales,
-      total_encontrados: totalFinal,
-      suficientes,
-      deficit: Math.max(0, minimo_requerido - totalFinal),
+      resultados: slice,
+      total_encontrados: slice.length,
+      suficientes: slice.length >= minimo_requerido,
+      deficit: Math.max(0, minimo_requerido - slice.length),
       minimo_requerido,
       calidad_resultados: calidad,
-      observacion_ia: observacionIA,
+      observacion_ia: observacion,
+      modelos_usados: [deepseekOut ? 'deepseek' : null, geminiOut ? 'gemini' : null].filter(Boolean),
       tiempo_ms: Date.now() - startTime,
       from_cache: false,
     };
 
-    if (totalFinal > 0) {
-      cacheIA.set(cacheKey, { resultados: respuesta, timestamp: Date.now() });
-    }
-
+    if (slice.length > 0) cacheIA.set(cacheKey, { resultados: respuesta, timestamp: Date.now() });
     return NextResponse.json(respuesta);
 
   } catch (error: unknown) {
     console.error('❌ Error crítico en analizar-con-ia:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Error interno del servidor',
-        resultados: [],
-        suficientes: false,
-        total_encontrados: 0,
-        deficit: 9,
-        tiempo_ms: 0,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Error interno', resultados: [], suficientes: false, total_encontrados: 0, deficit: 9, tiempo_ms: 0 }, { status: 500 });
   }
 }
 
-// ── DELETE: limpiar cache ─────────────────────────────────────────────────────
-export async function DELETE(req: Request) {
-  try {
-    const { productKey } = await req.json().catch(() => ({}));
-    if (productKey) {
-      cacheIA.delete(productKey);
-      return NextResponse.json({ message: `Cache eliminado para: ${productKey}` });
-    }
-    cacheIA.clear();
-    return NextResponse.json({ message: 'Cache completamente limpiado', items: 0 });
-  } catch {
-    return NextResponse.json({ error: 'Error limpiando cache' }, { status: 500 });
-  }
+export async function DELETE() {
+  cacheIA.clear();
+  return NextResponse.json({ message: 'Cache limpiado' });
 }

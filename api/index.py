@@ -94,6 +94,8 @@ def _leer_serper_key():
 SERPER_API_KEY = _leer_serper_key()
 SERPER_DISPONIBLE = bool(SERPER_API_KEY)
 
+DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "").strip()
+
 cache_resultados = {}
 CACHE_TTL = 86400  # 24 horas — evita re-buscar el mismo producto y previene rate limit
 
@@ -1096,6 +1098,311 @@ def generar_queries(producto: str, categoria: str) -> list:
     return list(dict.fromkeys(queries))[:3]
 
 
+# ─── QUERY UNDERSTANDING CON IA ──────────────────────────────────────────────
+# Extrae entidades clave ANTES de buscar para mejorar precisión y generar variantes
+
+def entender_consulta_ia(producto: str) -> dict:
+    """
+    Analiza la consulta con DeepSeek y extrae entidades: marca, modelo, SKU,
+    specs técnicas y genera variantes de búsqueda optimizadas.
+    Funciona para TODOS los productos, no solo los vagos.
+    """
+    fallback = {
+        "marca": None, "modelo": None, "sku": None,
+        "specs": [], "variantes": [producto],
+        "categoria_ia": None, "es_especifico": False,
+    }
+    if not DEEPSEEK_API_KEY:
+        return fallback
+    try:
+        prompt = """Eres un experto en productos industriales, ferretería y construcción en Chile.
+Analiza el nombre del producto y extrae entidades clave.
+
+Responde SOLO JSON sin texto adicional:
+{
+  "marca": "nombre de marca o null",
+  "modelo": "número de modelo/referencia o null",
+  "sku": "código SKU/número de parte o null",
+  "specs": ["lista de especificaciones técnicas detectadas"],
+  "variantes": ["3 consultas de búsqueda optimizadas, de más específica a más general"],
+  "categoria_ia": "categoría del producto en español",
+  "es_especifico": true/false
+}
+
+Ejemplos de variantes:
+- "Motor Siemens 5HP 380V" → ["Motor eléctrico Siemens 5HP 380V trifásico", "Motor 5HP 380V Chile precio", "Motor eléctrico 5HP Chile"]
+- "Cemento 25kg" → ["Cemento corriente 25kg saco Chile", "cemento Portland 25kg precio Chile", "cemento construcción 25kg"]
+- "Pintura anticorrosiva 1gl Sherwin" → ["Pintura anticorrosiva Sherwin Williams 1 galón", "anticorrosivo Sherwin 1gl precio Chile", "pintura anticorrosiva galón Chile"]"""
+
+        r = requests.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f'Producto: "{producto}"'}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 400,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=(5, 12),
+        )
+        if r.status_code != 200:
+            return fallback
+        data = r.json()
+        contenido = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        parsed = json.loads(contenido)
+        variantes = parsed.get("variantes") or []
+        if not variantes or not isinstance(variantes, list):
+            variantes = [producto]
+        # Garantizar que el producto original siempre esté incluido
+        if producto not in variantes:
+            variantes = [producto] + variantes[:2]
+        return {
+            "marca": parsed.get("marca"),
+            "modelo": parsed.get("modelo"),
+            "sku": parsed.get("sku"),
+            "specs": parsed.get("specs") or [],
+            "variantes": variantes[:3],
+            "categoria_ia": parsed.get("categoria_ia"),
+            "es_especifico": bool(parsed.get("es_especifico", False)),
+        }
+    except Exception as e:
+        print(f"  [QueryIA] Error: {e}")
+        return fallback
+
+
+# ─── BÚSQUEDA WEB ORGÁNICA CON SERPER ────────────────────────────────────────
+# Busca en resultados web generales (fabricantes, distribuidores, catálogos)
+# Complementa Google Shopping con fuentes que no listan en Shopping
+
+def buscar_serper_organico(producto: str, limite: int = 10) -> list:
+    """
+    Búsqueda web orgánica via Serper /search — encuentra fabricantes,
+    distribuidores oficiales, catálogos técnicos y fichas de producto.
+    """
+    if not SERPER_DISPONIBLE:
+        return []
+    cache_key = get_cache_key(f"serper_org_{producto}", limite)
+    if cache_key in cache_resultados:
+        return cache_resultados[cache_key]['data']
+    try:
+        r = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+            json={
+                "q": f"{producto} precio Chile comprar",
+                "gl": "cl", "hl": "es",
+                "location": "Chile",
+                "num": 20,
+            },
+            timeout=(5, 15),
+        )
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        organic = data.get("organic", [])
+        resultados = []
+        for item in organic:
+            link = item.get("link", "")
+            if not link:
+                continue
+            link_l = link.lower()
+            # Solo resultados chilenos o con precio
+            if not any(x in link_l for x in [".cl", "mercadolibre", "falabella", "paris"]):
+                if any(ind in link_l for ind in INDICADORES_EXTRANJEROS):
+                    continue
+            if any(ind in link_l for ind in INDICADORES_EXTRANJEROS):
+                continue
+            titulo = limpiar_nombre(item.get("title", ""))
+            snippet = item.get("snippet", "")
+            if len(titulo) < 4:
+                continue
+            # Extraer precio del snippet
+            pm = re.search(r'\$\s*([\d\.\,]{3,})', snippet + " " + titulo)
+            precio = None
+            if pm:
+                precio = limpiar_precio(re.sub(r'[^\d]', '', pm.group(1)))
+            # Registrar aunque no tenga precio (puede ser catálogo/fabricante)
+            domain_m = re.search(r'https?://(?:www\.)?([^/]+)', link)
+            tienda = domain_m.group(1)[:40] if domain_m else "Web"
+            resultados.append({
+                "tienda": tienda,
+                "nombre": titulo[:150],
+                "precio_con_iva": precio or 0,
+                "url": link,
+                "fuente": "serper_organico",
+                "pais": "CL",
+                "snippet": snippet[:200],
+            })
+            if len(resultados) >= limite:
+                break
+        # Filtrar los que no tienen precio para el ranking, pero guardarlos
+        con_precio = [r for r in resultados if r["precio_con_iva"] > 0]
+        if con_precio:
+            cache_resultados[cache_key] = {"data": con_precio, "timestamp": time.time()}
+        print(f"  [SerperOrg] {len(con_precio)} con precio / {len(resultados)} total")
+        return con_precio
+    except Exception as e:
+        print(f"  [SerperOrg] Error: {e}")
+        return []
+
+
+# ─── BÚSQUEDA MULTI-VARIANTE CON SERPER SHOPPING ─────────────────────────────
+
+def buscar_serper_variantes(variantes: list, limite_por_variante: int = 15) -> list:
+    """
+    Busca múltiples variantes en Serper Shopping en paralelo.
+    Las variantes vienen del query understanding IA.
+    """
+    if not SERPER_DISPONIBLE or not variantes:
+        return []
+    todos = []
+    urls_vistas = set()
+
+    def _buscar_variante(v):
+        return buscar_serper(v, limite_por_variante)
+
+    with ThreadPoolExecutor(max_workers=min(len(variantes), 3)) as ex:
+        futures = {ex.submit(_buscar_variante, v): v for v in variantes}
+        for future in as_completed(futures, timeout=20):
+            try:
+                nuevos = future.result()
+                for r in nuevos:
+                    clave = r.get("url") or normalizar(r.get("nombre", ""))
+                    if clave and clave not in urls_vistas:
+                        urls_vistas.add(clave)
+                        todos.append(r)
+            except Exception as e:
+                print(f"  [SerperVar] Error: {e}")
+    return todos
+
+
+# ─── VALIDACIÓN MASIVA CON IA ─────────────────────────────────────────────────
+
+def validar_lote_ia(producto: str, entidades: dict, resultados: list) -> list:
+    """
+    Envía los top resultados a DeepSeek para validación individual de confianza.
+    Retorna los resultados enriquecidos con 'confianza_ia' y 'producto_correcto'.
+    Solo se ejecuta cuando hay resultados con score < 70 o cuando entidades detectó
+    marca/modelo específico.
+    """
+    if not DEEPSEEK_API_KEY or not resultados:
+        return resultados
+    # Solo validar si hay marca/modelo detectado o si el top resultado tiene score bajo
+    score_top = resultados[0].get("score", 100) if resultados else 100
+    tiene_entidad_especifica = bool(entidades.get("marca") or entidades.get("modelo") or entidades.get("sku"))
+    if score_top >= 80 and not tiene_entidad_especifica:
+        return resultados  # No necesita validación
+    try:
+        top = resultados[:15]
+        payload = [
+            {
+                "id": i,
+                "nombre": r.get("nombre", "")[:100],
+                "tienda": r.get("tienda", "")[:30],
+                "precio": r.get("precio_con_iva", 0),
+            }
+            for i, r in enumerate(top)
+        ]
+        marca_str = entidades.get("marca") or "no especificada"
+        modelo_str = entidades.get("modelo") or "no especificado"
+        sku_str = entidades.get("sku") or "no especificado"
+        specs_str = ", ".join(entidades.get("specs", [])) or "ninguna"
+
+        prompt = f"""Eres un validador experto de productos industriales para el mercado chileno.
+
+Producto buscado: "{producto}"
+Marca: {marca_str}
+Modelo/Referencia: {modelo_str}
+SKU/Código: {sku_str}
+Especificaciones: {specs_str}
+
+Para cada resultado, determina si es exactamente el producto correcto.
+Responde SOLO JSON:
+{{
+  "validaciones": [
+    {{"id": 0, "producto_correcto": true, "confianza": 90, "motivo": "Coincide marca y modelo"}},
+    {{"id": 1, "producto_correcto": false, "confianza": 30, "motivo": "Diferente voltaje"}}
+  ]
+}}
+
+confianza: 0-100. producto_correcto: true si tiene ≥70 de confianza."""
+
+        r = requests.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"Valida estos {len(payload)} resultados:\n{json.dumps(payload, ensure_ascii=False)}"},
+                ],
+                "temperature": 0.05,
+                "max_tokens": 800,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=(5, 15),
+        )
+        if r.status_code != 200:
+            return resultados
+        data = r.json()
+        contenido = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        parsed = json.loads(contenido)
+        validaciones = {v["id"]: v for v in parsed.get("validaciones", []) if isinstance(v, dict)}
+        for i, res in enumerate(top):
+            val = validaciones.get(i, {})
+            res["confianza_ia"] = val.get("confianza", res.get("score", 0))
+            res["producto_correcto_ia"] = val.get("producto_correcto", True)
+            res["motivo_ia"] = val.get("motivo", "")
+        # Re-rankear: correctos primero, luego por confianza
+        top.sort(key=lambda x: (-int(x.get("producto_correcto_ia", True)), -x.get("confianza_ia", 0)))
+        return top + resultados[15:]
+    except Exception as e:
+        print(f"  [ValidIA] Error: {e}")
+        return resultados
+
+
+# ─── RANKING AVANZADO CON SISTEMA DE PUNTOS ──────────────────────────────────
+
+def calcular_score_avanzado(producto: str, resultado: dict, entidades: dict) -> int:
+    """
+    Sistema de puntuación avanzado basado en entidades extraídas por IA.
+    Prioridad: marca exacta (+40), modelo (+30), SKU (+30), fabricante (+20), etc.
+    """
+    score_base = resultado.get("score", calcular_concordancia(producto, resultado.get("nombre", "")))
+    nombre_r = normalizar(resultado.get("nombre", ""))
+    bonus = 0
+
+    marca = (entidades.get("marca") or "").lower().strip()
+    if marca and len(marca) > 1 and marca in nombre_r:
+        bonus += 20  # Marca exacta en nombre
+
+    modelo = (entidades.get("modelo") or "").lower().strip()
+    if modelo and len(modelo) > 1 and modelo in nombre_r:
+        bonus += 15  # Modelo exacto en nombre
+
+    sku = (entidades.get("sku") or "").lower().strip()
+    if sku and len(sku) > 1 and sku in nombre_r:
+        bonus += 20  # SKU exacto
+
+    # Specs técnicas detectadas
+    specs = [s.lower() for s in (entidades.get("specs") or []) if s]
+    if specs:
+        matches = sum(1 for s in specs if s in nombre_r)
+        bonus += min(15, matches * 5)  # Hasta +15 por specs
+
+    # Penalizar si es accesorio cuando no se busca accesorio
+    if not entidades.get("es_especifico"):
+        accesorio_kw = ["repuesto", "accesorio", "pieza", "para ", "kit para"]
+        if any(kw in nombre_r for kw in accesorio_kw):
+            bonus -= 20
+
+    return min(100, max(0, score_base + bonus))
+
+
 # ─── BÚSQUEDA PRINCIPAL ───────────────────────────────────────────────────────
 
 def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad"):
@@ -1115,7 +1422,16 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 urls_vistas.add(clave)
                 resultados.append(r)
 
-    # ── Query VTEX: solo palabras clave sin números puros ni stop words ────────
+    # ── ETAPA 0: Query Understanding con IA ──────────────────────────────────
+    # Extrae entidades (marca, modelo, SKU) y genera variantes de búsqueda optimizadas
+    print(f"  🧠 Etapa 0: Query Understanding...")
+    entidades = entender_consulta_ia(producto)
+    variantes = entidades.get("variantes") or [producto]
+    print(f"  💡 Variantes: {variantes}")
+    if entidades.get("marca"):
+        print(f"  🏷️  Marca: {entidades['marca']} | Modelo: {entidades.get('modelo')} | SKU: {entidades.get('sku')}")
+
+    # ── Preparar query VTEX (sin acentos, solo palabras clave) ───────────────
     PALABRAS_IGNORAR = {'con', 'para', 'por', 'los', 'las', 'del', 'una', 'uno',
                         'marca', 'similar', 'unidades', 'unidad', 'medidas', 'varias',
                         'resistente', 'acabado', 'interior', 'exterior', 'brillante'}
@@ -1125,30 +1441,33 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         and len(w) > 2
         and w.lower() not in PALABRAS_IGNORAR
     ]
-    # VTEX falla con acentos — normalizar antes de enviar
     def _sin_acentos(t):
         for a, b in {'á':'a','é':'e','í':'i','ó':'o','ú':'u','Á':'A','É':'E','Í':'I','Ó':'O','Ú':'U','ñ':'n','Ñ':'N'}.items():
             t = t.replace(a, b)
         return t
     query_vtex = _sin_acentos(' '.join(palabras_clave[:5]))
 
-    fuente_principal = "Serper" if SERPER_DISPONIBLE else "Selenium"
-    print(f"  📡 {fuente_principal} + MeLi + Sodimac + VTEX × {len(VTEX_STORES)} (VTEX: '{query_vtex}')")
+    # ── ETAPA 1: Búsqueda paralela multi-fuente ────────────────────────────────
+    # Shopping (múltiples variantes) + Orgánico + MeLi + Sodimac + VTEX
+    fuente_principal = "Serper Shopping+Orgánico" if SERPER_DISPONIBLE else "Selenium"
+    print(f"  📡 Etapa 1: {fuente_principal} + MeLi + Sodimac + VTEX ({len(VTEX_STORES)} tiendas)")
 
-    # ── Fase 1: TODO en paralelo — Serper es la fuente principal ─────────────
-    # Serper es API HTTP rápida → puede ir en el ThreadPool sin problema
-    ex = ThreadPoolExecutor(max_workers=8)
+    ex = ThreadPoolExecutor(max_workers=10)
     try:
         futures = {
             ex.submit(buscar_mercadolibre, producto, 12): "MercadoLibre",
             ex.submit(buscar_sodimac, query_vtex, 8): "Sodimac",
         }
         if SERPER_DISPONIBLE:
-            futures[ex.submit(buscar_serper, producto, max(limite, 20))] = "Serper"
+            # Shopping con variantes IA
+            futures[ex.submit(buscar_serper_variantes, variantes, max(limite, 15))] = "Serper Shopping (variantes)"
+            # Búsqueda orgánica — fabricantes, distribuidores, catálogos
+            futures[ex.submit(buscar_serper_organico, variantes[0], 10)] = "Serper Orgánico"
         for store in VTEX_STORES:
             futures[ex.submit(buscar_vtex, store, query_vtex, 8)] = store["nombre"]
+
         try:
-            for future in as_completed(futures, timeout=20):
+            for future in as_completed(futures, timeout=25):
                 nombre_f = futures[future]
                 try:
                     nuevos = future.result()
@@ -1157,34 +1476,43 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
                 except Exception as e:
                     print(f"  ❌ {nombre_f}: {e}")
         except Exception:
-            print(f"  ⚠️ Timeout 20s fase 1 — continuando con {len(resultados)}")
+            print(f"  ⚠️ Timeout 25s etapa 1 — continuando con {len(resultados)}")
     finally:
         try:
             ex.shutdown(wait=False, cancel_futures=True)
         except TypeError:
             ex.shutdown(wait=False)
 
-    # ── Fase 2: Selenium SOLO como fallback (sin Serper o muy pocos resultados) ──
+    # ── ETAPA 2: Fallback Selenium si hay muy pocos resultados ────────────────
     if not SERPER_DISPONIBLE and len(resultados) < 5:
-        print(f"  📡 Fallback Google Shopping (Selenium)...")
+        print(f"  📡 Fallback Selenium (sin Serper)...")
         gshop = buscar_google_shopping(producto, max(limite, 15))
         agregar(gshop)
-        print(f"  ✅ Google Shopping: {len(gshop)} | Total: {len(resultados)}")
+        print(f"  ✅ Google Shopping Selenium: {len(gshop)} | Total: {len(resultados)}")
+
+    # ── Reintento con variante más simple si muy pocos resultados ────────────
+    if len(resultados) < 5 and SERPER_DISPONIBLE and len(variantes) > 1:
+        print(f"  🔄 Reintento con variante simplificada: {variantes[-1]}")
+        reintento = buscar_serper(variantes[-1], 15)
+        agregar(reintento)
+        print(f"  ✅ Reintento: {len(reintento)} | Total: {len(resultados)}")
 
     if not resultados:
         return [], {}
 
-    # ── Scoring y ranking ─────────────────────────────────────────────────────
+    # ── ETAPA 3: Scoring avanzado ─────────────────────────────────────────────
+    print(f"  📊 Etapa 3: Scoring avanzado ({len(resultados)} candidatos)...")
     analisis_buscado = analizar_producto_buscado(producto)
     conv_lower = conversion.lower() if conversion else "unidad"
+
     for r in resultados:
         ar = analizar_resultado_encontrado(r, analisis_buscado)
-        score = ar["score_python"]
+        # Score avanzado incluye bonus por entidades IA (marca, modelo, SKU, specs)
+        score = calcular_score_avanzado(producto, {**r, "score": ar["score_python"]}, entidades)
         nombre_r = r.get("nombre", "").lower()
         if conv_lower not in ("unidad", "und", "un", ""):
             if detectar_unidad_resultado(nombre_r, conv_lower):
                 score = min(100, score + 8)
-        # Detector de unidad/empaque — avisa si el resultado no calza con lo pedido
         unidad_det, alerta_unidad = detectar_empaque(nombre_r, conv_lower)
         nivel, etiqueta = clasificar_concordancia(score)
         r.update({
@@ -1202,10 +1530,16 @@ def realizar_busqueda(producto: str, limite: int = 15, conversion: str = "unidad
         })
 
     resultados.sort(key=lambda x: (-x["score"], -x["prioridad_tienda"], x["precio_con_iva"]))
-    # Umbral bajo (5) para no filtrar resultados válidos de Google Shopping
     filtrados = [r for r in resultados if r["score"] >= 5] or resultados
 
-    # ── Variedad de tiendas: máx 3 por tienda, intercalando ──────────────────
+    # ── ETAPA 4: Validación con IA (para productos específicos o score bajo) ──
+    score_top = filtrados[0].get("score", 0) if filtrados else 0
+    tiene_entidad = bool(entidades.get("marca") or entidades.get("modelo") or entidades.get("sku"))
+    if (score_top < 75 or tiene_entidad) and len(filtrados) >= 3:
+        print(f"  🤖 Etapa 4: Validación IA (score_top={score_top}, entidad={tiene_entidad})...")
+        filtrados = validar_lote_ia(producto, entidades, filtrados)
+
+    # ── ETAPA 5: Diversificar tiendas y aplicar límite ────────────────────────
     filtrados = diversificar_tiendas(filtrados, max_por_tienda=3)
 
     return filtrados[:limite], analisis_buscado
@@ -1399,6 +1733,7 @@ def busqueda_robusta():
         "deficit": max(0, minimo_requerido - len(resultados_formateados)),
         "pais_busqueda": "CL",
         "analisis_producto": analisis_buscado,
+        "deepseek_activo": bool(DEEPSEEK_API_KEY),
     })
 
 

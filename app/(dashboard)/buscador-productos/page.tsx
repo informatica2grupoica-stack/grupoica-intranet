@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import {
@@ -8,7 +8,8 @@ import {
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X,
   Download, FileSpreadsheet, ShoppingBag,
   Upload, Eye, Settings, ChevronDown, ChevronUp,
-  TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles
+  TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles,
+  FileText, Zap
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -96,9 +97,110 @@ const MatchBadge = ({ pct }: { pct: number }) => {
   );
 };
 
+// ─── Banner PDF animado (dentro del Modal Preview) ───────────────────────────
+type EstadoPdf = 'idle' | 'cargando' | 'ok' | 'error';
+
+const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
+  onCargarPdf: (f: File) => void;
+  cargandoBases: boolean;
+  basesOk: boolean;
+}) => {
+  const refInput = useRef<HTMLInputElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Animación de entrada con delay para que el modal cargue primero
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 400); return () => clearTimeout(t); }, []);
+
+  if (basesOk) {
+    return (
+      <div className="mx-5 mb-4 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+        <div>
+          <p className="text-xs font-semibold text-emerald-800">Bases cargadas — los nombres se buscarán con las especificaciones correctas</p>
+          <p className="text-[10px] text-emerald-600 mt-0.5">Gemini leyó el PDF y completó las descripciones de tus ítems</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`mx-5 mb-4 transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
+    >
+      <input
+        ref={refInput}
+        type="file"
+        accept=".pdf,application/pdf"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onCargarPdf(f); e.target.value = ''; }}
+      />
+      <button
+        onClick={() => !cargandoBases && refInput.current?.click()}
+        disabled={cargandoBases}
+        className={`w-full group relative overflow-hidden rounded-xl border-2 border-dashed px-4 py-3.5 text-left transition-all
+          ${cargandoBases
+            ? 'border-violet-300 bg-violet-50 cursor-wait'
+            : 'border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 hover:border-violet-400 hover:from-violet-100 hover:to-indigo-100 cursor-pointer'
+          }`}
+      >
+        {/* Pulso animado en el borde cuando está idle */}
+        {!cargandoBases && (
+          <span className="absolute inset-0 rounded-xl border-2 border-violet-400 opacity-0 group-hover:opacity-0 animate-[ping_2s_ease-in-out_infinite] pointer-events-none" style={{ animationDelay: '0.5s' }} />
+        )}
+        <div className="flex items-center gap-3">
+          {cargandoBases ? (
+            <div className="h-8 w-8 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+              <Loader2 size={16} className="text-violet-600 animate-spin" />
+            </div>
+          ) : (
+            <div className="h-8 w-8 rounded-lg bg-violet-100 group-hover:bg-violet-200 flex items-center justify-center shrink-0 transition-colors">
+              <FileText size={16} className="text-violet-600" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            {cargandoBases ? (
+              <>
+                <p className="text-xs font-semibold text-violet-800">Leyendo el PDF con Gemini...</p>
+                <p className="text-[10px] text-violet-500 mt-0.5">Esto puede tardar hasta 30 segundos</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-violet-800">¿Tienes las bases de licitación en PDF?</p>
+                  <span className="text-[9px] px-1.5 py-0.5 bg-violet-200 text-violet-700 rounded-full font-bold uppercase tracking-wide">Recomendado</span>
+                </div>
+                <p className="text-[10px] text-violet-600 mt-0.5">
+                  Gemini lee el PDF y corrige los nombres mal escritos en tu Excel — mejora la precisión de búsqueda
+                </p>
+              </>
+            )}
+          </div>
+          {!cargandoBases && (
+            <div className="flex items-center gap-1 text-[10px] font-semibold text-violet-600 shrink-0">
+              <Zap size={11} />
+              Cargar PDF
+            </div>
+          )}
+        </div>
+        {cargandoBases && (
+          <div className="mt-2.5 h-1 rounded-full bg-violet-100 overflow-hidden">
+            <div className="h-full bg-violet-400 rounded-full animate-[progress_2s_ease-in-out_infinite]"
+              style={{ animation: 'pulse 1.5s ease-in-out infinite alternate', width: '60%' }} />
+          </div>
+        )}
+      </button>
+    </div>
+  );
+};
+
 // ─── Modal Preview Excel ──────────────────────────────────────────────────────
-const ModalPreview = ({ productos, onClose, onConfirm }: {
-  productos: ProductoExcel[]; onClose: () => void; onConfirm: () => void;
+const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk }: {
+  productos: ProductoExcel[];
+  onClose: () => void;
+  onConfirm: () => void;
+  onCargarPdf: (f: File) => void;
+  cargandoBases: boolean;
+  basesOk: boolean;
 }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col">
@@ -109,7 +211,13 @@ const ModalPreview = ({ productos, onClose, onConfirm }: {
         </div>
         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
       </div>
-      <div className="overflow-auto flex-1 p-5">
+
+      {/* Banner PDF animado */}
+      <div className="pt-4">
+        <BannerPdf onCargarPdf={onCargarPdf} cargandoBases={cargandoBases} basesOk={basesOk} />
+      </div>
+
+      <div className="overflow-auto flex-1 px-5 pb-2">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
@@ -140,11 +248,16 @@ const ModalPreview = ({ productos, onClose, onConfirm }: {
         </table>
         {productos.length > 60 && <p className="text-center text-xs text-slate-400 mt-3">+ {productos.length - 60} más</p>}
       </div>
-      <div className="flex justify-end gap-3 p-5 border-t">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-        <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
-          <Search size={15} /> Iniciar búsqueda ({productos.length})
-        </button>
+      <div className="flex justify-between items-center gap-3 p-5 border-t">
+        <p className="text-[10px] text-slate-400">
+          {basesOk ? '✅ Búsqueda con corrección de nombres activada' : 'Carga el PDF para mayor precisión en los resultados'}
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+            <Search size={15} /> Iniciar búsqueda ({productos.length})
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -423,23 +536,31 @@ export default function MonitorMasivoICA() {
       const raw = data.resultados || [];
       console.log(`📊 [${numero}] Python: ${raw.length} resultados`);
 
-      // Reranking IA si hay resultados suficientes
+      // Reranking IA con entidades detectadas (mejora precisión cuando hay marca/modelo/SKU)
       let final = raw;
       if (raw.length > 3) {
         try {
           const ir = await fetch('/api/analizar-con-ia', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ producto, numero_item: numero, minimo_requerido: 15, resultados_raw: raw, analisis_producto: data.analisis_producto }),
+            body: JSON.stringify({
+              producto,
+              numero_item: numero,
+              minimo_requerido: 15,
+              resultados_raw: raw,
+              analisis_producto: data.analisis_producto,
+              entidades_detectadas: data.entidades_detectadas || null,
+            }),
           });
           if (ir.ok) {
             const id = await ir.json();
             if (id.success && id.resultados?.length > 0) final = id.resultados;
           }
-        } catch { /* usar orden Python */ }
+        } catch { /* usar orden del búsqueda */ }
       }
 
       const resultados: ProductoResultado[] = final.map((r: any) => {
-        const pct = r.score ?? r.porcentaje ?? r.matching?.porcentaje ?? 0;
+        // Usar confianza_ia si disponible, sino score base
+        const pct = r.confianza_ia ?? r.score ?? r.porcentaje ?? r.matching?.porcentaje ?? 0;
         return {
           tienda: r.tienda || '',
           nombre: r.nombre || '',
@@ -450,7 +571,11 @@ export default function MonitorMasivoICA() {
           score: pct,
           unidad_detectada: r.unidad_detectada || '',
           alerta_unidad: !!r.alerta_unidad,
-          matching: { porcentaje: pct, nivel: pct >= 85 ? 'exacto' : pct >= 60 ? 'parcial' : 'bajo', razon: r.etiqueta_concordancia || '' },
+          matching: {
+            porcentaje: pct,
+            nivel: pct >= 85 ? 'exacto' : pct >= 60 ? 'parcial' : 'bajo',
+            razon: r.motivo_ia || r.etiqueta_concordancia || '',
+          },
         };
       }).sort((a: any, b: any) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
 
@@ -683,7 +808,14 @@ export default function MonitorMasivoICA() {
   return (
     <div className="min-h-screen bg-slate-50">
       {showModal && productosExcel.length > 0 && (
-        <ModalPreview productos={productosExcel} onClose={() => setShowModal(false)} onConfirm={iniciarExcel} />
+        <ModalPreview
+          productos={productosExcel}
+          onClose={() => setShowModal(false)}
+          onConfirm={iniciarExcel}
+          onCargarPdf={cargarBases}
+          cargandoBases={cargandoBases}
+          basesOk={!!basesInfo}
+        />
       )}
       {showBasesModal && basesItems.length > 0 && (
         <ModalBases items={basesItems} onClose={() => setShowBasesModal(false)} />
