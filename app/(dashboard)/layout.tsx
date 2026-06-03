@@ -1,11 +1,12 @@
 // app/(dashboard)/layout.tsx
 "use client";
 import { supabase } from "@/lib/supabase";
+import { SECTIONS_CONFIG, getSectionKeyForPath, puedeVerSeccion, ALL_SECTION_ITEMS } from "@/lib/sections";
 import {
   Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
-  BookOpen, CreditCard, Receipt, Briefcase
+  BookOpen, CreditCard, Receipt, Briefcase, Lock
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,7 +14,7 @@ import { useEffect, useState } from "react";
 import ChatBot from "@/components/ChatBot";
 import { ToastContainer } from "@/components/Toast";
 
-// ─── Identidad y metadatos de cada vista (identificador por vista) ────────────
+// ─── Metadatos de vista ───────────────────────────────────────────────────────
 const VIEW_META: Record<string, { id: string; label: string }> = {
   "/":                    { id: "MP-00",  label: "Inicio" },
   "/chat":                { id: "MP-CHT", label: "Chat Interno" },
@@ -32,30 +33,48 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/dispositivos":        { id: "MP-DEV", label: "Dispositivos" },
 };
 
-// Etiquetas legibles de privilegios (campo perfiles.permisos)
+// ─── Icono por sección (key → componente) ────────────────────────────────────
+const SECTION_ICONS: Record<string, React.ElementType> = {
+  "inicio":             Home,
+  "chat":               MessageSquare,
+  "tareas":             CheckSquare,
+  "dashboard":          BarChart3,
+  "buscador-productos": Box,
+  "historial-precios":  TrendingUp,
+  "obuma-clientes":     Users,
+  "ventas":             TrendingUp,
+  "obuma-productos":    Package,
+  "compras":            ShoppingCart,
+  "proveedores":        Building2,
+  "obuma-proveedores":  Database,
+  "contabilidad":       BookOpen,
+  "usuarios":           Users,
+  "dispositivos":       Laptop,
+};
+
 const PERM_LABELS: Record<string, string> = {
-  can_assign_tasks: "Asignar tareas",
-  can_create_tasks: "Crear tareas",
-  can_view_billing: "Ver facturación",
-  can_manage_devices: "Gestionar dispositivos",
-  can_create_products: "Crear productos",
-  can_search_products_only: "Solo búsqueda de productos",
+  can_assign_tasks:        "Asignar tareas",
+  can_create_tasks:        "Crear tareas",
+  can_view_billing:        "Ver facturación",
+  can_manage_devices:      "Gestionar dispositivos",
+  can_create_products:     "Crear productos",
+  can_search_products_only:"Solo búsqueda de productos",
 };
 
 const ROL_LABEL: Record<string, string> = {
   superuser: "Super Usuario", admin: "Administrador", user: "Usuario",
-  rrhh: "Recursos Humanos", jefe: "Jefatura", vendedor: "Vendedor",
+  rrhh: "Recursos Humanos",   jefe: "Jefatura",       vendedor: "Vendedor",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState("");
-  const [userName, setUserName] = useState("Cargando…");
-  const [userRol, setUserRol] = useState<string | null>(null);
-  const [permisos, setPermisos] = useState<Record<string, boolean> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showPerms, setShowPerms] = useState(false);
+  const [userEmail, setUserEmail]   = useState("");
+  const [userName, setUserName]     = useState("Cargando…");
+  const [userRol, setUserRol]       = useState<string | null>(null);
+  const [permisos, setPermisos]     = useState<Record<string, any> | null>(null);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [showPerms, setShowPerms]   = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -79,74 +98,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.href = "/login"; };
 
-  const isOnlyProductsUser = permisos?.can_search_products_only === true;
-  useEffect(() => {
-    if (!isLoading && isOnlyProductsUser) {
-      const allowed = ["/buscador-productos", "/obuma-productos"];
-      if (!allowed.includes(pathname)) router.push("/buscador-productos");
+  const esAdminOSuper = userRol === 'admin' || userRol === 'superuser';
+  const secciones: Record<string, boolean> | null | undefined = permisos?.secciones;
+
+  // Determina si el usuario puede ver una sección
+  const puedeVerSeccionFn = (key: string): boolean => {
+    if (esAdminOSuper) return true;
+    // Retrocompatibilidad: can_search_products_only restringe a productos
+    if (permisos?.can_search_products_only === true) {
+      return ["buscador-productos", "obuma-productos"].includes(key);
     }
-  }, [isLoading, isOnlyProductsUser, pathname, router]);
+    return puedeVerSeccion(secciones, key);
+  };
 
-  const sections = [
-    {
-      title: "PRINCIPAL",
-      items: [{ name: "Inicio", icon: Home, path: "/" }],
-    },
-    {
-      title: "COMUNICACIÓN",
-      items: [
-        { name: "Chat Interno", icon: MessageSquare, path: "/chat" },
-        { name: "Tareas", icon: CheckSquare, path: "/tareas" },
-      ],
-    },
-    {
-      title: "ANÁLISIS & PRECIOS",
-      items: [
-        { name: "Dashboard", icon: BarChart3, path: "/dashboard" },
-        { name: "Buscador de Productos", icon: Box, path: "/buscador-productos" },
-        { name: "Historial de Precios", icon: TrendingUp, path: "/historial-precios" },
-      ],
-    },
-    {
-      title: "CRM & CLIENTES",
-      items: [
-        { name: "Clientes Obuma", icon: Users, path: "/obuma-clientes" },
-      ],
-    },
-    {
-      title: "VENTAS",
-      items: [
-        { name: "Ventas / Cotizaciones", icon: TrendingUp, path: "/ventas" },
-      ],
-    },
-    {
-      title: "INVENTARIO & COMPRAS",
-      items: [
-        { name: "Productos Obuma", icon: Package, path: "/obuma-productos" },
-        { name: "Compras & Órdenes (OC)", icon: ShoppingCart, path: "/compras" },
-        { name: "Mis Proveedores", icon: Building2, path: "/proveedores" },
-        { name: "Proveedores Obuma", icon: Database, path: "/obuma-proveedores" },
-      ],
-    },
-    {
-      title: "FINANZAS",
-      items: [
-        { name: "Contabilidad", icon: BookOpen, path: "/contabilidad" },
-      ],
-    },
-    {
-      title: "ADMINISTRACIÓN",
-      items: [
-        { name: "Usuarios", icon: Users, path: "/usuarios" },
-        { name: "Dispositivos TI", icon: Laptop, path: "/dispositivos" },
-      ],
-    },
-  ];
+  // ─── Redirect si accede directamente a una URL bloqueada ─────────────────
+  useEffect(() => {
+    if (isLoading || !permisos || esAdminOSuper) return;
+    const currentKey = getSectionKeyForPath(pathname);
+    if (!currentKey) return;
+    if (!puedeVerSeccionFn(currentKey)) {
+      const primerPermitido = ALL_SECTION_ITEMS.find(i => puedeVerSeccionFn(i.key));
+      router.replace(primerPermitido?.path ?? "/");
+    }
+  }, [isLoading, pathname, permisos, userRol]);
 
-  const meta = VIEW_META[pathname] || { id: "MP-··", label: (pathname.split("/").filter(Boolean).pop() || "inicio").replace(/-/g, " ") };
-  const permActivos = permisos ? Object.entries(permisos).filter(([, v]) => v === true) : [];
+  // ─── Sidebar filtrado por permisos de sección ─────────────────────────────
+  const visibleSections = SECTIONS_CONFIG.map(group => ({
+    title: group.group,
+    items: group.items
+      .filter(item => puedeVerSeccionFn(item.key))
+      .map(item => ({
+        name:  item.label,
+        icon:  SECTION_ICONS[item.key] ?? Box,
+        path:  item.path,
+      })),
+  })).filter(group => group.items.length > 0);
 
-  // ─── Marca ─────────────────────────────────────────────────────────────────
+  const meta = VIEW_META[pathname] || {
+    id: "MP-··",
+    label: (pathname.split("/").filter(Boolean).pop() || "inicio").replace(/-/g, " "),
+  };
+
+  const permActivos = permisos
+    ? Object.entries(permisos)
+        .filter(([k, v]) => k !== "secciones" && v === true)
+    : [];
+
+  // ─── Marca ────────────────────────────────────────────────────────────────
   const Brand = ({ dark = true }: { dark?: boolean }) => (
     <div className="flex items-center gap-3">
       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#059669] to-[#10B981] flex items-center justify-center shadow-lg shadow-blue-900/30">
@@ -161,7 +159,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   );
 
-  // ─── Tarjeta de usuario + privilegios ────────────────────────────────────────
+  // ─── Tarjeta usuario ──────────────────────────────────────────────────────
   const UserCard = () => (
     <div className="relative">
       {showPerms && (
@@ -176,12 +174,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-[9px] text-slate-400">Rol</span>
             <p className="text-xs font-bold text-[#059669]">{userRol ? (ROL_LABEL[userRol] || userRol) : "—"}</p>
           </div>
-          <div className="space-y-1">
-            {permActivos.length ? permActivos.map(([k]) => (
-              <div key={k} className="flex items-center gap-2 text-[11px] text-slate-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> {PERM_LABELS[k] || k}
+          {/* Secciones permitidas */}
+          {!esAdminOSuper && secciones && (
+            <div className="mb-2">
+              <span className="text-[9px] text-slate-400">Secciones habilitadas</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {ALL_SECTION_ITEMS
+                  .filter(i => puedeVerSeccionFn(i.key))
+                  .map(i => (
+                    <span key={i.key} className="text-[8px] bg-emerald-50 text-emerald-600 border border-emerald-100 rounded px-1.5 py-0.5 font-bold">
+                      {i.label}
+                    </span>
+                  ))}
               </div>
-            )) : <p className="text-[11px] text-slate-400">Privilegios estándar de su rol.</p>}
+            </div>
+          )}
+          <div className="space-y-1">
+            {permActivos.length
+              ? permActivos.map(([k]) => (
+                  <div key={k} className="flex items-center gap-2 text-[11px] text-slate-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> {PERM_LABELS[k] || k}
+                  </div>
+                ))
+              : <p className="text-[11px] text-slate-400">Privilegios estándar de su rol.</p>}
           </div>
         </div>
       )}
@@ -205,28 +220,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   );
 
-  // ─── Vista restringida (solo productos) ──────────────────────────────────────
-  if (isOnlyProductsUser) {
-    return (
-      <div className="flex min-h-screen bg-[#F3F4F6]">
-        <main className="flex-1 p-6 md:p-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <Brand dark={false} />
-              <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">
-                <LogOut className="w-4 h-4" /> Cerrar Sesión
-              </button>
-            </div>
-            {children}
-          </div>
-        </main>
-        <ChatBot />
-        <ToastContainer />
-      </div>
-    );
-  }
-
-  // ─── Layout completo ─────────────────────────────────────────────────────────
+  // ─── Layout (único para todos los roles) ──────────────────────────────────
   return (
     <div className="flex min-h-screen bg-[#F3F4F6]">
       {/* SIDEBAR */}
@@ -234,7 +228,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-5 py-6 border-b border-white/5"><Brand /></div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
-          {sections.map((section, idx) => (
+          {visibleSections.map((section, idx) => (
             <div key={idx} className="mb-5">
               <h3 className="px-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">{section.title}</h3>
               <div className="space-y-1">
@@ -243,19 +237,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   const cls = `group flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all relative ${
                     isActive ? "bg-gradient-to-r from-[#059669]/25 to-transparent text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
                   }`;
-                  const content = (
-                    <>
+                  return (
+                    <Link key={item.path} href={item.path} className={cls}>
                       {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r bg-[#10B981]" />}
                       <span className="flex items-center gap-3">
                         <item.icon className={`w-[18px] h-[18px] transition-colors ${isActive ? "text-[#10B981]" : "text-slate-500 group-hover:text-[#10B981]"}`} />
                         {item.name}
                       </span>
-                      {(item as any).hasSub && <ChevronRight className="w-3 h-3 text-slate-600" />}
-                    </>
+                    </Link>
                   );
-                  return (item as any).external
-                    ? <a key={item.path} href={item.path} target="_blank" rel="noopener noreferrer" className={cls}>{content}</a>
-                    : <Link key={item.path} href={item.path} className={cls}>{content}</Link>;
                 })}
               </div>
             </div>
@@ -268,7 +258,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* CONTENIDO */}
       <main className="flex-1 ml-64 p-6 md:p-8">
         <div className="max-w-[1600px] mx-auto">
-          {/* HEADER con identificador de vista */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-7">
             <div className="flex items-center gap-3">
               <span className="font-mono text-[10px] font-bold tracking-wider text-white bg-gradient-to-r from-[#059669] to-[#10B981] px-2.5 py-1 rounded-md shadow-sm">
