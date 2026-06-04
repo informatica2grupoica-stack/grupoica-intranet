@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     const sheetName = formData.get('sheetName') as string || 'COSTEO';
     const seleccionadosRaw = formData.get('seleccionados') as string;
     const modo = formData.get('modo') as string || 'manual';
+    const colsRaw = formData.get('cols') as string | null;
 
     if (!file) return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
     if (!seleccionadosRaw) return NextResponse.json({ error: 'Sin datos de precios' }, { status: 400 });
@@ -31,36 +32,51 @@ export async function POST(req: NextRequest) {
     const cellText = (cell: ExcelJS.Cell): string => {
       const v = cell.value;
       if (v == null) return '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = v as any;
       if (typeof v === 'object') {
-        if ('richText' in (v as any)) return (v as any).richText.map((r: any) => r.text ?? '').join('');
-        if ('result' in (v as any)) return String((v as any).result ?? '');
-        if ('text' in (v as any)) return String((v as any).text ?? '');
+        if ('richText' in a) return a.richText.map((r: any) => r.text ?? '').join('');
+        if ('result' in a) return String(a.result ?? '');
+        if ('text' in a) return String(a.text ?? '');
       }
       return String(v);
     };
 
-    // ── Detectar fila de encabezados y columnas (1-indexado) ──────────────────
-    let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
+    // ── Usar índices enviados por el cliente (SheetJS los detecta correctamente) ─
+    // SheetJS usa 0-indexed; ExcelJS usa 1-indexed → sumar 1 a columnas y filas
+    let headerRow: number, colItem: number, colValor: number, colLink: number;
 
-    for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
-      const cells: string[] = [];
-      ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
-        cells[cn] = cellText(cell).toUpperCase().trim();
-      });
-      if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
-        headerRow = rn;
-        cells.forEach((h, cn) => {
-          if (!h) return;
-          if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
-          else if (h.includes('VALOR') && h.includes('IVA')) colValor = cn;
-          else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
+    if (colsRaw) {
+      // El cliente ya detectó correctamente con SheetJS — usamos esos índices
+      const cols = JSON.parse(colsRaw);
+      headerRow = cols.headerRow + 1;   // SheetJS 0-indexed → ExcelJS 1-indexed
+      colItem   = cols.colItem   + 1;
+      colValor  = cols.colValor  + 1;
+      colLink   = cols.colLink >= 0 ? cols.colLink + 1 : -1;
+    } else {
+      // Fallback: detección propia con ExcelJS (1-indexed)
+      headerRow = -1; colItem = -1; colValor = -1; colLink = -1;
+      for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
+        const cells: string[] = [];
+        ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
+          cells[cn] = cellText(cell).toUpperCase().trim();
         });
-        break;
+        if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
+          headerRow = rn;
+          cells.forEach((h, cn) => {
+            if (!h) return;
+            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
+            else if ((h.includes('VALOR') || h.includes('PRECIO')) && h.includes('IVA')) colValor = cn;
+            else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
+          });
+          break;
+        }
       }
+      if (headerRow < 0 || colItem < 0)
+        return NextResponse.json({ error: 'No se encontró columna ITEM' }, { status: 400 });
+      if (colValor < 0)
+        return NextResponse.json({ error: 'No se encontró columna VALOR C/IVA' }, { status: 400 });
     }
-
-    if (headerRow < 0 || colItem < 0) return NextResponse.json({ error: 'No se encontró columna ITEM' }, { status: 400 });
-    if (colValor < 0) return NextResponse.json({ error: 'No se encontró columna VALOR C/IVA' }, { status: 400 });
 
     // ── Rellenar precios y links ──────────────────────────────────────────────
     const mapa = new Map(seleccionados.map(s => [s.numero, s]));
@@ -71,12 +87,9 @@ export async function POST(req: NextRequest) {
       const rawKey = cellText(row.getCell(colItem)).trim();
       if (!rawKey) continue;
 
-      // Intentar match directo, luego numérico (por si "4" vs "4.0")
+      // Match directo → luego numérico (por si "4" vs "4.0")
       let dato = mapa.get(rawKey);
-      if (!dato) {
-        const numKey = String(parseFloat(rawKey));
-        dato = mapa.get(numKey);
-      }
+      if (!dato) dato = mapa.get(String(parseFloat(rawKey)));
       if (!dato) continue;
 
       row.getCell(colValor).value = dato.precio;
@@ -84,7 +97,8 @@ export async function POST(req: NextRequest) {
       filled++;
     }
 
-    if (!filled) return NextResponse.json({ error: 'No se encontraron ítems para rellenar — verifica que los números de ítem coincidan' }, { status: 400 });
+    if (!filled)
+      return NextResponse.json({ error: 'No se encontraron ítems para rellenar — verifica que los números de ítem coincidan' }, { status: 400 });
 
     const out = await wb.xlsx.writeBuffer();
     const nombreModo: Record<string, string> = {

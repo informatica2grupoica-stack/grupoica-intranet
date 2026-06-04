@@ -431,6 +431,8 @@ export default function MonitorMasivoICA() {
   const [pestanas, setPestanas]               = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel]       = useState<File | null>(null);
   const [workbook, setWorkbook]               = useState<XLSX.WorkBook | null>(null);
+  // Columnas detectadas por SheetJS (0-indexed) — se pasan al servidor para el export ExcelJS
+  const [colsExcel, setColsExcel] = useState<{ headerRow: number; colItem: number; colValor: number; colLink: number } | null>(null);
 
   const [contexto, setContexto]         = useState('');
   const [mostrarConfig, setMostrarConfig] = useState(false);
@@ -571,6 +573,7 @@ export default function MonitorMasivoICA() {
           else if (h.includes('LINK')) colLink = j;
         });
         console.log(`📌 Headers fila ${i+1} | ITEM:${colItem} DETALLE:${colDetalle} CANT:${colCantidad} VALOR:${colValor} CONV:${colConversion}`);
+        setColsExcel({ headerRow: i, colItem, colValor, colLink });
         break;
       }
     }
@@ -782,6 +785,8 @@ export default function MonitorMasivoICA() {
       fd.append('sheetName', sheetNameActual);
       fd.append('seleccionados', JSON.stringify(seleccionados));
       fd.append('modo', modo);
+      // Pasar los índices de columna detectados por SheetJS (el servidor los usa directamente)
+      if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
 
       const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
 
