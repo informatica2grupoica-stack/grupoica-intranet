@@ -164,20 +164,24 @@ export default function CapacitacionesPage() {
     setSubiendoArchivo(true);
     try {
       const tipo_archivo = archivoPendiente.name.endsWith(".pptx") ? "pptx" : "pdf";
+
+      // 1. Pedir URL firmada al servidor (crea el bucket si no existe)
       const res = await fetch("/api/capacitaciones/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo_archivo }),
       });
-      const { signedUrl, path, error } = await res.json();
-      if (error) throw new Error(error);
+      const urlData = await res.json();
+      if (urlData.error) throw new Error(urlData.error);
 
-      const uploadRes = await fetch(signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": archivoPendiente.type || "application/octet-stream" },
-        body: archivoPendiente,
-      });
-      if (!uploadRes.ok) throw new Error("Error al subir el archivo");
+      const { bucket, path, token } = urlData;
+
+      // 2. Subir usando uploadToSignedUrl del cliente Supabase (igual que buscador-productos)
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .uploadToSignedUrl(path, token, archivoPendiente);
+
+      if (upErr) throw new Error(`Error subiendo archivo: ${upErr.message}`);
 
       return { archivo_url: path, tipo_archivo };
     } catch (e: any) {
