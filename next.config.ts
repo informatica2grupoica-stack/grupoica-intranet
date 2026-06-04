@@ -1,6 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      // ExcelJS y xlsx acceden a módulos de Node.js que no existen en el browser
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        stream: false,
+        zlib: false,
+        crypto: false,
+        buffer: false,
+      };
+    }
+    return config;
+  },
   async rewrites() {
     return [
       {

@@ -835,44 +835,62 @@ export default function MonitorMasivoICA() {
     }
   };
 
+  // helper: descarga un workbook XLSX como blob sin usar writeFile (evita error de fs en Next.js)
+  const descargarXlsx = (wb: import('xlsx').WorkBook, filename: string) => {
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // ─── Exportar MEJOR resultado ─────────────────────────────────────────────────
   const exportarMejor = () => {
-    const rows = itemsLista.map(item => {
-      const orig = productosExcel.find(p => String(p.numero) === item.numero);
-      const mejor = seleccion.get(item.numero) || item.mejor_match;
-      const precio = mejor?.precio_valor || 0;
-      const neto = Math.round(precio / IVA);
-      return {
-        ITEM: item.numero, DETALLE: item.nombre, CANTIDAD: orig?.cantidad||1,
-        'VALOR REF C/IVA': orig?.valor_civa||0, 'PRECIO WEB C/IVA': precio,
-        'COSTO NETO UNIT': neto, 'COSTO NETO TOTAL': Math.round(neto*(orig?.cantidad||1)),
-        TIENDA: mejor?.tienda||'Sin resultados', '% MATCH': `${mejor?.matching?.porcentaje??0}%`,
-        LINK: mejor?.link||'',
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [8,45,10,16,18,18,18,25,10,55].map(w => ({ wch: w }));
-    const wb2 = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb2, ws, 'Mejor_Resultado');
-    XLSX.writeFile(wb2, `mejor_${new Date().toISOString().split('T')[0]}.xlsx`);
-    notify('Excel exportado', 'success');
+    try {
+      const rows = itemsLista.map(item => {
+        const orig = productosExcel.find(p => String(p.numero) === item.numero);
+        const mejor = seleccion.get(item.numero) || item.mejor_match;
+        const precio = mejor?.precio_valor || 0;
+        const neto = Math.round(precio / IVA);
+        return {
+          ITEM: item.numero, DETALLE: item.nombre, CANTIDAD: orig?.cantidad||1,
+          'VALOR REF C/IVA': orig?.valor_civa||0, 'PRECIO WEB C/IVA': precio,
+          'COSTO NETO UNIT': neto, 'COSTO NETO TOTAL': Math.round(neto*(orig?.cantidad||1)),
+          TIENDA: mejor?.tienda||'Sin resultados', '% MATCH': `${mejor?.matching?.porcentaje??0}%`,
+          LINK: mejor?.link||'',
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [8,45,10,16,18,18,18,25,10,55].map(w => ({ wch: w }));
+      const wb2 = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb2, ws, 'Mejor_Resultado');
+      descargarXlsx(wb2, `mejor_${new Date().toISOString().split('T')[0]}.xlsx`);
+      notify('Excel exportado', 'success');
+    } catch (e: any) {
+      notify(`Error exportando: ${e.message}`, 'error');
+    }
   };
 
   // ─── Exportar TODOS ───────────────────────────────────────────────────────────
   const exportarTodos = () => {
-    const rows: any[] = [];
-    itemsLista.forEach(item => {
-      if (!item.resultados.length) {
-        rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': 0, TIENDA: 'SIN RESULTADOS', ENCONTRADO: '', PRECIO: '', LINK: '', MATCH: '0%' });
-      } else {
-        item.resultados.forEach((r, i) => rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': i+1, TIENDA: r.tienda, ENCONTRADO: r.nombre, PRECIO: fmt(r.precio_valor), LINK: r.link, MATCH: `${r.matching?.porcentaje??0}%` }));
-      }
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb2 = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb2, ws, 'Todos');
-    XLSX.writeFile(wb2, `todos_${new Date().toISOString().split('T')[0]}.xlsx`);
-    notify('Excel exportado', 'success');
+    try {
+      const rows: any[] = [];
+      itemsLista.forEach(item => {
+        if (!item.resultados.length) {
+          rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': 0, TIENDA: 'SIN RESULTADOS', ENCONTRADO: '', PRECIO: '', LINK: '', MATCH: '0%' });
+        } else {
+          item.resultados.forEach((r, i) => rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': i+1, TIENDA: r.tienda, ENCONTRADO: r.nombre, PRECIO: fmt(r.precio_valor), LINK: r.link, MATCH: `${r.matching?.porcentaje??0}%` }));
+        }
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb2 = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb2, ws, 'Todos');
+      descargarXlsx(wb2, `todos_${new Date().toISOString().split('T')[0]}.xlsx`);
+      notify('Excel exportado', 'success');
+    } catch (e: any) {
+      notify(`Error exportando: ${e.message}`, 'error');
+    }
   };
 
   const limpiar = () => {
