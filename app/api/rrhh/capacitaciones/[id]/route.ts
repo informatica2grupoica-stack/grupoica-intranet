@@ -42,19 +42,23 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
+    const updates: Record<string, any> = {
+      nombre: body.nombre,
+      proveedor: body.proveedor,
+      fecha_inicio: body.fecha_inicio,
+      fecha_fin: body.fecha_fin,
+      horas_total: body.horas_total,
+      modalidad: body.modalidad,
+      costo: body.costo,
+      descripcion: body.descripcion,
+      activo: body.activo,
+    };
+    if (body.archivo_url !== undefined) updates.archivo_url = body.archivo_url;
+    if (body.tipo_archivo !== undefined) updates.tipo_archivo = body.tipo_archivo;
+
     const { data, error } = await supabase
       .from('capacitaciones')
-      .update({
-        nombre: body.nombre,
-        proveedor: body.proveedor,
-        fecha_inicio: body.fecha_inicio,
-        fecha_fin: body.fecha_fin,
-        horas_total: body.horas_total,
-        modalidad: body.modalidad,
-        costo: body.costo,
-        descripcion: body.descripcion,
-        activo: body.activo,
-      })
+      .update(updates)
       .eq('id', id)
       .select()
       .single();

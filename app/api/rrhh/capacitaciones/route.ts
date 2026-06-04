@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '50');
     const search = searchParams.get('search') || '';
     const activo = searchParams.get('activo') || '';
 
@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error('Error en GET /api/rrhh/capacitaciones:', error);
     return NextResponse.json(
       { error: error.message || 'Error al obtener capacitaciones' },
       { status: 500 }
@@ -64,14 +63,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'El nombre de la capacitación es obligatorio' }, { status: 400 });
     }
 
-    const nuevaCapacitacion = {
-      ...body,
-      created_at: new Date().toISOString(),
-    };
-
     const { data, error } = await supabase
       .from('capacitaciones')
-      .insert([nuevaCapacitacion])
+      .insert([{
+        nombre: body.nombre,
+        proveedor: body.proveedor || null,
+        fecha_inicio: body.fecha_inicio || null,
+        fecha_fin: body.fecha_fin || null,
+        horas_total: body.horas_total || null,
+        modalidad: body.modalidad || null,
+        costo: body.costo || null,
+        descripcion: body.descripcion || null,
+        archivo_url: body.archivo_url || null,
+        tipo_archivo: body.tipo_archivo || null,
+        activo: body.activo !== false,
+        created_by: body.created_by || null,
+      }])
       .select()
       .single();
 
@@ -79,7 +86,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
-    console.error('Error en POST /api/rrhh/capacitaciones:', error);
     return NextResponse.json(
       { error: error.message || 'Error al crear capacitación' },
       { status: 500 }

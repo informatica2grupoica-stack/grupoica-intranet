@@ -65,6 +65,12 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
     ],
   },
   {
+    group: "FORMACIÓN",
+    items: [
+      { key: "capacitaciones",     path: "/capacitaciones",     label: "Capacitaciones" },
+    ],
+  },
+  {
     group: "ADMINISTRACIÓN",
     items: [
       { key: "usuarios",           path: "/usuarios",           label: "Usuarios" },
