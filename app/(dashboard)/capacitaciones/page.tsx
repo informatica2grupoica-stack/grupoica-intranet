@@ -185,7 +185,10 @@ export default function CapacitacionesPage() {
 
       return { archivo_url: path, tipo_archivo };
     } catch (e: any) {
-      showToast(`Error al subir: ${e.message}`, "err");
+      console.error('[Capacitaciones] Error en subirArchivo:', e.message);
+      // Mostrar mensaje truncado en toast pero completo en consola
+      const msg = e.message?.length > 120 ? e.message.slice(0, 117) + '…' : e.message;
+      showToast(msg, "err");
       return null;
     } finally {
       setSubiendoArchivo(false);
