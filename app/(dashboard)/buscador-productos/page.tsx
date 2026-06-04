@@ -583,6 +583,36 @@ const ConfirmLimpiarModal = ({ onConfirm, onCancel }: { onConfirm: () => void; o
 
 const IVA = 1.19;
 
+// ─── Helpers base64 ↔ File (para guardar/restaurar el Excel original) ─────────
+
+/** Convierte un File del navegador a string base64 */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // result = "data:application/...;base64,XXXX"  → solo queremos XXXX
+      const result = reader.result as string;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Reconstruye un File desde un string base64 */
+function base64ToFile(base64: string, filename: string): File {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File(
+    [bytes],
+    filename || 'COSTEO.xlsx',
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+  );
+}
+
 export default function MonitorMasivoICA() {
   const [inputManual, setInputManual]   = useState('');
   const [inputMasivo, setInputMasivo]   = useState('');
@@ -1063,6 +1093,17 @@ export default function MonitorMasivoICA() {
   // ─── Guardar búsqueda en Supabase ─────────────────────────────────────────────
   const guardarBusqueda = async (nombre: string) => {
     try {
+      // Convertir el Excel original a base64 para poder restaurar la exportación
+      let excel_base64: string | null = null;
+      if (archivoExcel) {
+        try {
+          excel_base64 = await fileToBase64(archivoExcel);
+        } catch {
+          // Si falla la conversión, continuar sin el Excel — la exportación COSTEO
+          // no estará disponible al restaurar pero el resto sí.
+        }
+      }
+
       const payload = {
         nombre,
         nombre_archivo: archivoExcel?.name || '',
@@ -1076,6 +1117,9 @@ export default function MonitorMasivoICA() {
         total_productos: stats.total,
         con_resultados: stats.con,
         avg_match: stats.avgPct,
+        excel_base64,
+        cols_excel: colsExcel,
+        sheet_name: sheetNameActual,
       };
 
       const res = await fetch('/api/busquedas-guardadas', {
@@ -1111,6 +1155,38 @@ export default function MonitorMasivoICA() {
     }
   };
 
+  // ─── Aplicar datos de una búsqueda restaurada al estado del componente ────────
+  // Función interna compartida por restaurarBusquedaById y restaurarBusqueda.
+  const aplicarBusquedaRestaurada = (b: any) => {
+    setProductosExcel(b.items_excel || []);
+    setItemsLista(b.items_lista || []);
+    setNombreProyecto(b.nombre);
+
+    // Restaurar selección manual
+    if (b.seleccion && typeof b.seleccion === 'object') {
+      setSeleccion(new Map(Object.entries(b.seleccion)) as Map<string, ProductoResultado>);
+    }
+
+    // ── Restaurar el Excel original → habilita los 4 modos de exportación COSTEO ──
+    if (b.excel_base64) {
+      try {
+        const file = base64ToFile(b.excel_base64, b.nombre_archivo || 'COSTEO.xlsx');
+        setArchivoExcel(file);
+      } catch {
+        // Si falla la decodificación, continuar sin el archivo Excel.
+        // Los 4 primeros modos de exportar quedarán desactivados, pero
+        // "Resumen mejor resultado" y "Lista completa" funcionarán igual.
+        setArchivoExcel(null);
+      }
+    } else {
+      setArchivoExcel(null);
+    }
+
+    // Restaurar posición de columnas y nombre de pestaña
+    if (b.cols_excel) setColsExcel(b.cols_excel);
+    if (b.sheet_name) setSheetNameActual(b.sheet_name);
+  };
+
   // ─── Restaurar por ID directo (desde sessionStorage — página de búsquedas) ───
   const restaurarBusquedaById = async (id: string) => {
     notify('Restaurando búsqueda guardada...', 'info');
@@ -1118,38 +1194,31 @@ export default function MonitorMasivoICA() {
       const res = await fetch(`/api/busquedas-guardadas/${id}`);
       if (!res.ok) throw new Error('No se pudo cargar la búsqueda');
       const data = await res.json();
-      const b = data.busqueda;
-      setProductosExcel(b.items_excel || []);
-      setItemsLista(b.items_lista || []);
-      setNombreProyecto(b.nombre);
-      if (b.seleccion && typeof b.seleccion === 'object') {
-        setSeleccion(new Map(Object.entries(b.seleccion)) as Map<string, ProductoResultado>);
-      }
-      notify(`"${b.nombre}" restaurado — ${(b.items_lista || []).length} productos`, 'success');
+      aplicarBusquedaRestaurada(data.busqueda);
+      const tieneExcel = !!data.busqueda?.excel_base64;
+      notify(
+        `"${data.busqueda.nombre}" restaurado — ${(data.busqueda.items_lista || []).length} productos${tieneExcel ? ' · exportación Excel habilitada ✓' : ''}`,
+        'success'
+      );
     } catch (e: any) {
       notify(`Error al restaurar: ${e.message}`, 'error');
     }
   };
 
-  // ─── Restaurar una búsqueda guardada ─────────────────────────────────────────
+  // ─── Restaurar desde el panel lateral (botón "Restaurar" en Mis búsquedas) ────
   const restaurarBusqueda = async (id: string) => {
     setCargandoGuardadas(true);
     try {
       const res = await fetch(`/api/busquedas-guardadas/${id}`);
       if (!res.ok) throw new Error('No se pudo cargar la búsqueda');
       const data = await res.json();
-      const b = data.busqueda;
-
-      setProductosExcel(b.items_excel || []);
-      setItemsLista(b.items_lista || []);
-      setNombreProyecto(b.nombre);
-
-      if (b.seleccion && typeof b.seleccion === 'object') {
-        setSeleccion(new Map(Object.entries(b.seleccion)) as Map<string, ProductoResultado>);
-      }
-
+      aplicarBusquedaRestaurada(data.busqueda);
       setShowCargar(false);
-      notify(`"${b.nombre}" restaurado — ${(b.items_lista || []).length} productos`, 'success');
+      const tieneExcel = !!data.busqueda?.excel_base64;
+      notify(
+        `"${data.busqueda.nombre}" restaurado — ${(data.busqueda.items_lista || []).length} productos${tieneExcel ? ' · exportación Excel habilitada ✓' : ''}`,
+        'success'
+      );
     } catch (e: any) {
       notify(`Error al restaurar: ${e.message}`, 'error');
     } finally {
@@ -1329,9 +1398,16 @@ export default function MonitorMasivoICA() {
                         <span className="block text-[10px] text-slate-400">Todos los resultados de cada producto</span>
                       </span>
                     </button>
-                    {!archivoExcel && (
+                    {archivoExcel ? (
+                      <div className="px-3 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <p className="text-[10px] text-emerald-700 font-medium">Excel listo — formato COSTEO original habilitado</p>
+                      </div>
+                    ) : (
                       <div className="px-3 py-2 bg-amber-50 border-t border-amber-100">
-                        <p className="text-[10px] text-amber-700">Sube un Excel para las 4 primeras opciones</p>
+                        <p className="text-[10px] text-amber-700">
+                          Sin Excel original — sube el archivo o guarda la búsqueda con Excel cargado para habilitar estas opciones
+                        </p>
                       </div>
                     )}
                   </div>

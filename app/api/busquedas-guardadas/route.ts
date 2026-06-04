@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
       total_productos = 0,
       con_resultados = 0,
       avg_match = 0,
+      // Datos del Excel original para poder exportar al restaurar
+      excel_base64 = null,
+      cols_excel = null,
+      sheet_name = 'COSTEO',
     } = body;
 
     if (!nombre?.trim()) {
@@ -65,6 +69,10 @@ export async function POST(req: NextRequest) {
         total_productos,
         con_resultados,
         avg_match,
+        // Excel original para restaurar exportación
+        excel_base64,
+        cols_excel,
+        sheet_name,
         // Datos del usuario autenticado
         user_id: user.id,
         user_email: user.email,
