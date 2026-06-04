@@ -16,8 +16,42 @@ import {
 } from "recharts";
 
 // ─────────────────────────────────────────────────────────────
+// Helpers mensaje del día
+// ─────────────────────────────────────────────────────────────
+
+/** Hash determinístico — mismo resultado toda la jornada para ese usuario */
+function hashDia(semilla: string): number {
+  let h = 0;
+  for (let i = 0; i < semilla.length; i++) {
+    h = ((h << 5) - h + semilla.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/** Elige un mensaje diferente cada día y diferente para cada usuario */
+function elegirMensajeDelDia(mensajes: MensajeMotivacional[], userId: string, nombre: string): MensajeMotivacional | null {
+  if (!mensajes.length) return null;
+  const hoy = new Date();
+  const semilla = `${userId}${nombre}${hoy.getFullYear()}${hoy.getMonth()}${hoy.getDate()}`;
+  return mensajes[hashDia(semilla) % mensajes.length];
+}
+
+/** 2 de cada 3 días incluye el día de la semana en el saludo */
+function incluirDiaEnSaludo(userId: string, nombre: string): boolean {
+  const hoy = new Date();
+  const semilla = `dia${userId}${nombre}${hoy.toDateString()}`;
+  return hashDia(semilla) % 3 !== 0;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
+
+interface MensajeMotivacional {
+  id: number;
+  mensaje: string;
+  categoria: string;
+}
 interface Cumpleaños {
   id: string;
   nombre: string;
@@ -67,6 +101,8 @@ export default function HomePage() {
   const [userRole, setUserRole] = useState("");
   const [alertasOcultas, setAlertasOcultas] = useState<string[]>([]);
   const [fechaActual, setFechaActual] = useState("");
+  const [mensajeHoy, setMensajeHoy] = useState<MensajeMotivacional | null>(null);
+  const [conDiaEnSaludo, setConDiaEnSaludo] = useState(true);
 
   // ── Personal
   const [misTareas, setMisTareas] = useState<Tarea[]>([]);
@@ -152,11 +188,21 @@ export default function HomePage() {
       if (perfilError || !perfil) { router.push("/login"); return; }
       setUserName(perfil.nombre);
       setUserRole(perfil.rol);
+      setConDiaEnSaludo(incluirDiaEnSaludo(session.user.id, perfil.nombre));
 
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
 
       // ── Fetch all in parallel ──────────────────────────────
+      // Mensajes motivacionales del día
+      const { data: frasesData } = await supabase
+        .from("mensajes_motivacionales")
+        .select("id, mensaje, categoria")
+        .eq("activo", true);
+      if (frasesData?.length) {
+        setMensajeHoy(elegirMensajeDelDia(frasesData as MensajeMotivacional[], session.user.id, perfil.nombre));
+      }
+
       const [
         { data: todosPerfiles },
         { data: tareasData },
@@ -337,21 +383,88 @@ export default function HomePage() {
 
       {/* ── Welcome banner ───────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#111827] via-[#1F2937] to-[#111827] p-6 md:p-8 shadow-xl shadow-slate-900/20">
-        <div className="absolute -top-20 -right-10 w-72 h-72 bg-[#10B981]/20 blur-[100px] rounded-full" />
-        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-[#059669]/10 blur-[100px] rounded-full" />
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#D1FAE5] text-[#059669] px-2.5 py-1 rounded-full">
-              <Sparkles className="w-3 h-3" /> Comercial MP Workspace
+        {/* Orbes de fondo */}
+        <div className="absolute -top-20 -right-10 w-72 h-72 bg-[#10B981]/20 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-[#059669]/10 blur-[100px] rounded-full pointer-events-none" />
+        {mensajeHoy && (
+          <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 blur-[60px] rounded-full pointer-events-none" />
+        )}
+
+        <div className="relative">
+          {/* Cabecera: saludo + rol */}
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#D1FAE5] text-[#059669] px-2.5 py-1 rounded-full">
+                <Sparkles className="w-3 h-3" /> Comercial MP Workspace
+              </span>
+
+              {/* Saludo personalizado */}
+              <h1 className="text-2xl md:text-3xl font-black text-white mt-3 leading-tight">
+                {conDiaEnSaludo ? (
+                  <>
+                    Hola,{' '}
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10B981] to-[#34D399]">
+                      {userName}
+                    </span>{' '}
+                    <span className="text-slate-400 text-xl font-light">
+                      — hoy es{' '}
+                      <span className="capitalize">
+                        {new Date().toLocaleDateString('es-ES', { weekday: 'long' })}
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Hola,{' '}
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10B981] to-[#34D399]">
+                      {userName}
+                    </span>{' '}
+                    <span className="text-2xl">👋</span>
+                  </>
+                )}
+              </h1>
+              <p className="text-slate-500 text-xs mt-1 capitalize">{fechaActual}</p>
+            </div>
+
+            <span className="bg-white/10 backdrop-blur border border-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold self-start shrink-0">
+              {rolLabel}
             </span>
-            <h1 className="text-2xl md:text-3xl font-black text-white mt-3 leading-tight">
-              Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10B981] to-[#34D399]">{userName}</span> 👋
-            </h1>
-            <p className="text-slate-400 text-sm mt-1 capitalize">{fechaActual}</p>
           </div>
-          <span className="bg-white/10 backdrop-blur border border-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold self-start md:self-center">
-            {rolLabel}
-          </span>
+
+          {/* ── Mensaje motivacional del día ──────────────────────────── */}
+          {mensajeHoy && (
+            <div className="mt-6 pt-5 border-t border-white/8 animate-fade-in">
+              <div className="flex items-start gap-4">
+                {/* Comillas decorativas */}
+                <span className="text-5xl font-black text-[#10B981]/25 leading-none -mt-2 select-none shrink-0"
+                  style={{ fontFamily: 'Georgia, serif' }}>
+                  ❝
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-300 text-sm md:text-base leading-relaxed italic font-light">
+                    {mensajeHoy.mensaje}
+                  </p>
+
+                  {/* Footer del quote */}
+                  <div className="flex items-center gap-3 mt-3 flex-wrap">
+                    <div className="h-px flex-1 bg-white/10 min-w-[24px]" />
+                    <span className="text-[10px] text-slate-600 uppercase tracking-widest font-semibold whitespace-nowrap">
+                      frase del día
+                    </span>
+                    {{
+                      licitacion:    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">📋 Licitaciones</span>,
+                      equipo:        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20">🤝 Equipo</span>,
+                      logro:         <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">🏆 Logros</span>,
+                      perseverancia: <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">💪 Perseverancia</span>,
+                      proposito:     <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/20">🎯 Propósito</span>,
+                      general:       <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-500/15 text-slate-400 border border-slate-500/20">✨ Inspiración</span>,
+                    }[mensajeHoy.categoria] ?? null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
