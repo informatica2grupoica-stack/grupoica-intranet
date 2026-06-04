@@ -769,128 +769,81 @@ export default function MonitorMasivoICA() {
     const seleccionados = itemsLista.flatMap(item => {
       const sel = elegirPorModo(item, modo);
       if (!sel?.precio_valor) return [];
-      return [{ numero: String(item.numero), precio: sel.precio_valor, link: sel.link || '', tienda: sel.tienda || '', match: sel.matching?.porcentaje ?? 0 }];
+      return [{ numero: String(item.numero), precio: sel.precio_valor, link: sel.link || '' }];
     });
     if (!seleccionados.length) { notify('Sin resultados para exportar', 'warning'); return; }
     const nombreModo: Record<string, string> = { manual: 'seleccion', mejor_match: 'mejor-match', menor_precio: 'menor-precio', equilibrado: 'equilibrado' };
     notify(`Generando Excel (${nombreModo[modo] || modo})...`, 'success');
 
     try {
-      // ExcelJS preserva colores, formato y fórmulas EXACTOS del archivo original
-      const ExcelJS = (await import('exceljs')).default;
-      const buf = await archivoExcel.arrayBuffer();
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(buf);
-      const ws = wb.getWorksheet(sheetNameActual) || wb.worksheets[0];
-      if (!ws) { notify('No se encontró la pestaña', 'error'); return; }
+      // ExcelJS corre en el servidor (Node.js) para preservar colores, fórmulas y estilos.
+      const fd = new FormData();
+      fd.append('file', archivoExcel, archivoExcel.name);
+      fd.append('sheetName', sheetNameActual);
+      fd.append('seleccionados', JSON.stringify(seleccionados));
+      fd.append('modo', modo);
 
-      // Detectar fila de encabezados y columnas (1-indexado en ExcelJS)
-      let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
-      for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
-        const cells: string[] = [];
-        ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
-          cells[cn] = String(cell.value ?? '').toUpperCase().trim();
-        });
-        if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
-          headerRow = rn;
-          cells.forEach((h, cn) => {
-            if (!h) return;
-            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
-            else if (h.includes('VALOR') && h.includes('IVA')) colValor = cn;
-            else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
-          });
-          break;
-        }
+      const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        notify(`Error: ${err.error || 'Error al generar Excel'}`, 'error');
+        return;
       }
-      if (headerRow < 0 || colItem < 0) { notify('No se encontró columna ITEM en la pestaña', 'error'); return; }
-      if (colValor < 0) { notify('No se encontró columna VALOR C/IVA', 'error'); return; }
 
-      // Se rellena IDÉNTICO al COSTEO manual: solo VALOR C/IVA (precio) y LINK 1.
-      // NO se agregan columnas ni se toca CONVERSIÓN/EMPRESA/SKU.
-      const mapa = new Map(seleccionados.map(s => [s.numero, s]));
-      let filled = 0;
-      for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
-        const itemVal = ws.getRow(rn).getCell(colItem).value;
-        if (itemVal == null) continue;
-        // El ITEM puede ser tipo "4.1"; normalizar para comparar
-        const key = String(typeof itemVal === 'object' ? (itemVal as any).result ?? (itemVal as any).text ?? itemVal : itemVal).trim();
-        const dato = mapa.get(key);
-        if (!dato) continue;
-        ws.getRow(rn).getCell(colValor).value = dato.precio; // las fórmulas (costo neto, etc.) recalculan solas
-        if (colLink > 0 && dato.link) ws.getRow(rn).getCell(colLink).value = dato.link;
-        filled++;
-      }
-      if (!filled) { notify('No se encontraron ítems para rellenar', 'warning'); return; }
-
-      const out = await wb.xlsx.writeBuffer();
-      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const filled = res.headers.get('X-Filled') || '?';
+      const blob = await res.blob();
+      const filename = `COSTEO_${nombreModo[modo] || modo}_${new Date().toISOString().split('T')[0]}.xlsx`;
       const a = Object.assign(document.createElement('a'), {
         href: URL.createObjectURL(blob),
-        download: `COSTEO_${nombreModo[modo] || modo}_${new Date().toISOString().split('T')[0]}.xlsx`,
+        download: filename,
       });
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
       notify(`${filled} ítems exportados (${nombreModo[modo] || modo}) — colores y fórmulas intactos`, 'success');
     } catch (e: any) {
       notify(`Error generando Excel: ${e.message}`, 'error');
     }
   };
 
-  // helper: descarga un workbook XLSX como blob sin usar writeFile (evita error de fs en Next.js)
-  const descargarXlsx = (wb: import('xlsx').WorkBook, filename: string) => {
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   // ─── Exportar MEJOR resultado ─────────────────────────────────────────────────
   const exportarMejor = () => {
-    try {
-      const rows = itemsLista.map(item => {
-        const orig = productosExcel.find(p => String(p.numero) === item.numero);
-        const mejor = seleccion.get(item.numero) || item.mejor_match;
-        const precio = mejor?.precio_valor || 0;
-        const neto = Math.round(precio / IVA);
-        return {
-          ITEM: item.numero, DETALLE: item.nombre, CANTIDAD: orig?.cantidad||1,
-          'VALOR REF C/IVA': orig?.valor_civa||0, 'PRECIO WEB C/IVA': precio,
-          'COSTO NETO UNIT': neto, 'COSTO NETO TOTAL': Math.round(neto*(orig?.cantidad||1)),
-          TIENDA: mejor?.tienda||'Sin resultados', '% MATCH': `${mejor?.matching?.porcentaje??0}%`,
-          LINK: mejor?.link||'',
-        };
-      });
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [8,45,10,16,18,18,18,25,10,55].map(w => ({ wch: w }));
-      const wb2 = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb2, ws, 'Mejor_Resultado');
-      descargarXlsx(wb2, `mejor_${new Date().toISOString().split('T')[0]}.xlsx`);
-      notify('Excel exportado', 'success');
-    } catch (e: any) {
-      notify(`Error exportando: ${e.message}`, 'error');
-    }
+    const rows = itemsLista.map(item => {
+      const orig = productosExcel.find(p => String(p.numero) === item.numero);
+      const mejor = seleccion.get(item.numero) || item.mejor_match;
+      const precio = mejor?.precio_valor || 0;
+      const neto = Math.round(precio / IVA);
+      return {
+        ITEM: item.numero, DETALLE: item.nombre, CANTIDAD: orig?.cantidad||1,
+        'VALOR REF C/IVA': orig?.valor_civa||0, 'PRECIO WEB C/IVA': precio,
+        'COSTO NETO UNIT': neto, 'COSTO NETO TOTAL': Math.round(neto*(orig?.cantidad||1)),
+        TIENDA: mejor?.tienda||'Sin resultados', '% MATCH': `${mejor?.matching?.porcentaje??0}%`,
+        LINK: mejor?.link||'',
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [8,45,10,16,18,18,18,25,10,55].map(w => ({ wch: w }));
+    const wb2 = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb2, ws, 'Mejor_Resultado');
+    XLSX.writeFile(wb2, `mejor_${new Date().toISOString().split('T')[0]}.xlsx`);
+    notify('Excel exportado', 'success');
   };
 
   // ─── Exportar TODOS ───────────────────────────────────────────────────────────
   const exportarTodos = () => {
-    try {
-      const rows: any[] = [];
-      itemsLista.forEach(item => {
-        if (!item.resultados.length) {
-          rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': 0, TIENDA: 'SIN RESULTADOS', ENCONTRADO: '', PRECIO: '', LINK: '', MATCH: '0%' });
-        } else {
-          item.resultados.forEach((r, i) => rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': i+1, TIENDA: r.tienda, ENCONTRADO: r.nombre, PRECIO: fmt(r.precio_valor), LINK: r.link, MATCH: `${r.matching?.porcentaje??0}%` }));
-        }
-      });
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb2 = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb2, ws, 'Todos');
-      descargarXlsx(wb2, `todos_${new Date().toISOString().split('T')[0]}.xlsx`);
-      notify('Excel exportado', 'success');
-    } catch (e: any) {
-      notify(`Error exportando: ${e.message}`, 'error');
-    }
+    const rows: any[] = [];
+    itemsLista.forEach(item => {
+      if (!item.resultados.length) {
+        rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': 0, TIENDA: 'SIN RESULTADOS', ENCONTRADO: '', PRECIO: '', LINK: '', MATCH: '0%' });
+      } else {
+        item.resultados.forEach((r, i) => rows.push({ ITEM: item.numero, PRODUCTO: item.nombre, '#': i+1, TIENDA: r.tienda, ENCONTRADO: r.nombre, PRECIO: fmt(r.precio_valor), LINK: r.link, MATCH: `${r.matching?.porcentaje??0}%` }));
+      }
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb2 = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb2, ws, 'Todos');
+    XLSX.writeFile(wb2, `todos_${new Date().toISOString().split('T')[0]}.xlsx`);
+    notify('Excel exportado', 'success');
   };
 
   const limpiar = () => {
