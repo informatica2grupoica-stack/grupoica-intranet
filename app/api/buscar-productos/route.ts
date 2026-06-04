@@ -552,29 +552,22 @@ export async function GET(req: NextRequest) {
   }
 
   // ── ETAPA 0: Query Understanding con IA ─────────────────────────────────────
-  console.log(`🧠 [${numeroItem}] Query Understanding: "${producto}"`);
   const entidades = await entenderConsultaIA(producto, contexto);
   const variantes = entidades.variantes.length ? entidades.variantes : [producto];
-  console.log(`💡 Variantes: ${JSON.stringify(variantes)}`);
-  if (entidades.marca) console.log(`🏷️  Marca: ${entidades.marca} | Modelo: ${entidades.modelo} | SKU: ${entidades.sku}`);
 
   let crudos: ItemRaw[] = [];
   try {
     // ── ETAPA 1: Búsqueda multi-fuente en paralelo ──────────────────────────
-    console.log(`📡 [${numeroItem}] Búsqueda multi-fuente (Shopping + Orgánico)...`);
     const [shopping, organico] = await Promise.all([
       buscarSerperShopping(variantes, Math.max(minimo * 2, 20)),
       buscarSerperOrganico(variantes[0], 10),
     ]);
     crudos = [...shopping, ...organico];
-    console.log(`📦 Shopping: ${shopping.length} | Orgánico: ${organico.length} | Total: ${crudos.length}`);
 
     // Reintento si pocos resultados
     if (crudos.length < 8 && variantes.length > 1) {
-      console.log(`🔄 Reintento con variante alternativa: ${variantes[variantes.length - 1]}`);
       const reintento = await buscarSerperShopping([variantes[variantes.length - 1]], minimo);
       crudos.push(...reintento);
-      console.log(`📦 Reintento: ${reintento.length} | Total: ${crudos.length}`);
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'error';
@@ -602,7 +595,6 @@ export async function GET(req: NextRequest) {
   const necesitaValidacion = scoreTop < 75 || Boolean(entidades.marca || entidades.modelo || entidades.sku);
   let resultadosFinales = resultadosMapeados;
   if (necesitaValidacion && resultadosMapeados.length >= 3) {
-    console.log(`🤖 [${numeroItem}] Validación IA (score_top=${scoreTop})...`);
     resultadosFinales = await validarLoteIA(producto, entidades, resultadosMapeados);
     // Re-ordenar post-validación
     resultadosFinales.sort((a, b) => {

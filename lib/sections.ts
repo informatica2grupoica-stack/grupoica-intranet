@@ -31,9 +31,10 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
   {
     group: "ANÁLISIS & PRECIOS",
     items: [
-      { key: "dashboard",          path: "/dashboard",          label: "Dashboard" },
-      { key: "buscador-productos", path: "/buscador-productos", label: "Buscador de Productos" },
-      { key: "historial-precios",  path: "/historial-precios",  label: "Historial de Precios" },
+      { key: "dashboard",            path: "/dashboard",            label: "Dashboard" },
+      { key: "buscador-productos",   path: "/buscador-productos",   label: "Buscador de Productos" },
+      { key: "busquedas-guardadas",  path: "/busquedas-guardadas",  label: "Mis Búsquedas" },
+      { key: "historial-precios",    path: "/historial-precios",    label: "Historial de Precios" },
     ],
   },
   {

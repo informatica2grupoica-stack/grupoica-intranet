@@ -6,7 +6,7 @@ import {
   Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
-  BookOpen, CreditCard, Receipt, Briefcase, Lock
+  BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -20,8 +20,9 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/chat":                { id: "MP-CHT", label: "Chat Interno" },
   "/tareas":              { id: "MP-TAR", label: "Tareas" },
   "/dashboard":           { id: "MP-DSH", label: "Dashboard de Análisis" },
-  "/buscador-productos":  { id: "MP-BUS", label: "Buscador de Productos" },
-  "/historial-precios":   { id: "MP-HIS", label: "Historial de Precios" },
+  "/buscador-productos":   { id: "MP-BUS", label: "Buscador de Productos" },
+  "/busquedas-guardadas":  { id: "MP-BGD", label: "Mis Búsquedas" },
+  "/historial-precios":    { id: "MP-HIS", label: "Historial de Precios" },
   "/obuma-clientes":      { id: "MP-CLI", label: "Clientes Obuma" },
   "/proveedores":         { id: "MP-PRV", label: "Mis Proveedores" },
   "/obuma-proveedores":   { id: "MP-OPV", label: "Proveedores Obuma" },
@@ -39,8 +40,9 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "chat":               MessageSquare,
   "tareas":             CheckSquare,
   "dashboard":          BarChart3,
-  "buscador-productos": Box,
-  "historial-precios":  TrendingUp,
+  "buscador-productos":  Box,
+  "busquedas-guardadas": Bookmark,
+  "historial-precios":   TrendingUp,
   "obuma-clientes":     Users,
   "ventas":             TrendingUp,
   "obuma-productos":    Package,

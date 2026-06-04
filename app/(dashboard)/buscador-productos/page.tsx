@@ -9,7 +9,7 @@ import {
   Download, FileSpreadsheet, ShoppingBag,
   Upload, Eye, Settings, ChevronDown, ChevronUp,
   TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles,
-  FileText, Zap
+  FileText, Zap, Bookmark, FolderOpen, Save
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -49,6 +49,17 @@ interface ProductoExcel {
   _fila?: number;
 }
 
+interface BusquedaGuardada {
+  id: string;
+  nombre: string;
+  nombre_archivo: string;
+  id_proyecto: string;
+  total_productos: number;
+  con_resultados: number;
+  avg_match: number;
+  created_at: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => v > 0 ? `$${v.toLocaleString('es-CL')}` : '—';
 
@@ -72,8 +83,16 @@ function crearSemaforo(limite: number) {
   };
 }
 
-// ─── Sistema de Notificaciones ───────────────────────────────────────────────
+// Extrae un nombre legible del nombre de archivo Excel
+function extraerNombreProyecto(filename: string): string {
+  return filename
+    .replace(/\.[^.]+$/, '')    // quitar extensión
+    .replace(/[_-]+/g, ' ')    // guiones/underscores → espacios
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
+// ─── Sistema de Notificaciones ───────────────────────────────────────────────
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface ToastItem {
@@ -132,12 +151,9 @@ const Toast = ({ item, onClose }: { item: ToastItem; onClose: () => void }) => {
       onClick={onClose}
       role="alert"
     >
-      {/* Icono */}
       <div className="shrink-0 mt-0.5 p-1.5 rounded-xl bg-white/15">
         {cfg.icon}
       </div>
-
-      {/* Contenido */}
       <div className="flex-1 min-w-0">
         <p className={`text-[10px] font-bold uppercase tracking-widest ${cfg.text} opacity-75 mb-0.5`}>
           {cfg.label}
@@ -146,16 +162,12 @@ const Toast = ({ item, onClose }: { item: ToastItem; onClose: () => void }) => {
           {item.message}
         </p>
       </div>
-
-      {/* Botón cerrar */}
       <button
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         className={`shrink-0 mt-0.5 p-1 rounded-lg bg-white/10 hover:bg-white/25 transition-colors ${cfg.text} opacity-70 hover:opacity-100`}
       >
         <X size={14} />
       </button>
-
-      {/* Barra de progreso */}
       <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
         <div
           className={`h-full ${cfg.bar} toast-progress-bar`}
@@ -166,7 +178,6 @@ const Toast = ({ item, onClose }: { item: ToastItem; onClose: () => void }) => {
   );
 };
 
-// Contenedor global de toasts (fuera del flujo del documento)
 const ToastContainer = ({ toasts, onClose }: { toasts: ToastItem[]; onClose: (id: number) => void }) => (
   <div className="fixed bottom-6 right-6 z-[9999] flex flex-col-reverse gap-3 items-end pointer-events-none">
     {toasts.map((t) => (
@@ -189,9 +200,7 @@ const MatchBadge = ({ pct }: { pct: number }) => {
   );
 };
 
-// ─── Banner PDF animado (dentro del Modal Preview) ───────────────────────────
-type EstadoPdf = 'idle' | 'cargando' | 'ok' | 'error';
-
+// ─── Banner PDF animado ───────────────────────────────────────────────────────
 const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
   onCargarPdf: (f: File) => void;
   cargandoBases: boolean;
@@ -200,7 +209,6 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
   const refInput = useRef<HTMLInputElement>(null);
   const [visible, setVisible] = useState(false);
 
-  // Animación de entrada con delay para que el modal cargue primero
   useEffect(() => { const t = setTimeout(() => setVisible(true), 400); return () => clearTimeout(t); }, []);
 
   if (basesOk) {
@@ -216,9 +224,7 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
   }
 
   return (
-    <div
-      className={`mx-5 mb-4 transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
-    >
+    <div className={`mx-5 mb-4 transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
       <input
         ref={refInput}
         type="file"
@@ -235,10 +241,6 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
             : 'border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 hover:border-violet-400 hover:from-violet-100 hover:to-indigo-100 cursor-pointer'
           }`}
       >
-        {/* Pulso animado en el borde cuando está idle */}
-        {!cargandoBases && (
-          <span className="absolute inset-0 rounded-xl border-2 border-violet-400 opacity-0 group-hover:opacity-0 animate-[ping_2s_ease-in-out_infinite] pointer-events-none" style={{ animationDelay: '0.5s' }} />
-        )}
         <div className="flex items-center gap-3">
           {cargandoBases ? (
             <div className="h-8 w-8 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
@@ -274,10 +276,10 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
             </div>
           )}
         </div>
+        {/* Barra de progreso indeterminada — animación real definida en globals.css */}
         {cargandoBases && (
           <div className="mt-2.5 h-1 rounded-full bg-violet-100 overflow-hidden">
-            <div className="h-full bg-violet-400 rounded-full animate-[progress_2s_ease-in-out_infinite]"
-              style={{ animation: 'pulse 1.5s ease-in-out infinite alternate', width: '60%' }} />
+            <div className="h-full bg-violet-400 rounded-full animate-indeterminate" />
           </div>
         )}
       </button>
@@ -304,7 +306,6 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
       </div>
 
-      {/* Banner PDF animado */}
       <div className="pt-4">
         <BannerPdf onCargarPdf={onCargarPdf} cargandoBases={cargandoBases} basesOk={basesOk} />
       </div>
@@ -327,7 +328,7 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
                 <td className="py-2 pr-4 text-slate-800 font-medium max-w-xs truncate">{p.nombre}</td>
                 <td className="py-2 pr-4 text-center">
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                    !p.conversion || p.conversion === 'unidad' ? 'bg-slate-100 text-slate-400' : 'bg-[#D1FAE5]/50 text-[#059669] border border-[#059669]/20'
+                    !p.conversion || p.conversion === 'unidad' ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                   }`}>{p.conversion || 'un'}</span>
                 </td>
                 <td className="py-2 pr-4 text-right text-slate-600 text-xs">{p.cantidad}</td>
@@ -407,6 +408,179 @@ const ModalBases = ({ items, onClose }: {
   );
 };
 
+// ─── Modal: Guardar búsqueda ──────────────────────────────────────────────────
+const SaveSearchModal = ({ onClose, onSave, nombreDefault }: {
+  onClose: () => void;
+  onSave: (nombre: string) => Promise<void>;
+  nombreDefault: string;
+}) => {
+  const [nombre, setNombre] = useState(nombreDefault);
+  const [guardando, setGuardando] = useState(false);
+
+  const handleSave = async () => {
+    if (!nombre.trim() || guardando) return;
+    setGuardando(true);
+    await onSave(nombre.trim());
+    setGuardando(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex justify-between items-center p-5 border-b">
+          <div>
+            <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+              <Bookmark size={16} className="text-emerald-600" /> Guardar búsqueda
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Se guardará en la base de datos para acceso futuro</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Nombre del proyecto</p>
+            <input
+              type="text"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+              placeholder="Ej: Proyecto Señalética Hospital Sur"
+              autoFocus
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+            />
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            El nombre se extrajo automáticamente del archivo Excel. Puedes modificarlo antes de guardar. Este nombre se usará como ID del proyecto en la base de datos.
+          </p>
+        </div>
+        <div className="flex justify-end gap-3 p-5 border-t">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+          <button
+            onClick={handleSave}
+            disabled={!nombre.trim() || guardando}
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
+          >
+            {guardando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Panel: Búsquedas guardadas ───────────────────────────────────────────────
+const SavedSearchesPanel = ({
+  busquedas,
+  cargando,
+  onClose,
+  onCargar,
+  onEliminar,
+}: {
+  busquedas: BusquedaGuardada[];
+  cargando: boolean;
+  onClose: () => void;
+  onCargar: (id: string) => void;
+  onEliminar: (id: string) => void;
+}) => (
+  <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+      <div className="flex justify-between items-center p-5 border-b">
+        <div>
+          <h2 className="font-bold text-slate-800 text-base flex items-center gap-2">
+            <FolderOpen size={16} className="text-emerald-600" /> Búsquedas guardadas
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">{cargando ? 'Cargando...' : `${busquedas.length} búsqueda${busquedas.length !== 1 ? 's' : ''}`}</p>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
+      </div>
+      <div className="overflow-auto flex-1 p-4">
+        {cargando ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 size={28} className="text-emerald-600 animate-spin" />
+          </div>
+        ) : busquedas.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            <Bookmark size={36} className="mx-auto mb-3 opacity-20" />
+            <p className="font-semibold text-slate-500">No hay búsquedas guardadas</p>
+            <p className="text-xs mt-1">Realiza una búsqueda y guárdala con el botón <strong>Guardar</strong></p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {busquedas.map(b => (
+              <div key={b.id} className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors group">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet size={18} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 text-sm truncate">{b.nombre}</p>
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    <span className="text-[10px] text-slate-500">
+                      {b.total_productos} productos · {b.con_resultados} con resultados · {b.avg_match}% match
+                    </span>
+                    <span className="text-[10px] text-slate-300">
+                      {new Date(b.created_at).toLocaleDateString('es-CL', {
+                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  {b.nombre_archivo && (
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">📄 {b.nombre_archivo}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onCargar(b.id)}
+                    className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Restaurar
+                  </button>
+                  <button
+                    onClick={() => onEliminar(b.id)}
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Modal de confirmación de limpieza ────────────────────────────────────────
+const ConfirmLimpiarModal = ({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+      <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <Trash2 size={22} className="text-red-600" />
+      </div>
+      <h3 className="font-bold text-slate-800 text-base mb-1">¿Limpiar todos los resultados?</h3>
+      <p className="text-sm text-slate-500 mb-6">
+        Se eliminarán los productos cargados y sus resultados de búsqueda. Esta acción no se puede deshacer.
+      </p>
+      <div className="flex gap-3">
+        <button
+          onClick={onCancel}
+          className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors"
+        >
+          Limpiar todo
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 const IVA = 1.19;
 
 export default function MonitorMasivoICA() {
@@ -431,14 +605,30 @@ export default function MonitorMasivoICA() {
   const [pestanas, setPestanas]               = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel]       = useState<File | null>(null);
   const [workbook, setWorkbook]               = useState<XLSX.WorkBook | null>(null);
-  // Columnas detectadas por SheetJS (0-indexed) — se pasan al servidor para el export ExcelJS
   const [colsExcel, setColsExcel] = useState<{ headerRow: number; colItem: number; colValor: number; colLink: number } | null>(null);
 
-  const [contexto, setContexto]         = useState('');
+  const [contexto, setContexto]           = useState('');
   const [mostrarConfig, setMostrarConfig] = useState(false);
-  const [seleccion, setSeleccion]       = useState<Map<string, ProductoResultado>>(new Map());
-  const [ordenItem, setOrdenItem]       = useState<Map<string, ModoOrden>>(new Map());
-  const [menuDescarga, setMenuDescarga] = useState(false);
+  const [seleccion, setSeleccion]         = useState<Map<string, ProductoResultado>>(new Map());
+  const [ordenItem, setOrdenItem]         = useState<Map<string, ModoOrden>>(new Map());
+  const [menuDescarga, setMenuDescarga]   = useState(false);
+
+  // ─── Nuevos estados: guardar/cargar búsquedas ────────────────────────────────
+  const [nombreProyecto, setNombreProyecto]           = useState('');
+  const [showGuardar, setShowGuardar]                 = useState(false);
+  const [showCargar, setShowCargar]                   = useState(false);
+  const [busquedasGuardadas, setBusquedasGuardadas]   = useState<BusquedaGuardada[]>([]);
+  const [cargandoGuardadas, setCargandoGuardadas]     = useState(false);
+  const [confirmLimpiar, setConfirmLimpiar]           = useState(false);
+
+  // Restaurar automáticamente si venimos desde la página de búsquedas guardadas
+  useEffect(() => {
+    const id = sessionStorage.getItem('restaurar_busqueda');
+    if (!id) return;
+    sessionStorage.removeItem('restaurar_busqueda');
+    restaurarBusquedaById(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ordena los resultados de un item según el modo elegido (match o precio)
   const resultadosOrdenados = useCallback((item: ItemLista): ProductoResultado[] => {
@@ -454,14 +644,13 @@ export default function MonitorMasivoICA() {
 
   // ─── Notify ──────────────────────────────────────────────────────────────────
   const closeToast = useCallback((id: number) => {
-    // Marcar como "saliendo" para activar animación de salida
     setToasts(p => p.map(t => t.id === id ? { ...t, leaving: true } : t));
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 370);
   }, []);
 
   const notify = useCallback((message: string, type: ToastType = 'success', duration = 4500) => {
     const id = Date.now() + Math.random();
-    setToasts(p => [...p.slice(-4), { id, message, type, duration }]); // máx 5 toasts
+    setToasts(p => [...p.slice(-4), { id, message, type, duration }]);
     setTimeout(() => closeToast(id), duration);
   }, [closeToast]);
 
@@ -474,7 +663,7 @@ export default function MonitorMasivoICA() {
       return acc;
     }, []);
 
-  // ─── Cargar BASES (PDF) → Gemini extrae specs → match con ítems del Excel ─────
+  // ─── Cargar BASES (PDF) ────────────────────────────────────────────────────────
   const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const cargarBases = async (file: File) => {
     if (cargandoBases) return;
@@ -482,16 +671,13 @@ export default function MonitorMasivoICA() {
     setBasesInfo(null);
     notify('Subiendo bases y leyendo con IA (puede tardar ~30s)...', 'success');
     try {
-      // 1) URL firmada de subida
       const urlRes = await fetch('/api/bases-upload-url', { method: 'POST' });
       const u = await urlRes.json();
       if (!urlRes.ok || !u.token) throw new Error(u.error || 'No se pudo preparar la subida');
 
-      // 2) Subir el PDF directo a Supabase Storage (sin límite de Vercel)
       const { error: upErr } = await supabase.storage.from(u.bucket).uploadToSignedUrl(u.path, u.token, file);
       if (upErr) throw new Error(`Error subiendo PDF: ${upErr.message}`);
 
-      // 3) Gemini lee el PDF + los ítems del Excel y COMPLETA lo que falta a cada uno
       const itemsExcelPayload = productosExcel.map(pe => ({ numero: String(pe.numero), detalle: pe.nombre }));
       const leerRes = await fetch('/api/leer-bases', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -503,7 +689,6 @@ export default function MonitorMasivoICA() {
       const itemsBases = data.items || [];
       const enriquecidos: Array<{ numero: string; busqueda: string; agregado: string }> = data.enriquecidos || [];
 
-      // 4) Construir el mapa numero → búsqueda mejorada (lo que se usará al cotizar)
       const mapa = new Map<string, string>();
       const detalleOriginal = new Map(productosExcel.map(pe => [String(pe.numero), pe.nombre]));
       const filasModal = enriquecidos
@@ -513,10 +698,10 @@ export default function MonitorMasivoICA() {
           return {
             item: e.numero,
             nombre: detalleOriginal.get(e.numero) || '',
-            especificaciones: e.busqueda,        // búsqueda mejorada
-            cantidad: e.agregado || '',          // qué se completó
+            especificaciones: e.busqueda,
+            cantidad: e.agregado || '',
             unidad: '',
-            _excel: e.agregado ? e.numero : undefined, // verde si se completó algo
+            _excel: e.agregado ? e.numero : undefined,
           };
         });
 
@@ -536,6 +721,9 @@ export default function MonitorMasivoICA() {
   // ─── Cargar Excel ─────────────────────────────────────────────────────────────
   const cargarExcel = (file: File) => {
     setArchivoExcel(file);
+    // Auto-extraer nombre de proyecto desde el nombre del archivo
+    setNombreProyecto(extraerNombreProyecto(file.name));
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
@@ -572,7 +760,6 @@ export default function MonitorMasivoICA() {
           else if (h.includes('CONVERSION')) colConversion = j;
           else if (h.includes('LINK')) colLink = j;
         });
-        console.log(`📌 Headers fila ${i+1} | ITEM:${colItem} DETALLE:${colDetalle} CANT:${colCantidad} VALOR:${colValor} CONV:${colConversion}`);
         setColsExcel({ headerRow: i, colItem, colValor, colLink });
         break;
       }
@@ -604,10 +791,9 @@ export default function MonitorMasivoICA() {
     }
 
     if (!items.length) { notify('No se encontraron productos', 'error'); return; }
-    console.log(`✅ ${items.length} productos cargados`);
     setProductosExcel(items);
     setShowModal(true);
-    if (!basesInfo) setPreguntarBases(true); // ofrecer reforzar con el PDF de bases
+    if (!basesInfo) setPreguntarBases(true);
     notify(`${items.length} productos desde "${sheetName}"`, 'success');
   };
 
@@ -616,28 +802,24 @@ export default function MonitorMasivoICA() {
     if (workbook) procesarPestana(workbook, s);
   };
 
-  // ─── Búsqueda un producto ─────────────────────────────────────────────────────
-  const buscarProducto = async (
+  // ─── Búsqueda de un producto ──────────────────────────────────────────────────
+  const buscarProducto = useCallback(async (
     producto: string,
     numero: string,
     conversion = 'unidad'
   ): Promise<ItemLista> => {
     try {
-      // Si Gemini generó una búsqueda mejorada para este ítem (con las bases), usarla
       const mejorada = especPorItem.get(String(numero));
       const productoBuscar = mejorada ? mejorada.slice(0, 200) : producto;
 
-      // El backend hace la expansión inteligente con IA (términos vagos → variantes)
-      // usando el contexto del rubro. Pasamos el producto + specs de bases + contexto.
       const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
       const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const raw = data.resultados || [];
-      console.log(`📊 [${numero}] Python: ${raw.length} resultados`);
 
-      // Reranking IA con entidades detectadas (mejora precisión cuando hay marca/modelo/SKU)
+      // Reranking IA con entidades detectadas
       let final = raw;
       if (raw.length > 3) {
         try {
@@ -660,7 +842,6 @@ export default function MonitorMasivoICA() {
       }
 
       const resultados: ProductoResultado[] = final.map((r: any) => {
-        // Usar confianza_ia si disponible, sino score base
         const pct = r.confianza_ia ?? r.score ?? r.porcentaje ?? r.matching?.porcentaje ?? 0;
         return {
           tienda: r.tienda || '',
@@ -692,7 +873,7 @@ export default function MonitorMasivoICA() {
     } catch (err: any) {
       return { numero, nombre: producto, conversion, resultados: [], total_encontrados: 0, procesando: false, error: err.message };
     }
-  };
+  }, [especPorItem, contexto]);
 
   // ─── Búsqueda individual ──────────────────────────────────────────────────────
   const buscarUno = async () => {
@@ -739,7 +920,7 @@ export default function MonitorMasivoICA() {
   const iniciarTexto = () => iniciarBarrido(parsearLista(inputMasivo));
   const cancelar = () => { abortRef.current = true; notify('Cancelando barrido...', 'warning'); };
 
-  // ─── Selección de resultado por modo ──────────────────────────────────────────
+  // ─── Selección de resultado por modo ─────────────────────────────────────────
   const elegirPorModo = (item: ItemLista, modo: string): ProductoResultado | undefined => {
     const res = item.resultados;
     if (!res.length) return undefined;
@@ -751,7 +932,6 @@ export default function MonitorMasivoICA() {
         .sort((a, b) => a.precio_valor - b.precio_valor)[0];
     }
     if (modo === 'equilibrado') {
-      // Excluir alertas de unidad y outliers de precio (> 2x la mediana)
       const precios = res.map(r => r.precio_valor).filter(p => p > 0).sort((a, b) => a - b);
       const mediana = precios[Math.floor(precios.length / 2)] || 0;
       const candidatos = res.filter(r =>
@@ -761,11 +941,10 @@ export default function MonitorMasivoICA() {
       const pool = candidatos.length ? candidatos : res;
       return [...pool].sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0))[0];
     }
-    // mejor_match (default)
     return [...res].sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0))[0];
   };
 
-  // ─── Exportar MISMO Excel — 100% en el navegador (SheetJS), sin servidor ──────
+  // ─── Exportar MISMO Excel ─────────────────────────────────────────────────────
   const exportarMismoExcel = async (modo: string = 'manual') => {
     if (!archivoExcel) { notify('Carga un Excel primero', 'warning'); return; }
     setMenuDescarga(false);
@@ -776,16 +955,14 @@ export default function MonitorMasivoICA() {
     });
     if (!seleccionados.length) { notify('Sin resultados para exportar', 'warning'); return; }
     const nombreModo: Record<string, string> = { manual: 'seleccion', mejor_match: 'mejor-match', menor_precio: 'menor-precio', equilibrado: 'equilibrado' };
-    notify(`Generando Excel (${nombreModo[modo] || modo})...`, 'success');
+    notify(`Generando Excel (${nombreModo[modo] || modo})...`, 'info');
 
     try {
-      // ExcelJS corre en el servidor para preservar colores, fórmulas y estilos del COSTEO original
       const fd = new FormData();
       fd.append('file', archivoExcel, archivoExcel.name);
       fd.append('sheetName', sheetNameActual);
       fd.append('seleccionados', JSON.stringify(seleccionados));
       fd.append('modo', modo);
-      // Pasar los índices de columna detectados por SheetJS (el servidor los usa directamente)
       if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
 
       const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
@@ -811,7 +988,6 @@ export default function MonitorMasivoICA() {
     }
   };
 
-  // helper: descarga un workbook XLSX como blob sin usar writeFile (evita error de fs en Next.js)
   const descargarXlsx = (wb: import('xlsx').WorkBook, filename: string) => {
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -821,7 +997,6 @@ export default function MonitorMasivoICA() {
     URL.revokeObjectURL(url);
   };
 
-  // ─── Exportar MEJOR resultado ─────────────────────────────────────────────────
   const exportarMejor = () => {
     try {
       const rows = itemsLista.map(item => {
@@ -848,7 +1023,6 @@ export default function MonitorMasivoICA() {
     }
   };
 
-  // ─── Exportar TODOS ───────────────────────────────────────────────────────────
   const exportarTodos = () => {
     try {
       const rows: any[] = [];
@@ -869,10 +1043,129 @@ export default function MonitorMasivoICA() {
     }
   };
 
+  // ─── Limpiar (con modal de confirmación) ──────────────────────────────────────
   const limpiar = () => {
-    if (itemsLista.length && confirm('¿Limpiar todos los resultados?')) {
-      setItemsLista([]); setProductosExcel([]); setWorkbook(null);
-      setShowModal(false); setArchivoExcel(null); setPestanas([]); setSeleccion(new Map());
+    if (itemsLista.length) setConfirmLimpiar(true);
+  };
+
+  const confirmarLimpiar = () => {
+    setItemsLista([]);
+    setProductosExcel([]);
+    setWorkbook(null);
+    setShowModal(false);
+    setArchivoExcel(null);
+    setPestanas([]);
+    setSeleccion(new Map());
+    setNombreProyecto('');
+    setConfirmLimpiar(false);
+  };
+
+  // ─── Guardar búsqueda en Supabase ─────────────────────────────────────────────
+  const guardarBusqueda = async (nombre: string) => {
+    try {
+      const payload = {
+        nombre,
+        nombre_archivo: archivoExcel?.name || '',
+        id_proyecto: nombre,
+        items_excel: productosExcel,
+        items_lista: itemsLista.map(item => ({
+          ...item,
+          resultados: item.resultados.slice(0, 15),
+        })),
+        seleccion: Object.fromEntries(seleccion),
+        total_productos: stats.total,
+        con_resultados: stats.con,
+        avg_match: stats.avgPct,
+      };
+
+      const res = await fetch('/api/busquedas-guardadas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        notify(`Error al guardar: ${err.error}`, 'error');
+        return;
+      }
+
+      notify(`Búsqueda "${nombre}" guardada exitosamente`, 'success');
+    } catch (e: any) {
+      notify(`Error al guardar: ${e.message}`, 'error');
+    }
+  };
+
+  // ─── Cargar lista de búsquedas guardadas ──────────────────────────────────────
+  const cargarBusquedas = async () => {
+    setCargandoGuardadas(true);
+    try {
+      const res = await fetch('/api/busquedas-guardadas');
+      if (!res.ok) throw new Error('Error al cargar búsquedas');
+      const data = await res.json();
+      setBusquedasGuardadas(data.busquedas || []);
+    } catch (e: any) {
+      notify(`Error al cargar búsquedas: ${e.message}`, 'error');
+    } finally {
+      setCargandoGuardadas(false);
+    }
+  };
+
+  // ─── Restaurar por ID directo (desde sessionStorage — página de búsquedas) ───
+  const restaurarBusquedaById = async (id: string) => {
+    notify('Restaurando búsqueda guardada...', 'info');
+    try {
+      const res = await fetch(`/api/busquedas-guardadas/${id}`);
+      if (!res.ok) throw new Error('No se pudo cargar la búsqueda');
+      const data = await res.json();
+      const b = data.busqueda;
+      setProductosExcel(b.items_excel || []);
+      setItemsLista(b.items_lista || []);
+      setNombreProyecto(b.nombre);
+      if (b.seleccion && typeof b.seleccion === 'object') {
+        setSeleccion(new Map(Object.entries(b.seleccion)) as Map<string, ProductoResultado>);
+      }
+      notify(`"${b.nombre}" restaurado — ${(b.items_lista || []).length} productos`, 'success');
+    } catch (e: any) {
+      notify(`Error al restaurar: ${e.message}`, 'error');
+    }
+  };
+
+  // ─── Restaurar una búsqueda guardada ─────────────────────────────────────────
+  const restaurarBusqueda = async (id: string) => {
+    setCargandoGuardadas(true);
+    try {
+      const res = await fetch(`/api/busquedas-guardadas/${id}`);
+      if (!res.ok) throw new Error('No se pudo cargar la búsqueda');
+      const data = await res.json();
+      const b = data.busqueda;
+
+      setProductosExcel(b.items_excel || []);
+      setItemsLista(b.items_lista || []);
+      setNombreProyecto(b.nombre);
+
+      if (b.seleccion && typeof b.seleccion === 'object') {
+        setSeleccion(new Map(Object.entries(b.seleccion)) as Map<string, ProductoResultado>);
+      }
+
+      setShowCargar(false);
+      notify(`"${b.nombre}" restaurado — ${(b.items_lista || []).length} productos`, 'success');
+    } catch (e: any) {
+      notify(`Error al restaurar: ${e.message}`, 'error');
+    } finally {
+      setCargandoGuardadas(false);
+    }
+  };
+
+  // ─── Eliminar una búsqueda guardada ──────────────────────────────────────────
+  const eliminarBusqueda = async (id: string) => {
+    try {
+      const res = await fetch(`/api/busquedas-guardadas/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
+      setBusquedasGuardadas(prev => prev.filter(b => b.id !== id));
+      notify('Búsqueda eliminada', 'info');
+    } catch (e: any) {
+      notify(`Error al eliminar: ${e.message}`, 'error');
     }
   };
 
@@ -899,6 +1192,7 @@ export default function MonitorMasivoICA() {
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Modales */}
       {showModal && productosExcel.length > 0 && (
         <ModalPreview
           productos={productosExcel}
@@ -912,8 +1206,29 @@ export default function MonitorMasivoICA() {
       {showBasesModal && basesItems.length > 0 && (
         <ModalBases items={basesItems} onClose={() => setShowBasesModal(false)} />
       )}
+      {showGuardar && (
+        <SaveSearchModal
+          onClose={() => setShowGuardar(false)}
+          onSave={guardarBusqueda}
+          nombreDefault={nombreProyecto}
+        />
+      )}
+      {showCargar && (
+        <SavedSearchesPanel
+          busquedas={busquedasGuardadas}
+          cargando={cargandoGuardadas}
+          onClose={() => setShowCargar(false)}
+          onCargar={restaurarBusqueda}
+          onEliminar={eliminarBusqueda}
+        />
+      )}
+      {confirmLimpiar && (
+        <ConfirmLimpiarModal
+          onConfirm={confirmarLimpiar}
+          onCancel={() => setConfirmLimpiar(false)}
+        />
+      )}
 
-      {/* Toasts */}
       <ToastContainer toasts={toasts} onClose={closeToast} />
 
       {/* Header */}
@@ -947,6 +1262,26 @@ export default function MonitorMasivoICA() {
               </button>
             </div>
 
+            {/* Guardar búsqueda actual */}
+            {itemsLista.length > 0 && !procesando && (
+              <button
+                onClick={() => setShowGuardar(true)}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                title="Guardar búsqueda en base de datos"
+              >
+                <Bookmark size={14} /> Guardar
+              </button>
+            )}
+
+            {/* Mis búsquedas guardadas */}
+            <button
+              onClick={() => { cargarBusquedas(); setShowCargar(true); }}
+              className="flex items-center gap-1.5 px-3 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-semibold transition-colors"
+              title="Ver búsquedas guardadas"
+            >
+              <FolderOpen size={14} /> Mis búsquedas
+            </button>
+
             {/* Menú de descargas */}
             <div className="relative">
               <button onClick={() => setMenuDescarga(v => !v)} disabled={!itemsLista.length}
@@ -961,10 +1296,10 @@ export default function MonitorMasivoICA() {
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Mismo formato COSTEO (fórmulas intactas)</p>
                     </div>
                     {[
-                      { modo: 'mejor_match', label: 'Mejor coincidencia', desc: 'El de mayor % match por ítem', icon: <CheckCircle2 size={14} className="text-emerald-600" />, req: true },
-                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-[#059669]" />, req: true },
-                      { modo: 'equilibrado', label: 'Equilibrado', desc: 'Mejor match sin outliers ni alertas', icon: <Sparkles size={14} className="text-violet-600" />, req: true },
-                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-[#059669]" />, req: true },
+                      { modo: 'mejor_match', label: 'Mejor coincidencia', desc: 'El de mayor % match por ítem', icon: <CheckCircle2 size={14} className="text-emerald-600" /> },
+                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-[#059669]" /> },
+                      { modo: 'equilibrado', label: 'Equilibrado', desc: 'Mejor match sin outliers ni alertas', icon: <Sparkles size={14} className="text-violet-600" /> },
+                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-[#059669]" /> },
                     ].map(o => (
                       <button key={o.modo} onClick={() => exportarMismoExcel(o.modo)} disabled={!archivoExcel}
                         className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 disabled:opacity-40 text-left transition-colors border-b border-slate-50">
@@ -1004,7 +1339,8 @@ export default function MonitorMasivoICA() {
               )}
             </div>
             <button onClick={limpiar} disabled={!itemsLista.length}
-              className="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 disabled:opacity-40 transition-colors">
+              className="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 disabled:opacity-40 transition-colors"
+              title="Limpiar resultados">
               <Trash2 size={16} />
             </button>
           </div>
@@ -1018,7 +1354,7 @@ export default function MonitorMasivoICA() {
 
           {/* Cargar Excel */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">Cargar Excel COSTEO</label>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Cargar Excel COSTEO</p>
             <button onClick={() => document.getElementById('excel-input')?.click()}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
               <Upload size={15} /> Subir Excel
@@ -1026,7 +1362,15 @@ export default function MonitorMasivoICA() {
             <input id="excel-input" type="file" accept=".xlsx,.xls" className="hidden"
               onChange={e => e.target.files?.[0] && cargarExcel(e.target.files[0])} />
 
-            {/* Prompt: ofrecer reforzar con el PDF tras cargar el Excel */}
+            {/* Nombre proyecto auto-extraído */}
+            {nombreProyecto && (
+              <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+                <p className="text-[10px] text-emerald-700 font-medium truncate" title={nombreProyecto}>
+                  📁 {nombreProyecto}
+                </p>
+              </div>
+            )}
+
             {preguntarBases && !basesInfo && (
               <div className="mt-3 p-3 bg-violet-50 border border-violet-200 rounded-lg">
                 <p className="text-[11px] text-violet-800 font-medium mb-2">
@@ -1035,7 +1379,6 @@ export default function MonitorMasivoICA() {
               </div>
             )}
 
-            {/* Subir bases PDF (Gemini lee las especificaciones) */}
             <button onClick={() => document.getElementById('bases-input')?.click()}
               disabled={cargandoBases}
               className={`mt-2 w-full ${preguntarBases && !basesInfo ? 'ring-2 ring-violet-300' : ''} bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors`}>
@@ -1054,7 +1397,7 @@ export default function MonitorMasivoICA() {
 
             {pestanas.length > 1 && (
               <div className="mt-3">
-                <label className="text-[10px] text-slate-400 font-medium block mb-1">Pestaña:</label>
+                <p className="text-[10px] text-slate-400 font-medium mb-1">Pestaña:</p>
                 <select value={sheetNameActual} onChange={e => cambiarPestana(e.target.value)}
                   className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#059669]/20">
                   {pestanas.map(p => <option key={p}>{p}</option>)}
@@ -1087,7 +1430,7 @@ export default function MonitorMasivoICA() {
 
           {/* Búsqueda masiva texto */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">Lista manual</label>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Lista manual</p>
             <textarea
               className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]/20 resize-none"
               placeholder={`1\tLetrero de obra\n2\tMadera Pino 2"x3"\n3\tAnticorrosivo`}
@@ -1114,7 +1457,7 @@ export default function MonitorMasivoICA() {
               <div className="flex items-center gap-2">
                 <Settings size={14} className="text-slate-500" />
                 <span className="text-xs font-semibold text-slate-600">Contexto de búsqueda</span>
-                {contexto && <span className="w-2 h-2 rounded-full bg-[#D1FAE5]/500 inline-block" />}
+                {contexto && <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />}
               </div>
               {mostrarConfig ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
             </button>
@@ -1139,7 +1482,7 @@ export default function MonitorMasivoICA() {
           {/* Estadísticas */}
           {itemsLista.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Resumen</label>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Resumen</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'Total', val: stats.total, color: 'text-slate-900' },
@@ -1177,6 +1520,12 @@ export default function MonitorMasivoICA() {
               </div>
               <p className="font-semibold text-slate-400 text-sm mb-1">Lista vacía</p>
               <p className="text-slate-300 text-xs">Carga un Excel COSTEO o escribe productos en la lista manual</p>
+              <button
+                onClick={() => { cargarBusquedas(); setShowCargar(true); }}
+                className="mt-4 flex items-center gap-2 text-xs text-slate-500 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 px-4 py-2 rounded-lg transition-colors"
+              >
+                <FolderOpen size={14} /> Ver búsquedas guardadas
+              </button>
             </div>
           ) : (
             itemsLista.map((item) => {
@@ -1189,7 +1538,7 @@ export default function MonitorMasivoICA() {
 
                   {/* Header del item */}
                   <div className={`px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b ${
-                    item.procesando ? 'bg-[#D1FAE5]/60 border-[#059669]/20'
+                    item.procesando ? 'bg-emerald-50/60 border-emerald-100'
                     : pct >= 85 ? 'bg-emerald-50 border-emerald-100'
                     : pct >= 60 ? 'bg-amber-50 border-amber-100'
                     : item.resultados.length > 0 ? 'bg-red-50 border-red-100'
@@ -1203,7 +1552,7 @@ export default function MonitorMasivoICA() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-sm text-slate-800 truncate max-w-xl">{item.nombre}</h3>
                           {item.conversion && item.conversion !== 'unidad' && item.conversion !== 'und' && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-[#D1FAE5] text-[#059669] border border-[#059669]/30 rounded uppercase flex-shrink-0">{item.conversion}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded uppercase flex-shrink-0">{item.conversion}</span>
                           )}
                         </div>
                         {item.procesando ? (
@@ -1240,7 +1589,7 @@ export default function MonitorMasivoICA() {
                             </div>
                           );
                         })()}
-                        {/* Toggle filtro: Mejor match / Menor precio */}
+                        {/* Toggle: Mejor match / Menor precio */}
                         <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden">
                           {([['match','Match'],['precio','Menor $']] as [ModoOrden,string][]).map(([m,label]) => {
                             const activo = (ordenItem.get(item.numero) || 'match') === m;
@@ -1280,10 +1629,12 @@ export default function MonitorMasivoICA() {
                             const precioWeb = r.precio_valor || 0;
                             const diff = ref > 0 ? precioWeb - ref : null;
                             return (
-                              <tr key={i} className={`hover:bg-slate-50/60 transition-colors ${isSel ? 'bg-[#D1FAE5]/40' : ''}`}>
+                              <tr key={i} className={`hover:bg-slate-50/60 transition-colors ${isSel ? 'bg-emerald-50/40' : ''}`}>
                                 <td className="px-3 py-3 text-center">
-                                  <button onClick={() => setSeleccion(prev => { const m = new Map(prev); m.get(item.numero)===r ? m.delete(item.numero) : m.set(item.numero, r); return m; })}
-                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-300 hover:border-[#059669]'}`}>
+                                  <button
+                                    onClick={() => setSeleccion(prev => { const m = new Map(prev); m.get(item.numero)===r ? m.delete(item.numero) : m.set(item.numero, r); return m; })}
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-300 hover:border-[#059669]'}`}
+                                  >
                                     {isSel && <CheckCircle2 size={11} />}
                                   </button>
                                 </td>
@@ -1346,8 +1697,10 @@ export default function MonitorMasivoICA() {
                         <p className="font-medium text-slate-500">Sin resultados</p>
                         <p className="text-xs">Intenta con términos más cortos o generales</p>
                       </div>
-                      <button onClick={() => buscarProducto(item.nombre, item.numero, item.conversion).then(r => setItemsLista(prev => prev.map(p => p.numero===item.numero ? r : p)))}
-                        className="ml-auto text-xs text-[#059669] hover:text-[#065F46] flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => buscarProducto(item.nombre, item.numero, item.conversion).then(r => setItemsLista(prev => prev.map(p => p.numero===item.numero ? r : p)))}
+                        className="ml-auto text-xs text-[#059669] hover:text-[#065F46] flex items-center gap-1 flex-shrink-0"
+                      >
                         <RefreshCw size={13} /> Reintentar
                       </button>
                     </div>

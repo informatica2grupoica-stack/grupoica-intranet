@@ -102,20 +102,17 @@ input[type="date"] {
   padding-right: 0.5rem;
 }
 
-/* Inputs tipo checkbox y radio */
+/* Inputs tipo checkbox y radio — excluir del override de estilos general */
 input[type="checkbox"],
 input[type="radio"] {
-  width: 1rem;
-  height: 1rem;
-  padding: 0;
+  width: 1rem !important;
+  height: 1rem !important;
+  padding: 0 !important;
   accent-color: #3b82f6;
-  border-radius: 0.25rem;
-}
-
-input[type="checkbox"]:checked,
-input[type="radio"]:checked {
-  background-color: #3b82f6 !important;
-  border-color: #3b82f6 !important;
+  border-radius: 0.25rem !important;
+  background-color: transparent !important;
+  border: 1px solid #cbd5e1 !important;
+  min-height: unset !important;
 }
 
 /* Select personalizado con flecha */
@@ -149,8 +146,10 @@ select:-webkit-autofill:focus {
   font-size: 0.875rem;
 }
 
-/* Labels de formularios */
-label {
+/* Labels de formularios — solo dentro de contenedores de formulario para no afectar labels inline */
+.form-container label,
+.card label,
+form label {
   display: block;
   font-size: 0.7rem;
   font-weight: 700;
@@ -417,4 +416,15 @@ p, span, h1, h2, h3, h4, h5, h6, .text-truncate {
 
 .toast-progress-bar {
   animation: toast-progress linear forwards;
+}
+
+/* Barra indeterminada para carga de PDF/bases */
+@keyframes indeterminate-bar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.animate-indeterminate {
+  animation: indeterminate-bar 1.4s ease-in-out infinite;
+  width: 40% !important;
 }
