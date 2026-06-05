@@ -708,7 +708,14 @@ export default function MonitorMasivoICA() {
     } else {
       arr.sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
     }
-    return arr;
+    // Deduplicar por tienda/proveedor: máx 1 resultado por tienda por ítem
+    const tiendasVistas = new Set<string>();
+    return arr.filter(r => {
+      const key = (r.tienda || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+      if (!key || tiendasVistas.has(key)) return false;
+      tiendasVistas.add(key);
+      return true;
+    }).slice(0, 10); // máx 10 por ítem
   }, [ordenItem]);
 
   // ─── Notify ──────────────────────────────────────────────────────────────────
@@ -924,7 +931,7 @@ export default function MonitorMasivoICA() {
 
       const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
       const regionParam = region.trim() ? `&region=${encodeURIComponent(region.trim())}` : '';
-      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}${regionParam}`;
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=10&conversion=${encodeURIComponent(conversion)}${ctxParam}${regionParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1192,7 +1199,7 @@ export default function MonitorMasivoICA() {
         items_excel: productosExcel,
         items_lista: itemsLista.map(item => ({
           ...item,
-          resultados: item.resultados.slice(0, 15),
+          resultados: item.resultados.slice(0, 10),
         })),
         seleccion: Object.fromEntries(seleccion),
         total_productos: stats.total,
@@ -1911,7 +1918,7 @@ export default function MonitorMasivoICA() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {resultadosOrdenados(item).slice(0, 15).map((r, i) => {
+                          {resultadosOrdenados(item).slice(0, 10).map((r, i) => {
                             const isSel = seleccion.get(item.numero) === r || (!seleccion.has(item.numero) && i === 0 && r === item.mejor_match);
                             const pctR = r.matching?.porcentaje ?? 0;
                             const precioWeb = r.precio_valor || 0;

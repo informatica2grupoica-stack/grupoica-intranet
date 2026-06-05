@@ -138,17 +138,17 @@ const PREFIJOS_INTERNOS = /^(?:B\s+SC\s+|B\s+MSD\s+|B\s+MK\s+|B\s+VG\s+|[A-Z]\d{
 // para evitar que .test() avance lastIndex y rompa la lógica
 const PALABRAS_GLOSARIO: [RegExp, string][] = [
   [/\bMalla\s+Acma\b/i, 'Malla electrosoldada galvanizada'],
-  [/\bMalla\s+Raschel\b/i, 'Malla sombra'],
+  [/\bMalla\s+Raschel\b/i, 'Malla sombra raschel'],
   [/\bMalla\s+Concertina\b/i, 'Alambre concertina'],
   [/\bPino\s+Verde\b/i, 'Pino bruto'],
   [/\bPino\s+Impregnado\b/i, 'Pino impregnado CCA'],
-  [/\bRodillo\s+Chiporro\b/i, 'Rodillo pintura'],  // "Rodillo Chiporro" → no duplicar
+  [/\bRodillo\s+Chiporro\b/i, 'Rodillo pintura'],
   [/\bChiporro\b/i, 'Rodillo pintura'],
-  [/\bPomel(?:es?)?\b/i, 'Bisagra'],              // Pomel / Pomele / Pomeles
+  // NOTA: Pomel NO se reemplaza — "pomel" es el nombre comercial en Chile (pieza de fijación madera)
   [/\bHilo\s+Esp[aá]rrago\b/i, 'Espárrago roscado'],
-  [/\bPicaporte\s+Carcelero\b/i, 'Pasador puerta pesado'],
+  // NOTA: Picaporte Carcelero NO se reemplaza — es un nombre buscable directamente
   [/\bCerestain\b/i, 'Ceresita impregnante madera'],
-  [/\bTinetas?\b/i, 'Balde pintura'],             // Tineta / Tinetas
+  [/\bTinetas?\b/i, 'Balde pintura'],
   [/\bPrensa\s+[Ee]stopa\b/i, 'Prensaestopa'],
   [/\bConduit\s+EMT\b/i, 'Tubería conduit EMT'],
   [/\bTeja\s+Continua\b/i, 'Teja plástica continua'],
@@ -157,6 +157,29 @@ const PALABRAS_GLOSARIO: [RegExp, string][] = [
   [/\bEstruct-Viga\b/i, 'Viga pino estructural'],
   [/\bSalas?\s+de\s+Ba[ñn]o\b/i, 'Inodoro distancia entre ejes'],
 ];
+
+// ─── Simplificador para retry cuando Serper devuelve 0 resultados ─────────────
+// Elimina cantidades y especificaciones que confunden la búsqueda
+function simplificarParaBusqueda(nombre: string): string {
+  let n = nombre
+    // Quitar cantidades al final: "100 un", "100 U/N", "100 Unidades", "Pack de 25"
+    .replace(/\s+\d+\s*U\/N\s*$/i, '')
+    .replace(/\s+\(?\d+\s*un(?:idades?)?\)?$/i, '')
+    .replace(/\s+Pack\s+de\s+\d+$/i, '')
+    .replace(/\s+\d+\s*(?:unidades?|piezas?|pzs?)$/i, '')
+    // Quitar bloques entre paréntesis con cantidades: "(100 un)", "(pack 25)"
+    .replace(/\s*\(\d+[^)]*\)/gi, '')
+    .replace(/\s*\([^)]{0,8}\)/gi, '')  // paréntesis cortos
+    // Quitar "equivalente" y variantes que añaden ruido
+    .replace(/\s+equivalente\b/i, '')
+    .trim();
+
+  // Si queda muy largo, usar solo las primeras 5 palabras (el nombre comercial)
+  const palabras = n.split(/\s+/);
+  if (palabras.length > 5) n = palabras.slice(0, 5).join(' ');
+
+  return n.trim() || nombre;
+}
 
 function preprocesarProducto(nombre: string): string {
   if (!nombre) return nombre;
@@ -715,7 +738,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const producto = (sp.get('producto') || '').trim();
   const numeroItem = sp.get('numero') || '';
-  const minimo = parseInt(sp.get('minimo') || '15', 10);
+  const minimo = Math.min(parseInt(sp.get('minimo') || '10', 10), 10); // máx 10 por item
   const conversion = (sp.get('conversion') || 'unidad').trim().toLowerCase();
   const contexto = (sp.get('contexto') || '').trim();
   const region = (sp.get('region') || '').trim();
@@ -746,10 +769,34 @@ export async function GET(req: NextRequest) {
     ]);
     crudos = [...shopping, ...organico];
 
-    // Reintento si pocos resultados
-    if (crudos.length < 8 && variantes.length > 1) {
+    // Reintento 1: si pocos resultados, probar última variante (más general)
+    if (crudos.length < 5 && variantes.length > 1) {
       const reintento = await buscarSerperShopping([variantes[variantes.length - 1]], minimo, region);
       crudos.push(...reintento);
+    }
+
+    // Reintento 2: si CERO resultados, buscar con nombre simplificado (sin cantidades)
+    if (crudos.length === 0) {
+      const simplificado = simplificarParaBusqueda(productoLimpio);
+      if (simplificado !== productoLimpio && simplificado.length > 3) {
+        const [shop2, org2] = await Promise.all([
+          buscarSerperShopping([simplificado], Math.max(minimo, 10), region),
+          buscarSerperOrganico(simplificado, 5, region),
+        ]);
+        crudos = [...shop2, ...org2];
+      }
+    }
+
+    // Reintento 3: si aún 0, usar solo las primeras 3 palabras del nombre original
+    if (crudos.length === 0) {
+      const nuclear = productoLimpio.split(/\s+/).slice(0, 3).join(' ');
+      if (nuclear.length > 3) {
+        const [shop3, org3] = await Promise.all([
+          buscarSerperShopping([nuclear + ' Chile precio'], Math.max(minimo, 10), region),
+          buscarSerperOrganico(nuclear, 5, region),
+        ]);
+        crudos = [...shop3, ...org3];
+      }
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'error';
@@ -790,7 +837,20 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const resultadosSlice = resultadosFinales.slice(0, minimo * 2);
+  // Deduplicar por tienda: max 1 resultado por proveedor por ítem
+  const tiendasVistas = new Set<string>();
+  const resultadosDedupTienda: ResultadoMapeado[] = [];
+  for (const r of resultadosFinales) {
+    const tiendaKey = normalizar(r.tienda || '').slice(0, 20);
+    if (!tiendaKey || tiendasVistas.has(tiendaKey)) continue;
+    tiendasVistas.add(tiendaKey);
+    resultadosDedupTienda.push(r);
+    if (resultadosDedupTienda.length >= minimo) break;
+  }
+  // Si la deduplicación dejó muy pocos, completar con el resto (sin tienda repetida ya filtrada)
+  const resultadosSlice = resultadosDedupTienda.length >= 3
+    ? resultadosDedupTienda.slice(0, minimo)
+    : resultadosFinales.slice(0, minimo);
 
   return NextResponse.json({
     numero_item: numeroItem,
