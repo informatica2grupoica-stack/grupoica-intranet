@@ -837,17 +837,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Deduplicar por tienda: max 1 resultado por proveedor por ítem
+  // ── Normaliza nombre de tienda para deduplicar ─────────────────────────────
+  // "Sodimac" y "sodimac.cl" → "sodimac" | "Easy" y "easy.cl" → "easy"
+  const normTienda = (t: string) =>
+    (t || '').toLowerCase()
+      .replace(/\s+(s\.?a\.?|spa|ltda?\.?|limitada|store|chile)\s*$/i, '')
+      .replace(/\.(cl|com|net|org)\s*$/i, '')
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 25);
+
+  // Deduplicar: máx 1 resultado por proveedor por ítem
   const tiendasVistas = new Set<string>();
   const resultadosDedupTienda: ResultadoMapeado[] = [];
   for (const r of resultadosFinales) {
-    const tiendaKey = normalizar(r.tienda || '').slice(0, 20);
+    const tiendaKey = normTienda(r.tienda || '');
     if (!tiendaKey || tiendasVistas.has(tiendaKey)) continue;
     tiendasVistas.add(tiendaKey);
     resultadosDedupTienda.push(r);
     if (resultadosDedupTienda.length >= minimo) break;
   }
-  // Si la deduplicación dejó muy pocos, completar con el resto (sin tienda repetida ya filtrada)
   const resultadosSlice = resultadosDedupTienda.length >= 3
     ? resultadosDedupTienda.slice(0, minimo)
     : resultadosFinales.slice(0, minimo);

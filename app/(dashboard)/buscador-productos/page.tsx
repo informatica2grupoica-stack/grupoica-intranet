@@ -708,10 +708,17 @@ export default function MonitorMasivoICA() {
     } else {
       arr.sort((a, b) => (b.matching?.porcentaje ?? 0) - (a.matching?.porcentaje ?? 0));
     }
-    // Deduplicar por tienda/proveedor: máx 1 resultado por tienda por ítem
+    // Deduplicar por proveedor: máx 1 resultado por tienda por ítem
+    // "Sodimac" y "sodimac.cl" → mismo proveedor
+    const normT = (t: string) =>
+      (t || '').toLowerCase()
+        .replace(/\s+(s\.?a\.?|spa|ltda?\.?|limitada|store|chile)\s*$/i, '')
+        .replace(/\.(cl|com|net|org)\s*$/i, '')
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 25);
     const tiendasVistas = new Set<string>();
     return arr.filter(r => {
-      const key = (r.tienda || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+      const key = normT(r.tienda || '');
       if (!key || tiendasVistas.has(key)) return false;
       tiendasVistas.add(key);
       return true;
