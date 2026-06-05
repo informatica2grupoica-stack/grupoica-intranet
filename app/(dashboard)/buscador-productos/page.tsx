@@ -9,7 +9,8 @@ import {
   Download, FileSpreadsheet, ShoppingBag,
   Upload, Eye, Settings, ChevronDown, ChevronUp,
   TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles,
-  FileText, Zap, Bookmark, FolderOpen, Save
+  FileText, Zap, Bookmark, FolderOpen, Save,
+  MapPin, Building2
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,18 @@ interface BusquedaGuardada {
   con_resultados: number;
   avg_match: number;
   created_at: string;
+}
+
+interface LocalProveedor {
+  nombre: string;
+  tipo: 'ferreteria' | 'materiales' | 'otro';
+  direccion: string;
+  telefono: string | null;
+  sitio_web: string | null;
+  rating: number | null;
+  total_reviews: number | null;
+  horario: string | null;
+  maps_url: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -613,6 +626,26 @@ function base64ToFile(base64: string, filename: string): File {
   );
 }
 
+// ─── Regiones de Chile ────────────────────────────────────────────────────────
+const REGIONES_CHILE = [
+  { value: 'Arica y Parinacota', label: 'Arica y Parinacota', abbr: 'XV' },
+  { value: 'Tarapacá', label: 'Tarapacá', abbr: 'I' },
+  { value: 'Antofagasta', label: 'Antofagasta', abbr: 'II' },
+  { value: 'Atacama', label: 'Atacama', abbr: 'III' },
+  { value: 'Coquimbo', label: 'Coquimbo', abbr: 'IV' },
+  { value: 'Valparaíso', label: 'Valparaíso', abbr: 'V' },
+  { value: 'Metropolitana', label: 'Metropolitana', abbr: 'RM' },
+  { value: "O'Higgins", label: "O'Higgins", abbr: 'VI' },
+  { value: 'Maule', label: 'Maule', abbr: 'VII' },
+  { value: 'Ñuble', label: 'Ñuble', abbr: 'XVI' },
+  { value: 'Biobío', label: 'Biobío', abbr: 'VIII' },
+  { value: 'La Araucanía', label: 'La Araucanía', abbr: 'IX' },
+  { value: 'Los Ríos', label: 'Los Ríos', abbr: 'XIV' },
+  { value: 'Los Lagos', label: 'Los Lagos', abbr: 'X' },
+  { value: 'Aysén', label: 'Aysén', abbr: 'XI' },
+  { value: 'Magallanes', label: 'Magallanes', abbr: 'XII' },
+];
+
 export default function MonitorMasivoICA() {
   const [inputManual, setInputManual]   = useState('');
   const [inputMasivo, setInputMasivo]   = useState('');
@@ -651,6 +684,12 @@ export default function MonitorMasivoICA() {
   const [cargandoGuardadas, setCargandoGuardadas]     = useState(false);
   const [confirmLimpiar, setConfirmLimpiar]           = useState(false);
 
+  // ─── Georeferencia ───────────────────────────────────────────────────────────
+  const [region, setRegion]                           = useState('');
+  const [localesRegion, setLocalesRegion]             = useState<LocalProveedor[]>([]);
+  const [buscandoLocales, setBuscandoLocales]         = useState(false);
+  const [mostrarLocales, setMostrarLocales]           = useState(false);
+
   // Restaurar automáticamente si venimos desde la página de búsquedas guardadas
   useEffect(() => {
     const id = sessionStorage.getItem('restaurar_busqueda');
@@ -683,6 +722,35 @@ export default function MonitorMasivoICA() {
     setToasts(p => [...p.slice(-4), { id, message, type, duration }]);
     setTimeout(() => closeToast(id), duration);
   }, [closeToast]);
+
+  // ─── Buscar proveedores locales por región ────────────────────────────────────
+  const buscarLocales = useCallback(async (regionActual: string) => {
+    if (!regionActual) { setLocalesRegion([]); return; }
+    setBuscandoLocales(true);
+    try {
+      const res = await fetch(`/api/buscar-locales?region=${encodeURIComponent(regionActual)}&tipo=todos`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setLocalesRegion(data.locales || []);
+      if ((data.locales || []).length > 0) setMostrarLocales(true);
+      notify(`${data.total || 0} proveedores locales encontrados en ${regionActual}`, 'info');
+    } catch (e: any) {
+      notify(`No se pudo cargar proveedores locales: ${e.message}`, 'warning');
+      setLocalesRegion([]);
+    } finally {
+      setBuscandoLocales(false);
+    }
+  }, [notify]);
+
+  const cambiarRegion = useCallback((nuevaRegion: string) => {
+    setRegion(nuevaRegion);
+    if (nuevaRegion) {
+      buscarLocales(nuevaRegion);
+    } else {
+      setLocalesRegion([]);
+      setMostrarLocales(false);
+    }
+  }, [buscarLocales]);
 
   // ─── Parsear lista texto ──────────────────────────────────────────────────────
   const parsearLista = (texto: string) =>
@@ -843,7 +911,8 @@ export default function MonitorMasivoICA() {
       const productoBuscar = mejorada ? mejorada.slice(0, 200) : producto;
 
       const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
-      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}`;
+      const regionParam = region.trim() ? `&region=${encodeURIComponent(region.trim())}` : '';
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=15&conversion=${encodeURIComponent(conversion)}${ctxParam}${regionParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -903,7 +972,7 @@ export default function MonitorMasivoICA() {
     } catch (err: any) {
       return { numero, nombre: producto, conversion, resultados: [], total_encontrados: 0, procesando: false, error: err.message };
     }
-  }, [especPorItem, contexto]);
+  }, [especPorItem, contexto, region]);
 
   // ─── Búsqueda individual ──────────────────────────────────────────────────────
   const buscarUno = async () => {
@@ -1522,6 +1591,137 @@ export default function MonitorMasivoICA() {
                   <div className="bg-[#059669] h-1.5 rounded-full transition-all" style={{ width: `${progreso.total ? (progreso.actual/progreso.total)*100 : 0}%` }} />
                 </div>
                 <button onClick={cancelar} className="mt-1 text-xs text-red-500 hover:text-red-700 w-full text-center">Cancelar</button>
+              </div>
+            )}
+          </div>
+
+          {/* Georeferencia — Región de búsqueda */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className={region ? 'text-emerald-600' : 'text-slate-400'} />
+                  <span className="text-xs font-semibold text-slate-600">Región de búsqueda</span>
+                  {region && <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />}
+                </div>
+                {region && (
+                  <button onClick={() => cambiarRegion('')} className="text-[10px] text-red-500 hover:text-red-700 transition-colors">
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {/* Selector de región */}
+              <select
+                value={region}
+                onChange={e => cambiarRegion(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700"
+              >
+                <option value="">🌎 Todo Chile (sin filtro)</option>
+                {REGIONES_CHILE.map(r => (
+                  <option key={r.value} value={r.value}>
+                    {r.abbr} — {r.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Chips de regiones frecuentes */}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {['Valparaíso', 'Metropolitana', 'Biobío', 'Aysén'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => cambiarRegion(region === r ? '' : r)}
+                    className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${
+                      region === r
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'border-slate-200 text-slate-500 hover:border-emerald-400 hover:text-emerald-600'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+
+              {/* Info cuando hay región activa */}
+              {region && (
+                <div className="mt-2 px-2.5 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+                  <p className="text-[10px] text-emerald-700 font-medium">
+                    📍 Las búsquedas incluirán <b>{region}</b> como contexto geográfico
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Panel de proveedores locales */}
+            {region && (
+              <div className="border-t border-slate-100">
+                <button
+                  onClick={() => setMostrarLocales(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 size={13} className="text-slate-400" />
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      Proveedores locales
+                      {localesRegion.length > 0 && (
+                        <span className="ml-1.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                          {localesRegion.length}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {buscandoLocales
+                    ? <Loader2 size={13} className="animate-spin text-slate-400" />
+                    : mostrarLocales
+                    ? <ChevronUp size={13} className="text-slate-400" />
+                    : <ChevronDown size={13} className="text-slate-400" />
+                  }
+                </button>
+
+                {mostrarLocales && !buscandoLocales && (
+                  <div className="px-3 pb-3 space-y-2 max-h-72 overflow-y-auto">
+                    {localesRegion.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 text-center py-3">Sin proveedores encontrados</p>
+                    ) : (
+                      localesRegion.map((local, i) => (
+                        <div key={i} className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-semibold text-slate-800 truncate">{local.nombre}</p>
+                              <p className="text-[9px] text-slate-500 truncate mt-0.5">{local.direccion}</p>
+                            </div>
+                            <span className={`shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                              local.tipo === 'ferreteria'
+                                ? 'bg-amber-100 text-amber-700'
+                                : local.tipo === 'materiales'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {local.tipo === 'ferreteria' ? '🔧 Ferr.' : local.tipo === 'materiales' ? '🧱 Mat.' : '📦 Otro'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            {local.rating && (
+                              <span className="text-[9px] text-amber-600 font-medium">⭐ {local.rating} ({local.total_reviews})</span>
+                            )}
+                            {local.telefono && (
+                              <a href={`tel:${local.telefono}`} className="text-[9px] text-blue-600 hover:underline">📞 Llamar</a>
+                            )}
+                            {local.maps_url && (
+                              <a href={local.maps_url} target="_blank" rel="noreferrer" className="text-[9px] text-emerald-600 hover:underline">📍 Maps</a>
+                            )}
+                            {local.sitio_web && (
+                              <a href={local.sitio_web} target="_blank" rel="noreferrer" className="text-[9px] text-slate-600 hover:underline">🌐 Web</a>
+                            )}
+                          </div>
+                          {local.horario && (
+                            <p className="text-[8px] text-slate-400 mt-1">🕐 {local.horario}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

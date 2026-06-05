@@ -251,11 +251,14 @@ interface ItemRaw {
 
 // ─── ETAPA 0: Query Understanding con IA ─────────────────────────────────────
 
-async function entenderConsultaIA(producto: string, contexto: string): Promise<Entidades> {
+async function entenderConsultaIA(producto: string, contexto: string, region?: string): Promise<Entidades> {
   const fallback: Entidades = { marca: null, modelo: null, sku: null, specs: [], variantes: [producto], categoria_ia: null, es_especifico: false };
   if (!DEEPSEEK_KEY) return fallback;
   try {
-    const ctxLine = contexto?.trim() ? `Contexto del usuario: ${contexto}.` : 'Rubro: ferretería y construcción en Chile.';
+    const regionCtx = region?.trim() ? ` Búsqueda específica para la región de ${region}, Chile.` : '';
+    const ctxLine = contexto?.trim()
+      ? `Contexto del usuario: ${contexto}.${regionCtx}`
+      : `Rubro: ferretería y construcción en Chile.${regionCtx}`;
     const prompt = `Eres experto en productos industriales, ferretería y construcción en Chile. ${ctxLine}
 Analiza el producto y extrae entidades clave. Genera variantes de búsqueda optimizadas (de más específica a más general).
 
@@ -273,7 +276,9 @@ Responde SOLO JSON:
 Ejemplos de variantes:
 - "Motor Siemens 5HP 380V" → ["Motor eléctrico Siemens 5HP 380V trifásico Chile", "Motor 5HP 380V precio Chile", "motor eléctrico 5HP Chile"]
 - "Cemento 25kg" → ["cemento corriente 25kg saco precio Chile", "cemento Portland 25kg Chile", "cemento bolsa 25kg"]
-- "Perno M12 inox" → ["Perno M12 acero inoxidable Chile precio", "perno hexagonal M12 inoxidable Chile", "perno M12 Chile ferretería"]`;
+- "Perno M12 inox" → ["Perno M12 acero inoxidable Chile precio", "perno hexagonal M12 inoxidable Chile", "perno M12 Chile ferretería"]
+- Si hay región específica: añade el nombre de la región a al menos una variante
+${region ? `\nRegión de búsqueda: ${region} (inclúyela en al menos una variante).` : ''}`;
 
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 10000);
@@ -309,20 +314,21 @@ Ejemplos de variantes:
 
 // ─── ETAPA 1a: Serper Shopping (multi-variante) ───────────────────────────────
 
-async function buscarSerperShopping(variantes: string[], limitePorVariante: number): Promise<ItemRaw[]> {
+async function buscarSerperShopping(variantes: string[], limitePorVariante: number, region?: string): Promise<ItemRaw[]> {
   if (!SERPER_KEY) return [];
   const resultadosTodos: ItemRaw[] = [];
   const urlsVistas = new Set<string>();
 
   await Promise.allSettled(variantes.map(async (variante) => {
     try {
+      const queryConRegion = region?.trim() ? `${variante} ${region}` : variante;
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 12000);
       const r = await fetch('https://google.serper.dev/shopping', {
         method: 'POST',
         headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
         signal: ctrl.signal,
-        body: JSON.stringify({ q: variante, gl: 'cl', hl: 'es', location: 'Chile', num: 20 }),
+        body: JSON.stringify({ q: queryConRegion, gl: 'cl', hl: 'es', location: 'Chile', num: 20 }),
       });
       clearTimeout(tid);
       if (!r.ok) return;
@@ -353,16 +359,20 @@ async function buscarSerperShopping(variantes: string[], limitePorVariante: numb
 
 // ─── ETAPA 1b: Serper Búsqueda Orgánica (web general) ────────────────────────
 
-async function buscarSerperOrganico(query: string, limite: number): Promise<ItemRaw[]> {
+async function buscarSerperOrganico(query: string, limite: number, region?: string): Promise<ItemRaw[]> {
   if (!SERPER_KEY) return [];
   try {
+    const locationStr = region?.trim() ? region : 'Chile';
+    const queryFinal = region?.trim()
+      ? `${query} precio ${region} Chile comprar`
+      : `${query} precio Chile comprar`;
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
     const r = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
-      body: JSON.stringify({ q: `${query} precio Chile comprar`, gl: 'cl', hl: 'es', location: 'Chile', num: 20 }),
+      body: JSON.stringify({ q: queryFinal, gl: 'cl', hl: 'es', location: locationStr, num: 20 }),
     });
     clearTimeout(tid);
     if (!r.ok) return [];
@@ -542,6 +552,7 @@ export async function GET(req: NextRequest) {
   const minimo = parseInt(sp.get('minimo') || '15', 10);
   const conversion = (sp.get('conversion') || 'unidad').trim().toLowerCase();
   const contexto = (sp.get('contexto') || '').trim();
+  const region = (sp.get('region') || '').trim();
 
   if (!producto) {
     return NextResponse.json({ numero_item: numeroItem, producto, resultados: [], total_encontrados: 0, suficientes: false, categoria: 'desconocida', analisis_producto: {} });
@@ -552,21 +563,21 @@ export async function GET(req: NextRequest) {
   }
 
   // ── ETAPA 0: Query Understanding con IA ─────────────────────────────────────
-  const entidades = await entenderConsultaIA(producto, contexto);
+  const entidades = await entenderConsultaIA(producto, contexto, region);
   const variantes = entidades.variantes.length ? entidades.variantes : [producto];
 
   let crudos: ItemRaw[] = [];
   try {
     // ── ETAPA 1: Búsqueda multi-fuente en paralelo ──────────────────────────
     const [shopping, organico] = await Promise.all([
-      buscarSerperShopping(variantes, Math.max(minimo * 2, 20)),
-      buscarSerperOrganico(variantes[0], 10),
+      buscarSerperShopping(variantes, Math.max(minimo * 2, 20), region),
+      buscarSerperOrganico(variantes[0], 10, region),
     ]);
     crudos = [...shopping, ...organico];
 
     // Reintento si pocos resultados
     if (crudos.length < 8 && variantes.length > 1) {
-      const reintento = await buscarSerperShopping([variantes[variantes.length - 1]], minimo);
+      const reintento = await buscarSerperShopping([variantes[variantes.length - 1]], minimo, region);
       crudos.push(...reintento);
     }
   } catch (e: unknown) {
@@ -616,6 +627,7 @@ export async function GET(req: NextRequest) {
     suficientes: resultadosSlice.length >= minimo,
     deficit: Math.max(0, minimo - resultadosSlice.length),
     pais_busqueda: 'CL',
+    region_busqueda: region || null,
     queries_ia: variantes,
     expandido_ia: variantes.length > 1,
     analisis_producto: analisis,
