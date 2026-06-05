@@ -40,9 +40,16 @@ function tokens(s: string): string[] {
 }
 
 const SINONIMOS: Record<string, string> = {
-  // EPP
-  antiparra: 'lente', antiparras: 'lente', anteojo: 'lente', anteojos: 'lente', gafa: 'lente', gafas: 'lente',
+  // EPP — lentes / protección visual
+  antiparra: 'lente', anteojo: 'lente', anteojos: 'lente',
+  gafa: 'lente', gafas: 'lente',
+  visor: 'lente',        // "visor claro" → no penaliza cuando el resultado dice "lente claro"
+  // EPP — calzado y guantes
   guantes: 'guante', botas: 'bota',
+  // EPP — palabras contextuales que no deben bajar el score
+  seguridad: 'seguridad', industrial: 'seguridad',
+  // Herramientas — variantes de nombre
+  alicate: 'alicate', alicates: 'alicate',
   // Metales / ferretería chilena
   fierro: 'acero', golilla: 'arandela', golillas: 'arandela', pernos: 'perno', tornillos: 'tornillo',
   pletina: 'platina', angulo: 'angular', perfil: 'perfil',
@@ -58,6 +65,8 @@ const SINONIMOS: Record<string, string> = {
   // Mallas
   chiporro: 'rodillo',
   pomeles: 'bisagra', pomel: 'bisagra',
+  // Adjetivos genéricos que suelen no estar en títulos de productos
+  equivalente: 'similar', similar: 'similar',
 };
 
 function raiz(w: string): string {
@@ -96,7 +105,12 @@ function calcularScore(buscado: string, encontrado: string): number {
   if (comunes === 0) return 5;
   const cobertura = comunes / setB.size;
   const precision = comunes / setE.size;
-  const f1 = (2 * cobertura * precision) / (cobertura + precision);
+  // Para nombres de licitación con muchos tokens descriptivos (> 5 tokens únicos),
+  // dar más peso a la precisión que a la cobertura — si el resultado tiene todos sus
+  // tokens cubiertos (precision alta), el match es bueno aunque el query tenga extras.
+  const pesoCobertura = setB.size > 5 ? 0.35 : 0.5;
+  const pesoPrecision = setB.size > 5 ? 0.65 : 0.5;
+  const f1 = (cobertura * pesoCobertura + precision * pesoPrecision);
 
   // Comparar números con dimensiones normalizadas
   const bScore = normalizarParaScore(bN);
