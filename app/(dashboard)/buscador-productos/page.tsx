@@ -41,7 +41,7 @@ interface ItemLista {
 }
 
 interface ProductoExcel {
-  numero: number;
+  numero: number | string;
   nombre: string;
   cantidad: number;
   valor_civa: number;
@@ -865,20 +865,32 @@ export default function MonitorMasivoICA() {
 
     if (headerRow === -1) { notify('No se encontraron encabezados en el Excel', 'error'); return; }
 
+    // Palabras que indican una fila administrativa (no es un producto)
+    const ADMIN_WORDS = ['TOTAL','VERDADERO','COSTEADO','SUBTOTAL','ENTREGA','SOLICITA','FICHA','CIUDAD','REGION','REGIÓN','OBSERVACI','NOTA:','NOTA ','PLAZO','CONTRATO','DIRECCIÓN','DIRECCION'];
+
     const items: ProductoExcel[] = [];
     for (let i = headerRow + 1; i < jsonData.length; i++) {
       const row = jsonData[i];
       if (!row || !row.length) continue;
       const detalle = colDetalle >= 0 ? String(row[colDetalle]||'').trim() : '';
-      if (!detalle || ['TOTAL','VERDADERO','COSTEADO','SUBTOTAL'].some(s => detalle.toUpperCase().includes(s))) continue;
+      if (!detalle) continue;
+      // Filtrar filas administrativas (notas, totales, condiciones de entrega, etc.)
+      if (ADMIN_WORDS.some(s => detalle.toUpperCase().includes(s))) continue;
+      // Filtrar frases largas sin número de ítem válido (son notas del documento)
+      const itemRaw = colItem >= 0 ? String(row[colItem]||'').trim() : '';
+      if (!itemRaw && detalle.split(' ').length > 6) continue; // frase larga sin ítem → nota
       const conversion = colConversion >= 0 ? String(row[colConversion]||'').trim().toLowerCase() : 'unidad';
       let valorCIVA = 0;
       if (colValor >= 0 && row[colValor] != null) {
         const raw = row[colValor];
         valorCIVA = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[$\.]/g,'').replace(',','.')) || 0;
       }
+      // Número de ítem: soporta numérico (4), decimal (4.1) y alfanumérico (C2, B)
+      // Usar String siempre para evitar NaN con prefijos tipo "B", "C2", "B SC"
+      const numeroRaw = itemRaw || String(i - headerRow);
+      const numero = isNaN(Number(numeroRaw)) ? numeroRaw : Number(numeroRaw);
       items.push({
-        numero: colItem >= 0 ? Number(row[colItem]) : i - headerRow,
+        numero: numero as number,
         nombre: detalle,
         cantidad: colCantidad >= 0 ? Number(row[colCantidad])||1 : 1,
         valor_civa: valorCIVA,
