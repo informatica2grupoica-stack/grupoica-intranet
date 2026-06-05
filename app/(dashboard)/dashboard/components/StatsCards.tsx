@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import { Package, TrendingUp, DollarSign, AlertTriangle, TrendingDown } from "lucide-react";
 
@@ -32,7 +32,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Stock Total",
       valor: stats.total_stock,
       icono: TrendingUp,
-      gradient: "from-[#4F46E5] to-[#6366F1]",
+      gradient: "from-[#2563EB] to-[#3B82F6]",
       descripcion: "unidades en inventario",
       trend: "up"
     },
@@ -74,7 +74,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
             </div>
           </div>
           {card.trend === "up" && (
-            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#4F46E5]">
+            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#2563EB]">
               <TrendingUp size={10} /> Tendencia positiva
             </div>
           )}

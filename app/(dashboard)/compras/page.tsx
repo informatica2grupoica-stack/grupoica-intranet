@@ -1,4 +1,4 @@
-// app/(dashboard)/compras/page.tsx
+﻿// app/(dashboard)/compras/page.tsx
 "use client";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import {
@@ -51,7 +51,7 @@ const estadoColor = (e: string) => {
     FACTURADA: "bg-emerald-50 text-emerald-700 border-emerald-200",
     APROBADA: "bg-blue-50 text-blue-700 border-blue-200",
     ENVIADA: "bg-sky-50 text-sky-700 border-sky-200",
-    EMITIDA: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    EMITIDA: "bg-blue-50 text-blue-700 border-blue-200",
     RECEPCIONADA: "bg-teal-50 text-teal-700 border-teal-200",
     ANULADA: "bg-rose-50 text-rose-700 border-rose-200",
     SOLICITADA: "bg-amber-50 text-amber-700 border-amber-200",
@@ -202,8 +202,8 @@ export default function ComprasPage() {
       return [
         { label: "Total OC", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: ShoppingCart },
         { label: "Facturadas", value: fac, color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
-        { label: "Emitidas", value: emit, color: "text-indigo-600", bg: "bg-indigo-100", icon: Receipt },
-        { label: "Monto Total", value: fmt(monto), color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]", icon: DollarSign },
+        { label: "Emitidas", value: emit, color: "text-blue-600", bg: "bg-blue-100", icon: Receipt },
+        { label: "Monto Total", value: fmt(monto), color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", icon: DollarSign },
       ];
     }
     if (tab === "compras") {
@@ -212,7 +212,7 @@ export default function ComprasPage() {
       const porPagar = datosFiltrados.reduce((s, r) => s + Number(r.compra_total_por_pagar || 0), 0);
       return [
         { label: "Total Compras", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: FileText },
-        { label: "Monto Total", value: fmt(total), color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]", icon: DollarSign },
+        { label: "Monto Total", value: fmt(total), color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", icon: DollarSign },
         { label: "Pagado", value: fmt(pagado), color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
         { label: "Por Pagar", value: fmt(porPagar), color: "text-rose-600", bg: "bg-rose-100", icon: AlertCircle },
       ];
@@ -222,7 +222,7 @@ export default function ComprasPage() {
       const neto = datosFiltrados.reduce((s, r) => s + Number(r.dte_total_neto || 0), 0);
       return [
         { label: "Total DTE", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: FileText },
-        { label: "Monto Total", value: fmt(monto), color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]", icon: DollarSign },
+        { label: "Monto Total", value: fmt(monto), color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", icon: DollarSign },
         { label: "Total Neto", value: fmt(neto), color: "text-blue-600", bg: "bg-blue-100", icon: Hash },
         { label: "Emisores únicos", value: new Set(datosFiltrados.map((r) => r.dte_rut_emisor)).size, color: "text-purple-600", bg: "bg-purple-100", icon: Building2 },
       ];
@@ -234,7 +234,7 @@ export default function ComprasPage() {
     const pagosConSaldo = datosFiltrados.filter(r => Number(r.cp_por_pagar || 0) > 0).length;
     return [
       { label: "Total Pagos", value: datosFiltrados.length, color: "text-slate-700", bg: "bg-slate-100", icon: CreditCard },
-      { label: "Monto Total", value: fmt(montoTotal), color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]", icon: DollarSign },
+      { label: "Monto Total", value: fmt(montoTotal), color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", icon: DollarSign },
       { label: "Total Pagado", value: fmt(monPagado), color: "text-emerald-600", bg: "bg-emerald-100", icon: CheckCircle2 },
       { label: "Por Pagar", value: `${fmt(monPorPagar)} (${pagosConSaldo})`, color: "text-rose-500", bg: "bg-rose-100", icon: AlertCircle },
     ];
@@ -387,7 +387,7 @@ export default function ComprasPage() {
   const renderTabla = () => {
     if (loading) return (
       <tr><td colSpan={9} className="p-16 text-center">
-        <Loader2 className="animate-spin text-[#4F46E5] mx-auto mb-2" size={32} />
+        <Loader2 className="animate-spin text-[#2563EB] mx-auto mb-2" size={32} />
         <p className="text-slate-400 text-xs">Consultando API Obuma...</p>
       </td></tr>
     );
@@ -395,7 +395,7 @@ export default function ComprasPage() {
       <tr><td colSpan={9} className="p-16 text-center">
         <AlertCircle className="mx-auto text-rose-400 mb-2" size={32} />
         <p className="text-rose-500 text-sm font-bold">{error}</p>
-        <button onClick={cargar} className="mt-2 text-xs text-[#4F46E5] font-bold hover:underline">Reintentar</button>
+        <button onClick={cargar} className="mt-2 text-xs text-[#2563EB] font-bold hover:underline">Reintentar</button>
       </td></tr>
     );
     if (pagActual.length === 0) return (
@@ -404,7 +404,7 @@ export default function ComprasPage() {
 
     if (tab === "oc") return pagActual.map((r) => (
       <tr key={r.compra_oc_id} className="hover:bg-slate-50/50 transition-colors">
-        <td className="px-5 py-3.5 font-bold text-[#4F46E5]">#{r.compra_oc_folio}</td>
+        <td className="px-5 py-3.5 font-bold text-[#2563EB]">#{r.compra_oc_folio}</td>
         <td className="px-5 py-3.5 text-xs text-slate-600">{fmtFecha(r.compra_oc_fecha_ingreso)}</td>
         <td className="px-5 py-3.5">
           <p className="text-xs font-bold text-slate-700 truncate max-w-[180px]">
@@ -421,7 +421,7 @@ export default function ComprasPage() {
         </td>
         <td className="px-5 py-3.5 text-center">
           <button onClick={() => verDetalleOC(r.compra_oc_id)}
-            className="p-2 rounded-lg bg-slate-100 hover:bg-[#EEF2FF] text-slate-500 hover:text-[#4F46E5] transition-all">
+            className="p-2 rounded-lg bg-slate-100 hover:bg-[#EFF6FF] text-slate-500 hover:text-[#2563EB] transition-all">
             <Eye size={15} />
           </button>
         </td>
@@ -492,7 +492,7 @@ export default function ComprasPage() {
         </td>
         <td className="px-5 py-3.5 text-center">
           <button onClick={() => verDetalleDTE(r.dte_id)}
-            className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#EEF2FF] text-slate-500 hover:text-[#4F46E5] transition-all">
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#EFF6FF] text-slate-500 hover:text-[#2563EB] transition-all">
             <Eye size={14} />
           </button>
         </td>
@@ -563,8 +563,8 @@ export default function ComprasPage() {
             onClick={() => { setTab(t.id); setDatos([]); setFiltros({ ...FILTROS_INICIAL }); setDebugMode(false); }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wide transition-all ${
               tab === t.id
-                ? "bg-[#4F46E5] text-white shadow-md shadow-emerald-900/20"
-                : "bg-white text-slate-500 border border-slate-200 hover:border-[#4F46E5] hover:text-[#4F46E5]"
+                ? "bg-[#2563EB] text-white shadow-md shadow-emerald-900/20"
+                : "bg-white text-slate-500 border border-slate-200 hover:border-[#2563EB] hover:text-[#2563EB]"
             }`}>
             <t.icon size={14} /> {t.label}
           </button>
@@ -592,7 +592,7 @@ export default function ComprasPage() {
             <input type="text" placeholder="Buscar en resultados..."
               value={filtros.texto}
               onChange={(e) => setFiltros((f) => ({ ...f, texto: e.target.value }))}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#4F46E5]/20" />
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#2563EB]/20" />
           </div>
 
           {tab === "oc" && (
@@ -641,11 +641,11 @@ export default function ComprasPage() {
               <Filter size={13} /> Limpiar
             </button>
             <button onClick={cargar} disabled={loading}
-              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#4F46E5] transition-all disabled:opacity-50">
+              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#2563EB] transition-all disabled:opacity-50">
               <RefreshCcw size={13} className={loading ? "animate-spin" : ""} /> Buscar en API
             </button>
             <button onClick={exportarExcel}
-              className="px-4 py-2.5 text-xs font-bold bg-[#4F46E5] text-white rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-[#4338CA] transition-all">
+              className="px-4 py-2.5 text-xs font-bold bg-[#2563EB] text-white rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-[#1D4ED8] transition-all">
               <Download size={13} /> Excel
             </button>
             <button onClick={() => setDebugMode((d) => !d)}
@@ -717,7 +717,7 @@ export default function ComprasPage() {
             <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-white flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <ShoppingCart className="text-[#4F46E5]" size={18} /> Detalle Orden de Compra
+                  <ShoppingCart className="text-[#2563EB]" size={18} /> Detalle Orden de Compra
                 </h2>
                 {modalOC.data && (
                   <p className="text-[10px] text-slate-400 font-mono mt-0.5">
@@ -728,7 +728,7 @@ export default function ComprasPage() {
               <div className="flex gap-2">
                 {modalOC.data && (
                   <button onClick={exportarDetalleOC}
-                    className="px-4 py-2 text-xs font-bold bg-[#4F46E5] text-white rounded-xl flex items-center gap-1.5 hover:bg-[#4338CA]">
+                    className="px-4 py-2 text-xs font-bold bg-[#2563EB] text-white rounded-xl flex items-center gap-1.5 hover:bg-[#1D4ED8]">
                     <Download size={13} /> Excel
                   </button>
                 )}
@@ -741,7 +741,7 @@ export default function ComprasPage() {
 
             <div className="flex-1 overflow-y-auto p-6">
               {modalOC.loading ? (
-                <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#4F46E5]" size={36} /></div>
+                <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#2563EB]" size={36} /></div>
               ) : modalOC.data ? (
                 <div className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -750,7 +750,7 @@ export default function ComprasPage() {
                       <p className="font-bold text-slate-800">{modalOC.data.proveedor?.razon_social}</p>
                       <p className="text-xs font-mono text-slate-400">{modalOC.data.proveedor?.rut}</p>
                       {modalOC.data.proveedor?.direccion && <p className="text-xs text-slate-400 mt-1">{modalOC.data.proveedor.direccion}</p>}
-                      {modalOC.data.proveedor?.email && <p className="text-xs text-[#4F46E5] mt-0.5">{modalOC.data.proveedor.email}</p>}
+                      {modalOC.data.proveedor?.email && <p className="text-xs text-[#2563EB] mt-0.5">{modalOC.data.proveedor.email}</p>}
                       {modalOC.data.proveedor?.telefono && <p className="text-xs text-slate-500">{modalOC.data.proveedor.telefono}</p>}
                     </div>
                     <div className="space-y-2">
@@ -809,7 +809,7 @@ export default function ComprasPage() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-black text-slate-600 uppercase flex items-center gap-1.5">
-                        <Package size={14} className="text-[#4F46E5]" />
+                        <Package size={14} className="text-[#2563EB]" />
                         Productos ({(modalOC.data.productos || []).length} / declarados: {modalOC.data.cantidad_items})
                       </p>
                       {(modalOC.data.productos || []).length === 0 && (
@@ -921,7 +921,7 @@ export default function ComprasPage() {
                     <p className="text-[9px] font-bold uppercase text-slate-400 mb-1">Emisor (Proveedor)</p>
                     <p className="font-bold text-slate-800 text-lg">{modalDTE.data.dte_razonsocial_emisor || "—"}</p>
                     <p className="text-xs font-mono text-slate-400">{modalDTE.data.dte_rut_emisor}</p>
-                    {modalDTE.data.dte_email_emisor && <p className="text-xs text-[#4F46E5] mt-1">{modalDTE.data.dte_email_emisor}</p>}
+                    {modalDTE.data.dte_email_emisor && <p className="text-xs text-[#2563EB] mt-1">{modalDTE.data.dte_email_emisor}</p>}
                   </div>
 
                   {/* Datos tributarios */}
@@ -990,7 +990,7 @@ export default function ComprasPage() {
                               }
                             });
                           }}
-                          className="px-3 py-1.5 bg-[#4F46E5] text-white text-xs font-bold rounded-lg hover:bg-[#4338CA] flex items-center gap-1.5 shadow-sm"
+                          className="px-3 py-1.5 bg-[#2563EB] text-white text-xs font-bold rounded-lg hover:bg-[#1D4ED8] flex items-center gap-1.5 shadow-sm"
                         >
                           <FileText size={12} /> Ver DTE
                         </button>

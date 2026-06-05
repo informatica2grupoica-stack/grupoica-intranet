@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import { Zap, Loader2, Lightbulb, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 
@@ -62,11 +62,11 @@ export default function InsightsIA({ stats }: InsightsIAProps) {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center"><Zap size={17} /></span>
+          <span className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center"><Zap size={17} /></span>
           <h3 className="text-sm font-black uppercase text-slate-600">Insights IA</h3>
         </div>
         <div className="flex items-center justify-center h-32">
-          <Loader2 className="animate-spin text-[#4F46E5]" />
+          <Loader2 className="animate-spin text-[#2563EB]" />
         </div>
       </div>
     );
@@ -75,7 +75,7 @@ export default function InsightsIA({ stats }: InsightsIAProps) {
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
       <div className="flex items-center gap-2 mb-4">
-        <span className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center"><Zap size={17} /></span>
+        <span className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center"><Zap size={17} /></span>
         <h3 className="text-sm font-black uppercase text-slate-600">Insights IA</h3>
       </div>
 
@@ -94,8 +94,8 @@ export default function InsightsIA({ stats }: InsightsIAProps) {
       <div className="space-y-3 pt-3 border-t border-slate-100">
         <p className="text-[9px] font-bold uppercase text-slate-400">Recomendaciones</p>
         {recomendaciones.map((recom, idx) => (
-          <div key={idx} className="flex items-start gap-2 p-2 bg-[#EEF2FF]/50 rounded-lg">
-            <CheckCircle size={12} className="text-[#4F46E5] mt-0.5 flex-shrink-0" />
+          <div key={idx} className="flex items-start gap-2 p-2 bg-[#EFF6FF]/50 rounded-lg">
+            <CheckCircle size={12} className="text-[#2563EB] mt-0.5 flex-shrink-0" />
             <p className="text-[10px] text-slate-600">{recom}</p>
           </div>
         ))}

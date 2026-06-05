@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
 
 interface MetricasProps {
@@ -18,7 +18,7 @@ export default function MetricasTareas({ estadisticas }: MetricasProps) {
       titulo: 'Total Tareas',
       valor: estadisticas.total,
       icono: Calendar,
-      color: 'bg-[#4F46E5]',
+      color: 'bg-[#2563EB]',
       descripcion: 'tareas registradas'
     },
     {

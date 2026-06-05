@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { KeyRound, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
@@ -50,7 +50,7 @@ export default function UpdatePassword() {
         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8">
           
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-50 rounded-2xl mb-4 text-indigo-600">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl mb-4 text-blue-600">
               <KeyRound className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-bold text-slate-800">Nueva Contraseña</h1>
@@ -69,7 +69,7 @@ export default function UpdatePassword() {
                     <input 
                       type={showPass ? "text" : "password"}
                       required 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-indigo-50 focus:bg-white transition-all font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-blue-50 focus:bg-white transition-all font-medium"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
@@ -89,7 +89,7 @@ export default function UpdatePassword() {
                   <input 
                     type="password"
                     required 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-indigo-50 focus:bg-white transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-blue-50 focus:bg-white transition-all font-medium"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />

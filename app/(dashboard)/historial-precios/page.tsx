@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useMemo } from "react";
 import {
   TrendingDown, TrendingUp, Minus, Store,
@@ -100,7 +100,7 @@ export default function HistorialPreciosPage() {
           { label: "Con Baja de Precio", value: bajas, icon: TrendingDown, color: "text-emerald-600", bg: "bg-emerald-100", text: "Oportunidades" },
           { label: "Con Subida de Precio", value: subidas, icon: TrendingUp, color: "text-rose-500", bg: "bg-rose-100", text: "Atencion" },
           { label: "Sin Variación", value: estables, icon: Minus, color: "text-slate-500", bg: "bg-slate-100", text: "Estables" },
-          { label: "Ahorro Potencial", value: `$${ahorroPotencial.toLocaleString("es-CL")}`, icon: BarChart2, color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]", text: "En bajadas" },
+          { label: "Ahorro Potencial", value: `$${ahorroPotencial.toLocaleString("es-CL")}`, icon: BarChart2, color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", text: "En bajadas" },
         ].map((k, i) => (
           <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${k.bg}`}>
@@ -124,7 +124,7 @@ export default function HistorialPreciosPage() {
             <input
               type="text"
               placeholder="Buscar por nombre, SKU o tienda..."
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#2563EB]/20"
               value={filtroTexto}
               onChange={(e) => setFiltroTexto(e.target.value)}
             />
@@ -169,10 +169,10 @@ export default function HistorialPreciosPage() {
             <button onClick={resetFiltros} className="px-3 py-2.5 text-xs font-bold text-slate-500 bg-slate-100 rounded-xl flex items-center gap-1.5 hover:bg-slate-200 transition-all">
               <Filter size={14} /> Limpiar
             </button>
-            <button onClick={exportarExcel} className="px-4 py-2.5 text-xs font-bold bg-[#4F46E5] text-white rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-[#4338CA] transition-all">
+            <button onClick={exportarExcel} className="px-4 py-2.5 text-xs font-bold bg-[#2563EB] text-white rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-[#1D4ED8] transition-all">
               <Download size={14} /> Excel
             </button>
-            <button onClick={fetchAnalisis} className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-[#4F46E5] transition-all">
+            <button onClick={fetchAnalisis} className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-[#2563EB] transition-all">
               <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
@@ -188,14 +188,14 @@ export default function HistorialPreciosPage() {
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="h-64 flex flex-col items-center justify-center gap-4">
-            <RefreshCcw size={40} className="animate-spin text-[#4F46E5] opacity-20" />
+            <RefreshCcw size={40} className="animate-spin text-[#2563EB] opacity-20" />
             <p className="text-slate-400 font-black text-[9px] uppercase tracking-[0.3em]">Cargando registros...</p>
           </div>
         ) : filtrados.length === 0 ? (
           <div className="p-20 text-center">
             <AlertCircle size={40} className="mx-auto text-slate-200 mb-4" />
             <p className="text-slate-500 font-bold text-sm">Sin registros con los filtros aplicados</p>
-            <button onClick={resetFiltros} className="mt-3 text-xs text-[#4F46E5] font-bold hover:underline">Limpiar filtros</button>
+            <button onClick={resetFiltros} className="mt-3 text-xs text-[#2563EB] font-bold hover:underline">Limpiar filtros</button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -227,7 +227,7 @@ export default function HistorialPreciosPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-black text-slate-900 flex items-center gap-1">
-                          <Store size={10} className="text-[#4F46E5]" /> {item.tienda}
+                          <Store size={10} className="text-[#2563EB]" /> {item.tienda}
                         </span>
                         <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
                           <Hash size={10} /> {item.sku || "—"}
@@ -263,7 +263,7 @@ export default function HistorialPreciosPage() {
                     <td className="px-6 py-4 text-center">
                       {item.link ? (
                         <a href={item.link} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-[#4F46E5] hover:text-white transition-all">
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-[#2563EB] hover:text-white transition-all">
                           <ExternalLink size={14} />
                         </a>
                       ) : (

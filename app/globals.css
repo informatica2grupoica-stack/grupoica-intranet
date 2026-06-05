@@ -51,15 +51,14 @@ body {
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
 }
 
-/* --- PARCHE GLOBAL PARA INPUTS, SELECTS Y TEXTAREAS --- */
-input, 
-select, 
-textarea {
-  color: #0f172a !important;
-  background-color: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  /* NORMALIZACIÓN PARA TODOS LOS PC: */
-  font-size: 0.875rem !important; /* 14px para inputs, más compacto pero legible */
+/* --- DEFAULTS GLOBALES PARA INPUTS, SELECTS Y TEXTAREAS ---
+   Usamos :where() (especificidad 0,0,0) para que cualquier clase Tailwind
+   (especificidad 0,1,0) gane sin necesitar !important.                    */
+:where(input, select, textarea) {
+  color: #0f172a;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  font-size: 0.875rem;
   appearance: none;
   -webkit-appearance: none;
   border-radius: 0.75rem;
@@ -68,28 +67,22 @@ textarea {
 }
 
 /* Focus state para inputs */
-input:focus,
-select:focus,
-textarea:focus {
-  outline: none !important;
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+:where(input:focus, select:focus, textarea:focus) {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 /* Hover state para inputs */
-input:hover:not(:disabled),
-select:hover:not(:disabled),
-textarea:hover:not(:disabled) {
-  border-color: #cbd5e1 !important;
-  background-color: #fafafa !important;
+:where(input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled)) {
+  border-color: #cbd5e1;
+  background-color: #fafafa;
 }
 
 /* Inputs deshabilitados */
-input:disabled,
-select:disabled,
-textarea:disabled {
-  background-color: #f1f5f9 !important;
-  color: #64748b !important;
+:where(input:disabled, select:disabled, textarea:disabled) {
+  background-color: #f1f5f9;
+  color: #64748b;
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -103,26 +96,19 @@ input[type="date"] {
 }
 
 /* Inputs tipo checkbox y radio — excluir del override de estilos general */
-input[type="checkbox"],
-input[type="radio"] {
-  width: 1rem !important;
-  height: 1rem !important;
-  padding: 0 !important;
+:where(input[type="checkbox"], input[type="radio"]) {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
   accent-color: #3b82f6;
-  border-radius: 0.25rem !important;
-  background-color: transparent !important;
-  border: 1px solid #cbd5e1 !important;
-  min-height: unset !important;
+  border-radius: 0.25rem;
+  background-color: transparent;
+  border: 1px solid #cbd5e1;
+  min-height: unset;
 }
 
-/* Select personalizado con flecha */
-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
-  background-position: right 0.75rem center;
-  background-repeat: no-repeat;
-  background-size: 1.25rem;
-  padding-right: 2.5rem;
-}
+/* Select: sin flecha CSS global para que cada componente controle la suya
+   y evitar duplicación con iconos Lucide en wrappers. */
 
 /* Evita que el autocompletado de Chrome ponga letras blancas */
 input:-webkit-autofill,
@@ -325,22 +311,12 @@ tr:hover td {
 }
 
 /* ========================================
-   FORZAR ESTILOS EN SELECTS NATIVOS MAC
+   SELECTS Y DATE INPUTS NATIVOS MAC
    ======================================== */
-select,
-input[type="date"],
-input[type="time"],
-input[type="datetime-local"] {
+:where(select, input[type="date"], input[type="time"], input[type="datetime-local"]) {
   background-color: #ffffff;
   min-height: 2.75rem;
   line-height: 1.5;
-}
-
-/* Corrección para selects en Safari/macOS */
-@media not all and (min-resolution:.001dpcm) {
-  select {
-    background-color: #ffffff !important;
-  }
 }
 
 /* ========================================

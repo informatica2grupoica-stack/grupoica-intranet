@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BookOpen, Search, Download, Filter, RefreshCcw,
@@ -86,14 +86,14 @@ export default function ContabilidadPage() {
       const total = filtrados.reduce((s,r)=>s+Number(r.cheque_monto||r.monto||0),0);
       return [
         {label:"Total Cheques",value:filtrados.length,color:"text-slate-700",bg:"bg-slate-100",icon:CreditCard},
-        {label:"Monto Total",value:fmt(total),color:"text-[#4F46E5]",bg:"bg-[#EEF2FF]",icon:DollarSign},
+        {label:"Monto Total",value:fmt(total),color:"text-[#2563EB]",bg:"bg-[#EFF6FF]",icon:DollarSign},
         {label:"Mes/Año",value:`${mes||"*"}/${ano}`,color:"text-slate-500",bg:"bg-slate-100",icon:Hash},
         {label:"Bancos únicos",value:new Set(filtrados.map(r=>r.banco_id||r.banco)).size,color:"text-blue-600",bg:"bg-blue-100",icon:Layers},
       ];
     }
     return [
       {label:"Total registros",value:filtrados.length,color:"text-slate-700",bg:"bg-slate-100",icon:Hash},
-      {label:"Tab activo",value:tab.replace("_"," "),color:"text-[#4F46E5]",bg:"bg-[#EEF2FF]",icon:BookOpen},
+      {label:"Tab activo",value:tab.replace("_"," "),color:"text-[#2563EB]",bg:"bg-[#EFF6FF]",icon:BookOpen},
       {label:"","value":"","color":"text-slate-400","bg":"bg-slate-50",icon:Layers},
       {label:"","value":"","color":"text-slate-400","bg":"bg-slate-50",icon:Layers},
     ];
@@ -120,7 +120,7 @@ export default function ContabilidadPage() {
         {TABS.map(t => (
           <button key={t.id} onClick={()=>{setTab(t.id);setDatos([]);setDebugMode(false);}}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wide transition-all ${
-              tab===t.id?"bg-[#4F46E5] text-white shadow-md":"bg-white text-slate-500 border border-slate-200 hover:border-[#4F46E5] hover:text-[#4F46E5]"
+              tab===t.id?"bg-[#2563EB] text-white shadow-md":"bg-white text-slate-500 border border-slate-200 hover:border-[#2563EB] hover:text-[#2563EB]"
             }`}>
             <t.icon size={14}/> {t.label}
           </button>
@@ -173,10 +173,10 @@ export default function ContabilidadPage() {
               <Filter size={13}/> Limpiar
             </button>
             <button onClick={cargar} disabled={loading}
-              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#4F46E5] disabled:opacity-50">
+              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#2563EB] disabled:opacity-50">
               <RefreshCcw size={13} className={loading?"animate-spin":""}/> Buscar
             </button>
-            <button onClick={exportar} className="px-4 py-2.5 text-xs font-bold bg-[#4F46E5] text-white rounded-xl flex items-center gap-1.5">
+            <button onClick={exportar} className="px-4 py-2.5 text-xs font-bold bg-[#2563EB] text-white rounded-xl flex items-center gap-1.5">
               <Download size={13}/> Excel
             </button>
             <button onClick={()=>setDebugMode(d=>!d)} className={`px-3 py-2.5 text-xs font-bold rounded-xl ${debugMode?"bg-amber-400 text-white":"bg-slate-100 text-slate-400"}`}>
@@ -200,14 +200,14 @@ export default function ContabilidadPage() {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-16 text-center">
-              <Loader2 className="animate-spin text-[#4F46E5] mx-auto mb-2" size={32}/>
+              <Loader2 className="animate-spin text-[#2563EB] mx-auto mb-2" size={32}/>
               <p className="text-slate-400 text-xs">Consultando API Obuma...</p>
             </div>
           ) : error ? (
             <div className="p-16 text-center">
               <AlertCircle className="mx-auto text-rose-400 mb-2" size={32}/>
               <p className="text-rose-500 text-sm">{error}</p>
-              <button onClick={cargar} className="mt-2 text-xs text-[#4F46E5] font-bold">Reintentar</button>
+              <button onClick={cargar} className="mt-2 text-xs text-[#2563EB] font-bold">Reintentar</button>
             </div>
           ) : pagActual.length === 0 ? (
             <div className="p-16 text-center text-slate-400">Sin resultados para los filtros aplicados.</div>

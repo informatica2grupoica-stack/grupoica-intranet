@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   RefreshCcw, Loader2, Sparkles, Clock, BarChart3,
@@ -96,10 +96,10 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center">
           <div className="relative mb-5 inline-block">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center shadow-lg">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-lg">
               <Sparkles className="w-7 h-7 text-white" />
             </div>
-            <Loader2 className="w-20 h-20 animate-spin text-[#4F46E5]/30 absolute -top-3 -left-3" />
+            <Loader2 className="w-20 h-20 animate-spin text-[#2563EB]/30 absolute -top-3 -left-3" />
           </div>
           <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Cargando dashboard…</p>
         </div>
@@ -115,14 +115,14 @@ export default function DashboardPage() {
 
       {/* ── Banner cabecera ─────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#111827] via-[#1E293B] to-[#111827] p-6 shadow-xl">
-        <div className="absolute -top-16 -right-8 w-64 h-64 bg-[#6366F1]/20 blur-[90px] rounded-full" />
+        <div className="absolute -top-16 -right-8 w-64 h-64 bg-[#3B82F6]/20 blur-[90px] rounded-full" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#EEF2FF] text-[#4F46E5] px-2.5 py-1 rounded-full">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#EFF6FF] text-[#2563EB] px-2.5 py-1 rounded-full">
               <Sparkles className="w-3 h-3" /> Análisis en tiempo real
             </span>
             <h1 className="text-2xl md:text-3xl font-black text-white mt-3 leading-tight">
-              Dashboard de <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] to-[#818CF8]">Análisis</span>
+              Dashboard de <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]">Análisis</span>
             </h1>
             {data && (
               <p className="text-slate-400 text-xs mt-1.5 flex items-center gap-1.5">
@@ -131,7 +131,7 @@ export default function DashboardPage() {
             )}
           </div>
           <button onClick={actualizarDatos} disabled={refreshing}
-            className="self-start md:self-center bg-gradient-to-r from-[#4F46E5] to-[#6366F1] hover:shadow-lg text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">
+            className="self-start md:self-center bg-gradient-to-r from-[#2563EB] to-[#3B82F6] hover:shadow-lg text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">
             {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
             Actualizar todo
           </button>
@@ -159,7 +159,7 @@ export default function DashboardPage() {
           {ocResumen && (
             <p className="text-[10px] font-black text-slate-600 mt-2">${ocResumen.monto_total.toLocaleString("es-CL")}</p>
           )}
-          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#4F46E5] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#2563EB] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
             Ver órdenes <ArrowRight size={10} />
           </div>
         </Link>
@@ -177,7 +177,7 @@ export default function DashboardPage() {
             <span className="flex items-center gap-1 text-emerald-600"><CheckCircle2 size={9} />{clientesStats?.clientes_activos ?? 0} activos</span>
             <span className="flex items-center gap-1 text-rose-500"><XCircle size={9} />{clientesStats?.clientes_inactivos ?? 0} inactivos</span>
           </div>
-          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#4F46E5] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#2563EB] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
             Ver clientes <ArrowRight size={10} />
           </div>
         </Link>
@@ -195,7 +195,7 @@ export default function DashboardPage() {
             <span className="flex items-center gap-1 text-emerald-600"><TrendingDown size={9} />{preciosBajas} bajas</span>
             <span className="flex items-center gap-1 text-rose-500"><TrendingUp size={9} />{preciosSubidas} subidas</span>
           </div>
-          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#4F46E5] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="mt-2 flex items-center gap-1 text-[9px] text-[#2563EB] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
             Ver historial <ArrowRight size={10} />
           </div>
         </Link>
@@ -238,7 +238,7 @@ export default function DashboardPage() {
               </span>
               <h3 className="text-sm font-black uppercase text-slate-700">Últimos Movimientos de Precio</h3>
             </div>
-            <Link href="/historial-precios" className="text-[9px] font-bold uppercase text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1">
+            <Link href="/historial-precios" className="text-[9px] font-bold uppercase text-[#2563EB] hover:text-[#1D4ED8] flex items-center gap-1">
               Ver todo <ArrowRight size={10} />
             </Link>
           </div>
@@ -291,7 +291,7 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { href: "/obuma-productos", icon: Package, label: "Productos", desc: "Gestión de inventario", color: "text-[#4F46E5]", bg: "bg-[#EEF2FF]" },
+              { href: "/obuma-productos", icon: Package, label: "Productos", desc: "Gestión de inventario", color: "text-[#2563EB]", bg: "bg-[#EFF6FF]" },
               { href: "/compras", icon: ShoppingCart, label: "Compras", desc: "Órdenes de compra", color: "text-blue-600", bg: "bg-blue-100" },
               { href: "/obuma-clientes", icon: Users, label: "Clientes", desc: "CRM Obuma", color: "text-purple-600", bg: "bg-purple-100" },
               { href: "/obuma-proveedores", icon: Building2, label: "Proveedores", desc: "Gestión proveedores", color: "text-amber-600", bg: "bg-amber-100" },

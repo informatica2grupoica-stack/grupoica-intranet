@@ -1,9 +1,9 @@
-// components/ChatBot.tsx
+﻿// components/ChatBot.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Send, Minimize2, Maximize2, Sparkles, History, RefreshCw } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot, History, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Mensaje {
@@ -246,13 +246,13 @@ export default function ChatBot() {
     let html = msg.texto
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br/>')
-      .replace(/•/g, '<span class="text-[#6366F1] mr-1">•</span>')
+      .replace(/•/g, '<span class="text-[#3B82F6] mr-1">•</span>')
       .replace(/---/g, '<hr class="my-2 border-slate-200"/>')
       .replace(/\b(\d{7,})\b/g, '<code class="bg-slate-100 px-1 rounded text-xs font-mono">$1</code>')
       .replace(/\$\d{1,3}(?:\.\d{3})*/g, m => `<span class="font-bold text-emerald-600">${m}</span>`);
 
     const bubble = msg.esUsuario
-      ? 'bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-br-none shadow-md shadow-indigo-500/20'
+      ? 'bg-gradient-to-br from-[#2563EB] to-[#3B82F6] text-white rounded-br-none shadow-md shadow-blue-500/20'
       : msg.detalles?.esAccion
         ? msg.detalles.accionExitosa
           ? 'bg-emerald-50 border border-emerald-200 text-slate-700 rounded-bl-none'
@@ -262,7 +262,7 @@ export default function ChatBot() {
     return (
       <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm ${bubble}`}>
         <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
-        <div className={`text-[9px] mt-1.5 flex justify-between items-center gap-2 ${msg.esUsuario ? 'text-indigo-200' : 'text-slate-400'}`}>
+        <div className={`text-[9px] mt-1.5 flex justify-between items-center gap-2 ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
           <span>{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           {msg.detalles?.productosEncontrados !== undefined && msg.detalles.productosEncontrados > 0 && (
             <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
@@ -289,9 +289,9 @@ export default function ChatBot() {
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-2xl shadow-xl shadow-indigo-500/40 flex items-center justify-center z-50"
+            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#2563EB] to-[#3B82F6] text-white rounded-2xl shadow-xl shadow-blue-500/40 flex items-center justify-center z-50"
           >
-            <Sparkles size={24} />
+            <Bot size={24} />
             <span className="absolute -top-1 -right-1 bg-emerald-400 text-white text-[9px] font-black rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
               IA
             </span>
@@ -314,8 +314,8 @@ export default function ChatBot() {
             {/* Header */}
             <div className="bg-gradient-to-r from-[#1E293B] to-[#0F172A] text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center shadow-lg shadow-indigo-900/30">
-                  <Sparkles size={15} />
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-lg shadow-blue-900/30">
+                  <Bot size={15} />
                 </div>
                 <div>
                   <p className="font-bold text-sm leading-none">Asistente Gemini</p>
@@ -369,7 +369,7 @@ export default function ChatBot() {
                             key={i}
                             animate={{ y: [0, -8, 0] }}
                             transition={{ repeat: Infinity, duration: 0.7, delay: i * 0.15 }}
-                            className="w-2 h-2 bg-[#4F46E5]/40 rounded-full"
+                            className="w-2 h-2 bg-[#2563EB]/40 rounded-full"
                           />
                         ))}
                       </div>
@@ -399,7 +399,7 @@ export default function ChatBot() {
                                   key={i}
                                   animate={{ y: [0, -6, 0] }}
                                   transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.13 }}
-                                  className="w-1.5 h-1.5 bg-[#4F46E5]/50 rounded-full"
+                                  className="w-1.5 h-1.5 bg-[#2563EB]/50 rounded-full"
                                 />
                               ))}
                             </div>
@@ -418,7 +418,7 @@ export default function ChatBot() {
                       <button
                         key={s}
                         onClick={() => enviarMensaje(s)}
-                        className="text-[10px] bg-slate-50 hover:bg-[#EEF2FF] hover:text-[#4F46E5] border border-slate-200 hover:border-[#4F46E5]/30 text-slate-500 px-2.5 py-1 rounded-full transition-all font-medium"
+                        className="text-[10px] bg-slate-50 hover:bg-[#EFF6FF] hover:text-[#2563EB] border border-slate-200 hover:border-[#2563EB]/30 text-slate-500 px-2.5 py-1 rounded-full transition-all font-medium"
                       >
                         {s}
                       </button>
@@ -434,7 +434,7 @@ export default function ChatBot() {
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={handleKey}
                       placeholder="Pregunta o da una instrucción..."
-                      className="flex-1 p-2.5 bg-slate-50 border border-slate-200 focus:border-[#4F46E5]/40 focus:bg-white rounded-xl text-sm outline-none resize-none transition-all"
+                      className="flex-1 p-2.5 bg-slate-50 border border-slate-200 focus:border-[#2563EB]/40 focus:bg-white rounded-xl text-sm outline-none resize-none transition-all"
                       rows={1}
                       disabled={cargando}
                     />
@@ -442,7 +442,7 @@ export default function ChatBot() {
                       whileTap={{ scale: 0.92 }}
                       onClick={() => enviarMensaje()}
                       disabled={cargando || !input.trim()}
-                      className="w-10 h-10 bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-500/25 disabled:opacity-40 transition-opacity flex-shrink-0"
+                      className="w-10 h-10 bg-gradient-to-br from-[#2563EB] to-[#3B82F6] text-white rounded-xl flex items-center justify-center shadow-md shadow-blue-500/25 disabled:opacity-40 transition-opacity flex-shrink-0"
                     >
                       <Send size={16} />
                     </motion.button>

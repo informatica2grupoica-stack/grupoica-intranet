@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Mail, Lock, Loader2, AlertCircle, ArrowRight, Sparkles } from "lucide-react";
@@ -57,12 +57,12 @@ export default function LoginPage() {
       <motion.div
         animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.25, 0.15] }}
         transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-[#4F46E5] blur-[140px] rounded-full pointer-events-none"
+        className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-[#2563EB] blur-[140px] rounded-full pointer-events-none"
       />
       <motion.div
         animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
         transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-        className="absolute -bottom-32 -right-32 w-[500px] h-[500px] bg-[#6366F1] blur-[140px] rounded-full pointer-events-none"
+        className="absolute -bottom-32 -right-32 w-[500px] h-[500px] bg-[#3B82F6] blur-[140px] rounded-full pointer-events-none"
       />
 
       <motion.div
@@ -76,13 +76,13 @@ export default function LoginPage() {
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.15 }}
-            className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center shadow-xl shadow-indigo-900/30"
+            className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-xl shadow-blue-900/30"
           >
             <Sparkles className="w-8 h-8 text-white" />
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <h1 className="text-3xl font-black tracking-tight leading-none mb-2 text-slate-800">
-              Comercial <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#4F46E5] to-[#6366F1]">MP</span>
+              Comercial <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] to-[#3B82F6]">MP</span>
             </h1>
             <p className="text-[10px] font-black uppercase tracking-[0.45em] text-slate-400">Workspace</p>
           </motion.div>
@@ -110,25 +110,25 @@ export default function LoginPage() {
           className="space-y-4"
         >
           <div className="relative group">
-            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#4F46E5] transition-colors" />
+            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#2563EB] transition-colors" />
             <input
               type="email" placeholder="Correo electrónico" required disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#4F46E5]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#2563EB]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
               value={email} onChange={e => setEmail(e.target.value)}
             />
           </div>
 
           <div className="relative group">
-            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#4F46E5] transition-colors" />
+            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#2563EB] transition-colors" />
             <input
               type="password" placeholder="Contraseña" required disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#4F46E5]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#2563EB]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
               value={password} onChange={e => setPassword(e.target.value)}
             />
           </div>
 
           <div className="flex justify-end px-1">
-            <Link href="/forgot-password" className="text-[11px] font-bold text-slate-400 hover:text-[#4F46E5] transition-colors uppercase tracking-wider">
+            <Link href="/forgot-password" className="text-[11px] font-bold text-slate-400 hover:text-[#2563EB] transition-colors uppercase tracking-wider">
               ¿Olvidaste tu clave?
             </Link>
           </div>
@@ -138,7 +138,7 @@ export default function LoginPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
+            className="w-full bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>Ingresar al Workspace</span><ArrowRight className="w-4 h-4" /></>}
           </motion.button>

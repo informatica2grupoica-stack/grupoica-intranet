@@ -1,4 +1,4 @@
-// components/deepseek/SkuSugeridoButton.tsx
+﻿// components/deepseek/SkuSugeridoButton.tsx
 'use client';
 
 import { useState } from 'react';
@@ -65,7 +65,7 @@ export default function SkuSugeridoButton({
         type="button"
         onClick={sugerirSku}
         disabled={cargando || !nombreProducto.trim()}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg hover:from-purple-600 hover:to-indigo-600 transition-all disabled:opacity-50 text-xs font-bold flex items-center gap-1 shadow-md"
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-50 text-xs font-bold flex items-center gap-1 shadow-md"
         title="Sugerir SKU con IA"
       >
         {cargando ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}

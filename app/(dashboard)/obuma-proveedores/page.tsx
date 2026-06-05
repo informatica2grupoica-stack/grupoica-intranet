@@ -1,4 +1,4 @@
-// app/(dashboard)/obuma-proveedores/page.tsx
+﻿// app/(dashboard)/obuma-proveedores/page.tsx
 'use client';
 import { useState, useMemo } from 'react';
 import {
@@ -226,7 +226,7 @@ export default function ObumaProveedoresPage() {
         </div>
       )}
       {prov.proveedor_website && (
-        <div className="flex items-center gap-2 text-sm text-[#4F46E5]">
+        <div className="flex items-center gap-2 text-sm text-[#2563EB]">
           <Globe size={14} />
           <a href={prov.proveedor_website} target="_blank" rel="noopener noreferrer" className="hover:underline">
             {prov.proveedor_website}
@@ -252,7 +252,7 @@ export default function ObumaProveedoresPage() {
           <p className="text-slate-500 text-sm mt-2">{error}</p>
           <button 
             onClick={() => cargarProveedores()} 
-            className="mt-4 px-6 py-2 bg-[#4F46E5] text-white rounded-xl text-sm font-bold flex items-center gap-2 mx-auto"
+            className="mt-4 px-6 py-2 bg-[#2563EB] text-white rounded-xl text-sm font-bold flex items-center gap-2 mx-auto"
           >
             <RefreshCw size={16} /> Reintentar
           </button>
@@ -280,12 +280,12 @@ export default function ObumaProveedoresPage() {
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
             <div className="flex items-center gap-4">
-              <div className="bg-gradient-to-br from-[#4F46E5] to-[#4338CA] p-3 rounded-2xl text-white shadow-xl">
+              <div className="bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] p-3 rounded-2xl text-white shadow-xl">
                 <Building2 size={28} />
               </div>
               <div>
                 <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-800 uppercase italic">
-                  Proveedores <span className="text-[#4F46E5]">Obuma</span>
+                  Proveedores <span className="text-[#2563EB]">Obuma</span>
                 </h1>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
                   Integración API - Gestión Centralizada de Proveedores
@@ -296,19 +296,19 @@ export default function ObumaProveedoresPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setVista('lista')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-[#4F46E5] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-[#2563EB] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 📋 Lista
               </button>
               <button
                 onClick={() => setVista('grid')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-[#4F46E5] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-[#2563EB] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 🔲 Grid
               </button>
               <button
                 onClick={() => cargarProveedores()}
-                className="p-2 text-slate-500 hover:text-[#4F46E5] transition-colors"
+                className="p-2 text-slate-500 hover:text-[#2563EB] transition-colors"
                 title="Actualizar lista"
               >
                 <RefreshCw size={20} />
@@ -335,8 +335,8 @@ export default function ObumaProveedoresPage() {
                   <p className="text-[9px] font-black uppercase text-slate-400">Total Proveedores</p>
                   <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total}</p>
                 </div>
-                <div className="bg-[#EEF2FF] p-2 rounded-xl">
-                  <Building2 size={18} className="text-[#4F46E5]" />
+                <div className="bg-[#EFF6FF] p-2 rounded-xl">
+                  <Building2 size={18} className="text-[#2563EB]" />
                 </div>
               </div>
             </div>
@@ -383,7 +383,7 @@ export default function ObumaProveedoresPage() {
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por nombre, RUT, contacto o email..."
-                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-transparent"
+                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent"
               />
             </div>
 
@@ -391,7 +391,7 @@ export default function ObumaProveedoresPage() {
             <select
               value={filtroRegion}
               onChange={(e) => setFiltroRegion(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#4F46E5]"
+              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#2563EB]"
             >
               <option value="TODAS">Todas las regiones</option>
               {[['01','Tarapacá'],['02','Antofagasta'],['03','Atacama'],['04','Coquimbo'],['05','Valparaíso'],
@@ -405,7 +405,7 @@ export default function ObumaProveedoresPage() {
             <select
               value={filtroConEmail}
               onChange={(e) => setFiltroConEmail(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#4F46E5]"
+              className="bg-white border border-slate-200 rounded-xl py-3 px-3 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-[#2563EB]"
             >
               <option value="todos">Con / Sin email</option>
               <option value="si">Con email</option>
@@ -414,7 +414,7 @@ export default function ObumaProveedoresPage() {
 
             <button
               onClick={exportarExcel}
-              className="bg-[#4F46E5] hover:bg-[#4338CA] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
+              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
             >
               <Download size={16} /> Excel
             </button>
@@ -433,7 +433,7 @@ export default function ObumaProveedoresPage() {
         {showForm && (
           <form onSubmit={handleCrear} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
-              <Plus size={20} className="text-[#4F46E5]" />
+              <Plus size={20} className="text-[#2563EB]" />
               REGISTRAR NUEVO PROVEEDOR EN OBUMA
             </h2>
             
@@ -519,7 +519,7 @@ export default function ObumaProveedoresPage() {
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
               <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button type="submit" disabled={enviando} className="px-6 py-2.5 bg-[#4F46E5] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button type="submit" disabled={enviando} className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {enviando && <Loader2 size={16} className="animate-spin" />}
                 Guardar en Obuma
               </button>
@@ -556,7 +556,7 @@ export default function ObumaProveedoresPage() {
                     <tr key={prov.proveedor_id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-[#4F46E5] to-[#4338CA] rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                          <div className="w-10 h-10 bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] rounded-xl flex items-center justify-center text-white font-bold text-lg">
                             {getInitials(prov.proveedor_razon_social)}
                           </div>
                           <div>
@@ -579,7 +579,7 @@ export default function ObumaProveedoresPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="p-2 text-slate-400 hover:text-[#4F46E5] transition-colors" title="Ver detalles">
+                          <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="p-2 text-slate-400 hover:text-[#2563EB] transition-colors" title="Ver detalles">
                             {expandedCard === prov.proveedor_id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
                           <button onClick={() => setSeleccionado(prov)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
@@ -604,7 +604,7 @@ export default function ObumaProveedoresPage() {
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#4F46E5] to-[#4338CA] rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] rounded-xl flex items-center justify-center text-white font-bold text-lg">
                         {getInitials(prov.proveedor_razon_social)}
                       </div>
                       <div>
@@ -646,7 +646,7 @@ export default function ObumaProveedoresPage() {
                   
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                     <div className="flex-1"></div>
-                    <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="text-[10px] font-bold text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1">
+                    <button onClick={() => setExpandedCard(expandedCard === prov.proveedor_id ? null : prov.proveedor_id!)} className="text-[10px] font-bold text-[#2563EB] hover:text-[#1D4ED8] flex items-center gap-1">
                       {expandedCard === prov.proveedor_id ? 'Ver menos' : 'Ver detalles'}
                       {expandedCard === prov.proveedor_id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
@@ -678,7 +678,7 @@ export default function ObumaProveedoresPage() {
         {/* Loading */}
         {loading && (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-[#4F46E5]" size={48} />
+            <Loader2 className="animate-spin text-[#2563EB]" size={48} />
           </div>
         )}
       </div>
@@ -774,7 +774,7 @@ export default function ObumaProveedoresPage() {
 
             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
               <button onClick={() => setSeleccionado(null)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button onClick={handleActualizar} disabled={enviando} className="px-6 py-2.5 bg-[#4F46E5] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button onClick={handleActualizar} disabled={enviando} className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {enviando && <Loader2 size={16} className="animate-spin" />}
                 Actualizar en Obuma
               </button>

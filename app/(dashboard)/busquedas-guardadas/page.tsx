@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -140,7 +140,7 @@ const BusquedaCard = ({
           <div className="flex gap-2">
             <button
               onClick={() => onAbrir(b.id)}
-              className="flex-1 py-2 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl transition-colors flex items-center justify-center gap-1.5"
+              className="flex-1 py-2 text-xs font-semibold text-white bg-[#2563EB] hover:bg-[#1D4ED8] rounded-xl transition-colors flex items-center justify-center gap-1.5"
             >
               <ExternalLink size={12} /> Abrir en buscador
             </button>
@@ -183,11 +183,11 @@ const GrupoUsuario = ({
         onClick={() => setExpandido(v => !v)}
         className="w-full flex items-center gap-3 mb-4 text-left group"
       >
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center text-white font-bold text-sm shadow-sm">
           {(nombre || email || '?')[0].toUpperCase()}
         </div>
         <div className="flex-1">
-          <p className="font-bold text-slate-800 text-sm group-hover:text-[#4F46E5] transition-colors">{nombre || '—'}</p>
+          <p className="font-bold text-slate-800 text-sm group-hover:text-[#2563EB] transition-colors">{nombre || '—'}</p>
           <p className="text-[10px] text-slate-400">{email}</p>
         </div>
         <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
@@ -352,7 +352,7 @@ export default function BusquedasGuardadasPage() {
         </p>
         <button
           onClick={() => router.push('/buscador-productos')}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl text-sm font-semibold transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-sm font-semibold transition-colors"
         >
           <BarChart3 size={15} /> Ir al buscador
         </button>
@@ -368,7 +368,7 @@ export default function BusquedasGuardadasPage() {
         <div className="flex flex-wrap gap-3 items-center">
 
           {/* Buscador de texto */}
-          <div className="flex items-center gap-2 flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3 focus-within:ring-2 focus-within:ring-[#4F46E5]/20 bg-slate-50">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px] border border-slate-200 rounded-xl px-3 focus-within:ring-2 focus-within:ring-[#2563EB]/20 bg-slate-50">
             <Search size={14} className="text-slate-400 shrink-0" />
             <input
               type="text"
@@ -391,7 +391,7 @@ export default function BusquedasGuardadasPage() {
               <select
                 value={filtroUsuario}
                 onChange={e => setFiltroUsuario(e.target.value)}
-                className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-[#4F46E5]/20 text-slate-700"
+                className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-[#2563EB]/20 text-slate-700"
               >
                 <option value="todos">Todos los usuarios ({busquedas.length})</option>
                 {usuariosUnicos.map(u => (
@@ -453,7 +453,7 @@ export default function BusquedasGuardadasPage() {
       {cargando && (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 size={32} className="text-[#4F46E5] animate-spin" />
+            <Loader2 size={32} className="text-[#2563EB] animate-spin" />
             <p className="text-sm text-slate-500">Cargando búsquedas...</p>
           </div>
         </div>
@@ -467,7 +467,7 @@ export default function BusquedasGuardadasPage() {
           <p className="text-xs text-slate-400 mt-1">Intenta con otro término de búsqueda o filtro</p>
           <button
             onClick={() => { setBusqueda(''); setFiltroUsuario('todos'); }}
-            className="mt-3 text-xs text-[#4F46E5] hover:underline"
+            className="mt-3 text-xs text-[#2563EB] hover:underline"
           >
             Limpiar filtros
           </button>

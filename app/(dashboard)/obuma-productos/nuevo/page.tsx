@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock } from "lucide-react";
@@ -191,12 +191,12 @@ export default function NuevoProductoForm() {
             <h1 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase">Nuevo Producto</h1>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Panel de Creación Directa Obuma</p>
           </div>
-          <Link href="/obuma-productos" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#4F46E5] transition-all shadow-sm"><ArrowLeft size={20} /></Link>
+          <Link href="/obuma-productos" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#2563EB] transition-all shadow-sm"><ArrowLeft size={20} /></Link>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8">
           
-          <div className="p-6 bg-[#4F46E5] rounded-3xl text-white shadow-lg flex justify-between items-center">
+          <div className="p-6 bg-[#2563EB] rounded-3xl text-white shadow-lg flex justify-between items-center">
             <div className="space-y-1 flex-1">
               <label className="text-[9px] font-black uppercase opacity-60">Nombre final Obuma</label>
               <div className="text-xl font-black uppercase italic">{form.nombre_completo || "Esperando datos..."}</div>
@@ -221,7 +221,7 @@ export default function NuevoProductoForm() {
             {(['c1', 'c2', 'c3', 'c4'] as const).map((f, i) => (
               <div key={f} className="flex flex-col gap-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">{i+1}. {f === 'c1' ? 'Tipo' : f === 'c2' ? 'Atributo' : f === 'c3' ? 'Medida' : 'Marca'}</label>
-                <input disabled={!puedeCrear} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#4F46E5] focus:bg-white transition-all shadow-sm disabled:opacity-50" value={form[f]} onChange={(e) => setForm(prev => ({...prev, [f]: e.target.value}))} />
+                <input disabled={!puedeCrear} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-[#2563EB] focus:bg-white transition-all shadow-sm disabled:opacity-50" value={form[f]} onChange={(e) => setForm(prev => ({...prev, [f]: e.target.value}))} />
               </div>
             ))}
           </div>
@@ -236,15 +236,15 @@ export default function NuevoProductoForm() {
             </div>
             
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-[#4F46E5] uppercase ml-2">SKU Obuma</label>
+              <label className="text-[10px] font-black text-[#2563EB] uppercase ml-2">SKU Obuma</label>
               <div className="relative">
                 <input 
                   readOnly 
-                  className="w-full p-4 bg-[#EEF2FF]/50 border border-[#EEF2FF] rounded-2xl text-xs font-black italic text-[#4F46E5] outline-none pr-12" 
+                  className="w-full p-4 bg-[#EFF6FF]/50 border border-[#EFF6FF] rounded-2xl text-xs font-black italic text-[#2563EB] outline-none pr-12" 
                   value={form.sku || "Auto-generado"} 
                 />
                 <div className="absolute right-12 top-1/2 -translate-y-1/2">
-                  {generatingSku ? <Loader2 size={16} className="animate-spin text-[#4F46E5]" /> : <RefreshCcw size={16} className="text-blue-300" />}
+                  {generatingSku ? <Loader2 size={16} className="animate-spin text-[#2563EB]" /> : <RefreshCcw size={16} className="text-blue-300" />}
                 </div>
                 <SkuSugeridoButton
                   nombreProducto={form.nombre_completo}
@@ -289,14 +289,14 @@ export default function NuevoProductoForm() {
 
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center px-2">
-                <label className="text-[10px] font-black text-[#4F46E5] uppercase italic">Precio Venta</label>
-                <button type="button" disabled={!puedeCrear} onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#4F46E5] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
+                <label className="text-[10px] font-black text-[#2563EB] uppercase italic">Precio Venta</label>
+                <button type="button" disabled={!puedeCrear} onClick={() => setForm(prev => ({ ...prev, venta_incluye_iva: !prev.venta_incluye_iva }))} className={`text-[8px] font-black px-2 py-0.5 rounded-md border transition-all ${form.venta_incluye_iva ? 'bg-[#2563EB] text-white border-blue-900' : 'bg-slate-100 text-slate-400 border-slate-200'} disabled:opacity-30`}>
                   {form.venta_incluye_iva ? 'CON IVA (BRUTO)' : 'NETO'}
                 </button>
               </div>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4F46E5] font-black">$</span>
-                <input disabled={!puedeCrear} type="number" className="w-full p-4 pl-8 bg-white border-2 border-[#4F46E5] rounded-2xl text-sm font-black text-[#4F46E5] outline-none shadow-md disabled:border-slate-200 disabled:text-slate-300 disabled:shadow-none" value={form.precio_venta} onChange={(e) => setForm(prev => ({...prev, precio_venta: Number(e.target.value)}))} />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#2563EB] font-black">$</span>
+                <input disabled={!puedeCrear} type="number" className="w-full p-4 pl-8 bg-white border-2 border-[#2563EB] rounded-2xl text-sm font-black text-[#2563EB] outline-none shadow-md disabled:border-slate-200 disabled:text-slate-300 disabled:shadow-none" value={form.precio_venta} onChange={(e) => setForm(prev => ({...prev, precio_venta: Number(e.target.value)}))} />
               </div>
             </div>
           </div>
@@ -304,7 +304,7 @@ export default function NuevoProductoForm() {
           <div className="flex flex-wrap items-center gap-8 py-4 px-2 border-t border-slate-100">
             {(['se_puede_vender', 'se_puede_comprar', 'se_mantiene_stock'] as const).map((key) => (
               <label key={key} className={`flex items-center gap-3 cursor-pointer group ${!puedeCrear ? 'pointer-events-none opacity-40' : ''}`}>
-                <input disabled={!puedeCrear} type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#4F46E5] focus:ring-0" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
+                <input disabled={!puedeCrear} type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-[#2563EB] focus:ring-0" checked={form[key]} onChange={e => setForm(prev => ({...prev, [key]: e.target.checked}))} />
                 <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-800 transition-colors">{key.replace(/_/g, ' ')}</span>
               </label>
             ))}
@@ -335,7 +335,7 @@ export default function NuevoProductoForm() {
                 disabled={loading || !form.sku || !form.nombre_completo || !puedeCrear} 
                 className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-16 py-5 rounded-3xl text-xs font-black uppercase transition-all shadow-xl
                   ${puedeCrear 
-                    ? 'bg-[#4F46E5] text-white hover:bg-blue-800 shadow-[0_10px_30px_rgba(0,51,141,0.3)]' 
+                    ? 'bg-[#2563EB] text-white hover:bg-blue-800 shadow-[0_10px_30px_rgba(0,51,141,0.3)]' 
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
               >
                 {loading ? <Loader2 className="animate-spin" size={20} /> : (puedeCrear ? <Save size={20} /> : <Lock size={20} />)} 

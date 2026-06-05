@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, AlertTriangle, RefreshCcw } from "lucide-react";
@@ -16,7 +16,7 @@ const RenderForm = ({
   setEditingId 
 }: any) => (
   <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-slate-200 space-y-6 max-w-5xl mx-auto my-4">
-    <div className="p-4 bg-[#4F46E5] rounded-2xl text-white shadow-md flex justify-between items-center">
+    <div className="p-4 bg-[#2563EB] rounded-2xl text-white shadow-md flex justify-between items-center">
       <div>
         <label className="text-[8px] font-black uppercase opacity-60 tracking-widest">Previsualización Nombre Obuma</label>
         <div className="text-lg font-black uppercase italic tracking-tight">{editForm.nombre_completo || "ESPERANDO DATOS..."}</div>
@@ -29,7 +29,7 @@ const RenderForm = ({
         <div key={item.k} className="flex flex-col gap-1">
           <label className="text-[9px] font-black text-slate-400 uppercase">{item.l}</label>
           <input 
-            className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#4F46E5] transition-colors"
+            className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-[#2563EB] transition-colors"
             value={editForm[item.k] || ""}
             onChange={(e) => setEditForm({...editForm, [item.k]: e.target.value})}
           />
@@ -46,7 +46,7 @@ const RenderForm = ({
         </select>
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[9px] font-black text-[#4F46E5] uppercase italic">SKU / Código Comercial</label>
+        <label className="text-[9px] font-black text-[#2563EB] uppercase italic">SKU / Código Comercial</label>
         <input readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold italic text-slate-500 outline-none" value={editForm.sku || ""} />
       </div>
       <div className="flex flex-col gap-1">
@@ -72,7 +72,7 @@ const RenderForm = ({
       </div>
       <div className="flex-1">
         <label className="text-[9px] font-black text-slate-400 uppercase italic">Precio Venta Total</label>
-        <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#4F46E5]" value={editForm.precio_venta || 0} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
+        <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none border-b-2 border-b-[#2563EB]" value={editForm.precio_venta || 0} onChange={(e) => setEditForm({...editForm, precio_venta: e.target.value})} />
       </div>
     </div>
 
@@ -81,7 +81,7 @@ const RenderForm = ({
       <button 
         disabled={saving === id}
         onClick={() => handleSave(id)}
-        className="flex items-center gap-3 bg-[#4F46E5] text-white px-12 py-4 rounded-2xl text-xs font-black uppercase shadow-xl hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50"
+        className="flex items-center gap-3 bg-[#2563EB] text-white px-12 py-4 rounded-2xl text-xs font-black uppercase shadow-xl hover:bg-blue-800 transition-all active:scale-95 disabled:opacity-50"
       >
         {saving === id ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
         Guardar Cambios
@@ -281,7 +281,7 @@ export default function ObumaProductosListado() {
             <input 
               type="text"
               placeholder="Buscar por nombre, SKU o categoría..."
-              className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-[#4F46E5] transition-all"
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-[#2563EB] transition-all"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -290,7 +290,7 @@ export default function ObumaProductosListado() {
           <Link 
             href="/obuma-productos/nuevo"
             onClick={() => sessionStorage.setItem('fromCreate', 'true')}
-            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
+            className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
           >
             <Plus size={24} />
           </Link>
@@ -320,9 +320,9 @@ export default function ObumaProductosListado() {
           </div>
           <div className="h-8 w-[1px] bg-slate-100" />
           <div className="flex items-center gap-2">
-            <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)} className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#4F46E5] hover:text-white disabled:opacity-30 transition-all"><ChevronLeft size={20} /></button>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)} className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#2563EB] hover:text-white disabled:opacity-30 transition-all"><ChevronLeft size={20} /></button>
             <div className="px-4 py-2 bg-slate-50 rounded-xl"><span className="text-[11px] font-black text-slate-600 uppercase">Pág. {currentPage} / {totalPages || 1}</span></div>
-            <button disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(prev => prev + 1)} className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#4F46E5] hover:text-white disabled:opacity-30 transition-all"><ChevronRight size={20} /></button>
+            <button disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(prev => prev + 1)} className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#2563EB] hover:text-white disabled:opacity-30 transition-all"><ChevronRight size={20} /></button>
           </div>
         </div>
       </div>
@@ -342,17 +342,17 @@ export default function ObumaProductosListado() {
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#4F46E5]" /></td></tr>
+              <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-[#2563EB]" /></td></tr>
             ) : currentItems.length === 0 ? (
               <tr><td colSpan={7} className="py-20 text-center text-slate-400">No se encontraron productos</td></tr>
             ) : (
               currentItems.map((prod) => (
                 <React.Fragment key={prod.id}>
-                  <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.id ? 'bg-[#EEF2FF]/20' : ''}`}>
+                  <tr className={`hover:bg-slate-50/50 transition-all ${editingId === prod.id ? 'bg-[#EFF6FF]/20' : ''}`}>
                     <td className="px-8 py-5">
                       <div className="text-sm font-black text-slate-700 uppercase italic leading-tight">{prod.nombre}</div>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        <span className="text-[8px] font-black text-[#4F46E5] uppercase bg-[#EEF2FF] px-1.5 py-0.5 rounded">{prod.categoria_nombre || 'Sin Categoría'}</span>
+                        <span className="text-[8px] font-black text-[#2563EB] uppercase bg-[#EFF6FF] px-1.5 py-0.5 rounded">{prod.categoria_nombre || 'Sin Categoría'}</span>
                         {prod.subcategoria_nombre && (
                           <span className="text-[8px] font-black text-slate-400 uppercase bg-slate-100 px-1.5 py-0.5 rounded">{prod.subcategoria_nombre}</span>
                         )}
@@ -375,16 +375,16 @@ export default function ObumaProductosListado() {
                     <td className="px-4 py-5 text-right font-bold text-slate-400 text-[11px] italic">
                       {formatPrice(prod.precio_neto || 0)}
                     </td>
-                    <td className="px-4 py-5 text-right font-black text-[#4F46E5] text-sm italic">
+                    <td className="px-4 py-5 text-right font-black text-[#2563EB] text-sm italic">
                       {formatPrice(prod.precio_total || 0)}
                     </td>
                     <td className="px-4 py-5 text-center">
-                      <span className={`text-[9px] font-black px-2 py-1 rounded-full ${prod.tipo === 'Producto' ? 'bg-[#EEF2FF] text-[#4F46E5]' : 'bg-purple-100 text-purple-600'}`}>
+                      <span className={`text-[9px] font-black px-2 py-1 rounded-full ${prod.tipo === 'Producto' ? 'bg-[#EFF6FF] text-[#2563EB]' : 'bg-purple-100 text-purple-600'}`}>
                         {prod.tipo || 'Producto'}
                       </span>
                     </td>
                     <td className="px-8 py-5 text-center">
-                      <button onClick={() => handleEditClick(prod)} className="p-2.5 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#4F46E5] hover:text-white transition-all active:scale-90 shadow-sm">
+                      <button onClick={() => handleEditClick(prod)} className="p-2.5 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#2563EB] hover:text-white transition-all active:scale-90 shadow-sm">
                         {editingId === prod.id ? <X size={18} /> : <Edit3 size={18} />}
                       </button>
                     </td>

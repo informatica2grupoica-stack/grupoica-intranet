@@ -1,4 +1,4 @@
-// app/(dashboard)/proveedores/page.tsx
+﻿// app/(dashboard)/proveedores/page.tsx
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -530,11 +530,11 @@ export default function ProveedoresPage() {
       {prov.email_contacto && (
         <div className="flex items-center gap-2 text-xs text-slate-600">
           <Mail size={12} className="text-slate-400 flex-shrink-0" />
-          <a href={`mailto:${prov.email_contacto}`} className="truncate hover:text-[#4F46E5] hover:underline">{prov.email_contacto}</a>
+          <a href={`mailto:${prov.email_contacto}`} className="truncate hover:text-[#2563EB] hover:underline">{prov.email_contacto}</a>
         </div>
       )}
       {prov.sitio_web && (
-        <div className="flex items-center gap-2 text-xs text-[#4F46E5]">
+        <div className="flex items-center gap-2 text-xs text-[#2563EB]">
           <Globe size={12} className="flex-shrink-0" />
           <a href={prov.sitio_web.startsWith('http') ? prov.sitio_web : `https://${prov.sitio_web}`} target="_blank" rel="noopener noreferrer" className="hover:underline truncate">
             {prov.sitio_web}
@@ -560,7 +560,7 @@ export default function ProveedoresPage() {
       )}
       <div className="flex items-center gap-2 flex-wrap pt-1">
         {prov.obuma_id && (
-          <span className="text-[9px] text-[#4F46E5] bg-[#EEF2FF] px-1.5 py-0.5 rounded-lg">
+          <span className="text-[9px] text-[#2563EB] bg-[#EFF6FF] px-1.5 py-0.5 rounded-lg">
             🏢 ID Obuma: {prov.obuma_id}
           </span>
         )}
@@ -576,7 +576,7 @@ export default function ProveedoresPage() {
   if (loadingUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-[#4F46E5]" size={48} />
+        <Loader2 className="animate-spin text-[#2563EB]" size={48} />
       </div>
     );
   }
@@ -588,7 +588,7 @@ export default function ProveedoresPage() {
         <div className="text-center">
           <ShieldAlert size={48} className="mx-auto text-red-500 mb-4" />
           <p className="text-slate-600">No tienes acceso a esta página</p>
-          <button onClick={() => router.push('/login')} className="mt-4 px-4 py-2 bg-[#4F46E5] text-white rounded-xl">
+          <button onClick={() => router.push('/login')} className="mt-4 px-4 py-2 bg-[#2563EB] text-white rounded-xl">
             Ir al Login
           </button>
         </div>
@@ -620,7 +620,7 @@ export default function ProveedoresPage() {
               </div>
               <div>
                 <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-800 uppercase italic">
-                  Central de <span className="text-[#4F46E5]">Proveedores</span>
+                  Central de <span className="text-[#2563EB]">Proveedores</span>
                 </h1>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
                   Gestión Estratégica de Partners Comerciales
@@ -632,7 +632,7 @@ export default function ProveedoresPage() {
               {/* Badge de rol del usuario */}
               <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1 ${
                 userRole === 'superuser' ? 'bg-purple-100 text-purple-700' : 
-                userRole === 'admin' ? 'bg-[#EEF2FF] text-[#4338CA]' : 
+                userRole === 'admin' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 
                 'bg-slate-100 text-slate-500'
               }`}>
                 <Shield size={12} />
@@ -641,13 +641,13 @@ export default function ProveedoresPage() {
               
               <button
                 onClick={() => setVista('lista')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-[#4F46E5] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'lista' ? 'bg-[#2563EB] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 📋 Lista
               </button>
               <button
                 onClick={() => setVista('grid')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-[#4F46E5] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${vista === 'grid' ? 'bg-[#2563EB] text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200'}`}
               >
                 🔲 Grid
               </button>
@@ -679,8 +679,8 @@ export default function ProveedoresPage() {
                   <p className="text-[9px] font-black uppercase text-slate-400">Total</p>
                   <p className="text-2xl font-black text-slate-800 mt-1">{estadisticas.total.toLocaleString()}</p>
                 </div>
-                <div className="bg-[#EEF2FF] p-2 rounded-xl">
-                  <Building2 size={18} className="text-[#4F46E5]" />
+                <div className="bg-[#EFF6FF] p-2 rounded-xl">
+                  <Building2 size={18} className="text-[#2563EB]" />
                 </div>
               </div>
             </div>
@@ -699,10 +699,10 @@ export default function ProveedoresPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase text-slate-400">🏢 Obuma</p>
-                  <p className="text-2xl font-black text-[#4F46E5] mt-1">{estadisticas.obuma.toLocaleString()}</p>
+                  <p className="text-2xl font-black text-[#2563EB] mt-1">{estadisticas.obuma.toLocaleString()}</p>
                 </div>
-                <div className="bg-[#EEF2FF] p-2 rounded-xl">
-                  <Database size={18} className="text-[#4F46E5]" />
+                <div className="bg-[#EFF6FF] p-2 rounded-xl">
+                  <Database size={18} className="text-[#2563EB]" />
                 </div>
               </div>
             </div>
@@ -770,7 +770,7 @@ export default function ProveedoresPage() {
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por nombre, RUT o servicio..." 
-                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]"
+                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               />
             </div>
             
@@ -798,7 +798,7 @@ export default function ProveedoresPage() {
             {isAdmin() && (
               <button 
                 onClick={() => setShowForm(!showForm)}
-                className="bg-[#4F46E5] hover:bg-[#4338CA] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
+                className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wide shadow-lg transition-all flex items-center gap-2"
               >
                 {showForm ? <X size={18} /> : <Plus size={18} />}
                 {showForm ? 'Cerrar' : 'Nuevo Proveedor'}
@@ -817,7 +817,7 @@ export default function ProveedoresPage() {
         {showForm && isAdmin() && (
           <form onSubmit={guardarProveedor} className="mb-8 bg-white rounded-2xl border border-slate-200 p-6 shadow-lg animate-in slide-in-from-top duration-300">
             <h2 className="text-lg font-black mb-6 text-slate-800 flex items-center gap-2">
-              <Plus size={20} className="text-[#4F46E5]" />
+              <Plus size={20} className="text-[#2563EB]" />
               REGISTRAR NUEVO PROVEEDOR
             </h2>
             
@@ -906,7 +906,7 @@ export default function ProveedoresPage() {
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
               <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-[#4F46E5] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {loading && <Loader2 size={16} className="animate-spin" />}
                 Guardar Proveedor
               </button>
@@ -956,7 +956,7 @@ export default function ProveedoresPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#4338CA]' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#1D4ED8]' : 'bg-slate-100 text-slate-500'}`}>
                             {prov.categoria || 'General'}
                           </span>
                           {(prov.proveedor_giro_comercial || prov.tipo_servicio) && (
@@ -972,7 +972,7 @@ export default function ProveedoresPage() {
                         </td>
                         <td className="px-6 py-4">
                           {prov.obuma_id ? (
-                            <span className="text-[9px] font-bold bg-[#EEF2FF] text-[#4F46E5] px-2 py-1 rounded-full">🏢 Obuma</span>
+                            <span className="text-[9px] font-bold bg-[#EFF6FF] text-[#2563EB] px-2 py-1 rounded-full">🏢 Obuma</span>
                           ) : (
                             <span className="text-[9px] font-bold bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full">📋 Manual</span>
                           )}
@@ -995,7 +995,7 @@ export default function ProveedoresPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-[#4F46E5] transition-colors">
+                            <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="p-2 text-slate-400 hover:text-[#2563EB] transition-colors">
                               {expandedCard === prov.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                             {canEdit() && (
@@ -1046,7 +1046,7 @@ export default function ProveedoresPage() {
                         onClick={() => setCurrentPage(pageNum)}
                         className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
                           currentPage === pageNum
-                            ? 'bg-[#4F46E5] text-white shadow-md'
+                            ? 'bg-[#2563EB] text-white shadow-md'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1101,7 +1101,7 @@ export default function ProveedoresPage() {
                     <div className="space-y-2 mb-4">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold text-slate-400 uppercase flex-shrink-0">Categoría</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#4338CA]' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${prov.categoria && prov.categoria !== 'General' ? 'bg-emerald-100 text-[#1D4ED8]' : 'bg-slate-100 text-slate-500'}`}>
                           {prov.categoria || 'General'}
                         </span>
                       </div>
@@ -1112,7 +1112,7 @@ export default function ProveedoresPage() {
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Fuente</span>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#4F46E5]">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#2563EB]">{prov.obuma_id ? '🏢 Obuma' : '📋 Manual'}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Contacto</span>
@@ -1130,7 +1130,7 @@ export default function ProveedoresPage() {
                           <Star key={i} size={12} className={i < (prov.calificacion || 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"} />
                         ))}
                       </div>
-                      <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1">
+                      <button onClick={() => setExpandedCard(expandedCard === prov.id ? null : prov.id)} className="text-[10px] font-bold text-[#2563EB] hover:text-[#1D4ED8] flex items-center gap-1">
                         {expandedCard === prov.id ? 'Ver menos' : 'Ver detalles'}
                         {expandedCard === prov.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </button>
@@ -1170,7 +1170,7 @@ export default function ProveedoresPage() {
                         onClick={() => setCurrentPage(pageNum)}
                         className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
                           currentPage === pageNum
-                            ? 'bg-[#4F46E5] text-white shadow-md'
+                            ? 'bg-[#2563EB] text-white shadow-md'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -1193,7 +1193,7 @@ export default function ProveedoresPage() {
 
         {loading && (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-[#4F46E5]" size={48} />
+            <Loader2 className="animate-spin text-[#2563EB]" size={48} />
           </div>
         )}
       </div>
@@ -1303,7 +1303,7 @@ export default function ProveedoresPage() {
 
             <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
               <button onClick={() => setSeleccionado(null)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold">Cancelar</button>
-              <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-[#4F46E5] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <button onClick={actualizarProveedor} disabled={loading} className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 flex items-center gap-2">
                 {loading && <Loader2 size={16} className="animate-spin" />}
                 Guardar Cambios
               </button>
@@ -1360,7 +1360,7 @@ export default function ProveedoresPage() {
                           <p className="text-[10px] text-slate-400 font-mono">{prov.rut}</p>
                         </div>
                         {prov.telefono && (
-                          <a href={`tel:${prov.telefono}`} className="text-xs text-[#4F46E5] hover:underline">
+                          <a href={`tel:${prov.telefono}`} className="text-xs text-[#2563EB] hover:underline">
                             <Phone size={14} className="inline mr-1" /> {prov.telefono}
                           </a>
                         )}
@@ -1382,7 +1382,7 @@ export default function ProveedoresPage() {
                         ))}
                       </div>
                       {prov.sitio_web && (
-                        <a href={prov.sitio_web} target="_blank" className="text-[10px] text-[#4F46E5] hover:underline mt-3 inline-flex items-center gap-1">
+                        <a href={prov.sitio_web} target="_blank" className="text-[10px] text-[#2563EB] hover:underline mt-3 inline-flex items-center gap-1">
                           <ExternalLink size={10} /> Ver sitio web
                         </a>
                       )}

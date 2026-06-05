@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -369,10 +369,10 @@ export default function HomePage() {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center">
         <div className="relative mb-5">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center shadow-lg shadow-emerald-900/20">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-lg shadow-emerald-900/20">
             <Sparkles className="w-7 h-7 text-white" />
           </div>
-          <Loader2 className="w-20 h-20 animate-spin text-[#4F46E5]/30 absolute -top-3 -left-3" />
+          <Loader2 className="w-20 h-20 animate-spin text-[#2563EB]/30 absolute -top-3 -left-3" />
         </div>
         <p className="text-[10px] font-black uppercase tracking-[0.5em] text-slate-400">Cargando tu espacio…</p>
       </div>
@@ -393,8 +393,8 @@ export default function HomePage() {
       {/* ── Welcome banner ───────────────────────────────────────────── */}
       <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#111827] via-[#1E293B] to-[#111827] p-6 md:p-8 shadow-xl shadow-slate-900/20">
         {/* Orbes de fondo */}
-        <div className="absolute -top-20 -right-10 w-72 h-72 bg-[#6366F1]/20 blur-[100px] rounded-full pointer-events-none" />
-        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-[#4F46E5]/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute -top-20 -right-10 w-72 h-72 bg-[#3B82F6]/20 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-[#2563EB]/10 blur-[100px] rounded-full pointer-events-none" />
         {mensajeHoy && (
           <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 blur-[60px] rounded-full pointer-events-none" />
         )}
@@ -403,7 +403,7 @@ export default function HomePage() {
           {/* Cabecera: saludo + rol */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#EEF2FF] text-[#4F46E5] px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-[#EFF6FF] text-[#2563EB] px-2.5 py-1 rounded-full">
                 <Sparkles className="w-3 h-3" /> Comercial MP Workspace
               </span>
 
@@ -412,7 +412,7 @@ export default function HomePage() {
                 {conDiaEnSaludo ? (
                   <>
                     Hola,{' '}
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] to-[#818CF8]">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]">
                       {userName}
                     </span>{' '}
                     <span className="text-slate-400 text-xl font-light">
@@ -425,7 +425,7 @@ export default function HomePage() {
                 ) : (
                   <>
                     Hola,{' '}
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6366F1] to-[#818CF8]">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]">
                       {userName}
                     </span>{' '}
                     <span className="text-2xl">👋</span>
@@ -445,7 +445,7 @@ export default function HomePage() {
             <div className="mt-6 pt-5 border-t border-white/8 animate-fade-in">
               <div className="flex items-start gap-4">
                 {/* Comillas decorativas */}
-                <span className="text-5xl font-black text-[#6366F1]/25 leading-none -mt-2 select-none shrink-0"
+                <span className="text-5xl font-black text-[#3B82F6]/25 leading-none -mt-2 select-none shrink-0"
                   style={{ fontFamily: 'Georgia, serif' }}>
                   ❝
                 </span>
@@ -525,12 +525,12 @@ export default function HomePage() {
         >
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-emerald-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mb-3">
-            <ClipboardCheck className="w-5 h-5 text-[#4F46E5]" />
+            <ClipboardCheck className="w-5 h-5 text-[#2563EB]" />
           </div>
           <p className="text-3xl font-black text-[#111827] tabular-nums"><AnimatedNumber value={misTareas.length} /></p>
           <p className="text-xs text-slate-500 font-semibold mt-0.5">Tareas</p>
-          <p className="text-[10px] text-[#4F46E5] font-bold mt-1">pendientes</p>
-          <ArrowRight className="w-4 h-4 text-slate-200 group-hover:text-[#4F46E5] absolute top-5 right-5 transition-colors" />
+          <p className="text-[10px] text-[#2563EB] font-bold mt-1">pendientes</p>
+          <ArrowRight className="w-4 h-4 text-slate-200 group-hover:text-[#2563EB] absolute top-5 right-5 transition-colors" />
         </div>
 
         {/* Buscador */}
@@ -598,14 +598,14 @@ export default function HomePage() {
         {/* ── Tareas por prioridad (Donut) ───────────────────────────── */}
         <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
-            <span className="w-8 h-8 rounded-lg bg-emerald-100 text-[#4F46E5] flex items-center justify-center flex-shrink-0">
+            <span className="w-8 h-8 rounded-lg bg-emerald-100 text-[#2563EB] flex items-center justify-center flex-shrink-0">
               <ClipboardCheck size={17} />
             </span>
             <div>
               <h2 className="font-bold text-[#111827] text-sm leading-tight">Tareas Pendientes</h2>
               <p className="text-[10px] text-slate-400">por prioridad</p>
             </div>
-            <button onClick={() => router.push("/tareas")} className="ml-auto text-[10px] text-[#4F46E5] font-bold flex items-center gap-0.5 hover:underline">
+            <button onClick={() => router.push("/tareas")} className="ml-auto text-[10px] text-[#2563EB] font-bold flex items-center gap-0.5 hover:underline">
               Ver todas <ChevronRight className="w-3 h-3" />
             </button>
           </div>
@@ -663,7 +663,7 @@ export default function HomePage() {
                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${(t.prioridad || "").toLowerCase() === "alta" ? "bg-[#EF4444]" : (t.prioridad || "").toLowerCase() === "media" ? "bg-[#F59E0B]" : "bg-[#22C55E]"}`} />
                     <p className="text-xs text-slate-700 font-medium truncate flex-1">{t.titulo || t.nombre || "Tarea"}</p>
                     {t.fecha_limite && <p className="text-[10px] text-slate-400 whitespace-nowrap">{formatearFecha(t.fecha_limite)}</p>}
-                    <Clock size={11} className="text-[#4F46E5] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    <Clock size={11} className="text-[#2563EB] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                   </div>
                 ))}
               </div>
@@ -810,7 +810,7 @@ export default function HomePage() {
               <p className="text-2xl font-black tabular-nums"><AnimatedNumber value={totalProductos} /></p>
               <p className="text-[10px] opacity-80 font-semibold mt-0.5">Total</p>
             </div>
-            <div className="rounded-2xl bg-gradient-to-br from-[#4F46E5] to-[#4338CA] p-4 text-white text-center shadow-md shadow-emerald-500/20">
+            <div className="rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] p-4 text-white text-center shadow-md shadow-emerald-500/20">
               <p className="text-2xl font-black tabular-nums"><AnimatedNumber value={Math.max(0, totalProductos - productosSinStock)} /></p>
               <p className="text-[10px] opacity-80 font-semibold mt-0.5">Con stock</p>
             </div>
@@ -829,7 +829,7 @@ export default function HomePage() {
             </div>
             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-teal-500 to-[#4F46E5] rounded-full transition-all duration-1000"
+                className="h-full bg-gradient-to-r from-teal-500 to-[#2563EB] rounded-full transition-all duration-1000"
                 style={{ width: totalProductos > 0 ? `${((totalProductos - productosSinStock) / totalProductos) * 100}%` : "0%" }}
               />
             </div>
@@ -869,8 +869,8 @@ export default function HomePage() {
             <>
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-center">
-                  <TrendingDown className="w-5 h-5 text-[#4F46E5] mx-auto mb-1" />
-                  <p className="text-2xl font-black text-[#4F46E5] tabular-nums"><AnimatedNumber value={historial.bajas} /></p>
+                  <TrendingDown className="w-5 h-5 text-[#2563EB] mx-auto mb-1" />
+                  <p className="text-2xl font-black text-[#2563EB] tabular-nums"><AnimatedNumber value={historial.bajas} /></p>
                   <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">Bajaron</p>
                 </div>
                 <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-center">
@@ -901,7 +901,7 @@ export default function HomePage() {
                       contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 16px #0001", fontSize: 11 }}
                     />
                     <Bar dataKey="value" radius={[6, 6, 0, 0]} animationBegin={400} animationDuration={900}>
-                      {[{ fill: "#4F46E5" }, { fill: "#EF4444" }, { fill: "#94A3B8" }].map((c, i) => (
+                      {[{ fill: "#2563EB" }, { fill: "#EF4444" }, { fill: "#94A3B8" }].map((c, i) => (
                         <Cell key={i} fill={c.fill} />
                       ))}
                     </Bar>
@@ -911,7 +911,7 @@ export default function HomePage() {
 
               {historial.ahorro > 0 && (
                 <div className="mt-3 flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2.5">
-                  <Star className="w-4 h-4 text-[#4F46E5] flex-shrink-0" />
+                  <Star className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
                   <p className="text-xs text-emerald-700 font-semibold">
                     Ahorro potencial: <span className="font-black">${historial.ahorro.toLocaleString("es-CL")}</span>
                   </p>
@@ -1058,7 +1058,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-            <div className="bg-gradient-to-br from-[#4F46E5] to-[#4338CA] rounded-xl p-3 text-white">
+            <div className="bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] rounded-xl p-3 text-white">
               <Users size={14} className="mb-1 opacity-80" />
               <p className="text-lg font-black tabular-nums"><AnimatedNumber value={totalEmpleados} /></p>
               <p className="text-[9px] opacity-70 font-semibold">Colaboradores</p>

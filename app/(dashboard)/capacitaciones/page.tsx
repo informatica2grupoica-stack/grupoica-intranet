@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -376,7 +376,7 @@ export default function CapacitacionesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-[#4F46E5]" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#2563EB]" />
       </div>
     );
   }
@@ -396,7 +396,7 @@ export default function CapacitacionesPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -452,14 +452,14 @@ export default function CapacitacionesPage() {
                 )}
 
                 <div className="mt-auto pt-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className={`flex items-center gap-1 text-[10px] font-medium ${cap.archivo_url ? "text-[#4F46E5]" : "text-slate-400"}`}>
+                  <span className={`flex items-center gap-1 text-[10px] font-medium ${cap.archivo_url ? "text-[#2563EB]" : "text-slate-400"}`}>
                     <FileText className="w-3.5 h-3.5" />
                     {cap.archivo_url ? `Archivo ${cap.tipo_archivo?.toUpperCase() || "adjunto"}` : "Sin archivo"}
                   </span>
                   {cap.archivo_url && (
                     <button
                       onClick={() => abrirViewer(cap)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-[#4F46E5] to-[#6366F1] px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-[#2563EB] to-[#3B82F6] px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
                     >
                       <Eye className="w-3.5 h-3.5" /> Ver contenido
                     </button>
@@ -498,7 +498,7 @@ export default function CapacitacionesPage() {
       {/* Header admin */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -508,7 +508,7 @@ export default function CapacitacionesPage() {
         </div>
         <button
           onClick={() => { setEditando(null); setForm(formInit); setArchivoPendiente(null); setModalForm(true); }}
-          className="flex items-center gap-2 bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white text-sm font-bold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+          className="flex items-center gap-2 bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white text-sm font-bold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity shadow-sm"
         >
           <Plus className="w-4 h-4" /> Nueva Capacitación
         </button>
@@ -537,7 +537,7 @@ export default function CapacitacionesPage() {
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             placeholder="Buscar por nombre o proveedor…"
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30 bg-white"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 bg-white"
           />
         </div>
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1">
@@ -545,7 +545,7 @@ export default function CapacitacionesPage() {
             <button
               key={k}
               onClick={() => setFiltroActivo(k)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${filtroActivo === k ? "bg-[#4F46E5] text-white" : "text-slate-500 hover:bg-slate-100"}`}
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${filtroActivo === k ? "bg-[#2563EB] text-white" : "text-slate-500 hover:bg-slate-100"}`}
             >
               {l}
             </button>
@@ -612,7 +612,7 @@ export default function CapacitacionesPage() {
                   </span>
                 )}
                 {cap.archivo_url && (
-                  <span className="flex items-center gap-1 text-[11px] font-medium text-[#4F46E5] bg-emerald-50 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-[#2563EB] bg-emerald-50 px-2 py-1 rounded-full">
                     <FileText className="w-3 h-3" /> {cap.tipo_archivo?.toUpperCase() || "Archivo"}
                   </span>
                 )}
@@ -654,7 +654,7 @@ export default function CapacitacionesPage() {
                   value={form.nombre}
                   onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
                   placeholder="Ej: Excel Avanzado"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                 />
               </div>
 
@@ -666,7 +666,7 @@ export default function CapacitacionesPage() {
                     value={form.proveedor}
                     onChange={e => setForm(f => ({ ...f, proveedor: e.target.value }))}
                     placeholder="Ej: SENCE"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
                 </div>
                 <div>
@@ -674,7 +674,7 @@ export default function CapacitacionesPage() {
                   <select
                     value={form.modalidad}
                     onChange={e => setForm(f => ({ ...f, modalidad: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30 bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 bg-white"
                   >
                     <option value="">Sin especificar</option>
                     {MODALIDADES.map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
@@ -687,12 +687,12 @@ export default function CapacitacionesPage() {
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5">Fecha inicio</label>
                   <input type="date" value={form.fecha_inicio} onChange={e => setForm(f => ({ ...f, fecha_inicio: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30" />
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5">Fecha fin</label>
                   <input type="date" value={form.fecha_fin} onChange={e => setForm(f => ({ ...f, fecha_fin: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30" />
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30" />
                 </div>
               </div>
 
@@ -702,13 +702,13 @@ export default function CapacitacionesPage() {
                   <label className="block text-xs font-bold text-slate-600 mb-1.5">Horas totales</label>
                   <input type="number" min="0" value={form.horas_total} onChange={e => setForm(f => ({ ...f, horas_total: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30" />
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5">Costo (CLP)</label>
                   <input type="number" min="0" value={form.costo} onChange={e => setForm(f => ({ ...f, costo: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30" />
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30" />
                 </div>
               </div>
 
@@ -720,7 +720,7 @@ export default function CapacitacionesPage() {
                   onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
                   rows={3}
                   placeholder="Describe el contenido de esta capacitación…"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30 resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 resize-none"
                 />
               </div>
 
@@ -729,11 +729,11 @@ export default function CapacitacionesPage() {
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Archivo (PDF o PPTX)</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-[#4F46E5] rounded-xl p-5 text-center cursor-pointer transition-colors"
+                  className="border-2 border-dashed border-slate-200 hover:border-[#2563EB] rounded-xl p-5 text-center cursor-pointer transition-colors"
                 >
                   <input ref={fileInputRef} type="file" accept=".pdf,.pptx" className="hidden" onChange={handleFileChange} />
                   {archivoPendiente ? (
-                    <div className="flex items-center justify-center gap-2 text-[#4F46E5]">
+                    <div className="flex items-center justify-center gap-2 text-[#2563EB]">
                       <FileText className="w-5 h-5" />
                       <span className="text-sm font-medium">{archivoPendiente.name}</span>
                       <button onClick={e => { e.stopPropagation(); setArchivoPendiente(null); }} className="text-rose-400 hover:text-rose-600">
@@ -742,7 +742,7 @@ export default function CapacitacionesPage() {
                     </div>
                   ) : editando?.archivo_url ? (
                     <div className="flex items-center justify-center gap-2 text-slate-500">
-                      <FileText className="w-5 h-5 text-[#4F46E5]" />
+                      <FileText className="w-5 h-5 text-[#2563EB]" />
                       <span className="text-sm">Archivo actual: <strong>{editando.tipo_archivo?.toUpperCase()}</strong></span>
                       <span className="text-xs text-slate-400">(clic para reemplazar)</span>
                     </div>
@@ -760,7 +760,7 @@ export default function CapacitacionesPage() {
               <label className="flex items-center gap-3 cursor-pointer">
                 <div
                   onClick={() => setForm(f => ({ ...f, activo: !f.activo }))}
-                  className={`w-11 h-6 rounded-full transition-colors ${form.activo ? "bg-[#4F46E5]" : "bg-slate-300"} relative`}
+                  className={`w-11 h-6 rounded-full transition-colors ${form.activo ? "bg-[#2563EB]" : "bg-slate-300"} relative`}
                 >
                   <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.activo ? "translate-x-5.5" : "translate-x-0.5"}`} />
                 </div>
@@ -775,7 +775,7 @@ export default function CapacitacionesPage() {
               <button
                 onClick={handleSave}
                 disabled={savingForm || subiendoArchivo}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white text-sm font-bold hover:opacity-90 disabled:opacity-60"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white text-sm font-bold hover:opacity-90 disabled:opacity-60"
               >
                 {(savingForm || subiendoArchivo) && <Loader2 className="w-4 h-4 animate-spin" />}
                 {editando ? "Guardar cambios" : "Crear capacitación"}
@@ -806,17 +806,17 @@ export default function CapacitacionesPage() {
                   value={busquedaAsig}
                   onChange={e => setBusquedaAsig(e.target.value)}
                   placeholder="Buscar perfil…"
-                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30"
+                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                 />
               </div>
               {pendientes.size > 0 && (
-                <p className="text-xs text-[#4F46E5] font-medium mt-2">{pendientes.size} cambio{pendientes.size !== 1 ? "s" : ""} pendiente{pendientes.size !== 1 ? "s" : ""}</p>
+                <p className="text-xs text-[#2563EB] font-medium mt-2">{pendientes.size} cambio{pendientes.size !== 1 ? "s" : ""} pendiente{pendientes.size !== 1 ? "s" : ""}</p>
               )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
               {loadingAsig ? (
-                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#4F46E5]" /></div>
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#2563EB]" /></div>
               ) : perfilesAsig
                     .filter(p =>
                       !busquedaAsig ||
@@ -831,11 +831,11 @@ export default function CapacitacionesPage() {
                           onClick={() => toggleAsignacion(p.id)}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                             asignadoActual
-                              ? "border-[#4F46E5]/30 bg-emerald-50"
+                              ? "border-[#2563EB]/30 bg-emerald-50"
                               : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
                           }`}
                         >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${asignadoActual ? "bg-[#4F46E5]" : "bg-slate-300"}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${asignadoActual ? "bg-[#2563EB]" : "bg-slate-300"}`}>
                             {p.nombre.charAt(0).toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -843,7 +843,7 @@ export default function CapacitacionesPage() {
                             {p.cargo && <p className="text-xs text-slate-400 truncate">{p.cargo}</p>}
                           </div>
                           {asignadoActual
-                            ? <UserCheck className="w-4 h-4 text-[#4F46E5] shrink-0" />
+                            ? <UserCheck className="w-4 h-4 text-[#2563EB] shrink-0" />
                             : <UserMinus className="w-4 h-4 text-slate-300 shrink-0" />
                           }
                         </button>
@@ -859,7 +859,7 @@ export default function CapacitacionesPage() {
               <button
                 onClick={guardarAsignaciones}
                 disabled={loadingAsig || pendientes.size === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#4F46E5] to-[#6366F1] text-white text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white text-sm font-bold hover:opacity-90 disabled:opacity-50"
               >
                 {loadingAsig && <Loader2 className="w-4 h-4 animate-spin" />}
                 Guardar asignaciones
@@ -899,7 +899,7 @@ function ModalViewer({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col" style={{ height: "90vh" }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-[#4F46E5]" />
+            <FileText className="w-5 h-5 text-[#2563EB]" />
             <div>
               <h3 className="font-black text-slate-800 text-sm">{cap.nombre}</h3>
               <p className="text-xs text-slate-400">{cap.tipo_archivo?.toUpperCase() || "Archivo"} · {cap.proveedor || "Sin proveedor"}</p>

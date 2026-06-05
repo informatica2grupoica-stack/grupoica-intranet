@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { X, Loader2, Calendar, Clock, Briefcase, User, AlertCircle } from 'lucide-react';
@@ -136,7 +136,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Título de la tarea *</label>
             <input
               type="text"
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#4F46E5]"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#2563EB]"
               placeholder="Ej: Revisar documentación del proyecto"
               value={form.titulo}
               onChange={(e) => setForm({...form, titulo: e.target.value})}
@@ -147,7 +147,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
           <div>
             <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Descripción</label>
             <textarea
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#4F46E5] resize-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-[#2563EB] resize-none"
               placeholder="Detalla las actividades a realizar..."
               rows={3}
               value={form.descripcion}
@@ -235,7 +235,7 @@ export default function FormularioTarea({ usuarios, perfilUsuario, onClose, onSu
             <button
               type="submit"
               disabled={loading}
-              className="px-8 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 disabled:opacity-50"
+              className="px-8 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-black uppercase shadow-lg flex items-center gap-2 disabled:opacity-50"
             >
               {loading && <Loader2 size={14} className="animate-spin" />}
               {tareaEdit ? 'Actualizar Tarea' : 'Crear Tarea'}

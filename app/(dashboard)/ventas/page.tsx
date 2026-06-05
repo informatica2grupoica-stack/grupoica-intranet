@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   TrendingUp, Search, Download, Filter, RefreshCcw,
@@ -94,7 +94,7 @@ export default function VentasPage() {
       const clientes = new Set(filtrados.map(r=>r.venta_rut_cliente||r.cliente_rut)).size;
       return [
         {label:"Total Ventas",value:filtrados.length,color:"text-slate-700",bg:"bg-slate-100",icon:TrendingUp},
-        {label:"Monto Total",value:fmt(total),color:"text-[#4F46E5]",bg:"bg-[#EEF2FF]",icon:DollarSign},
+        {label:"Monto Total",value:fmt(total),color:"text-[#2563EB]",bg:"bg-[#EFF6FF]",icon:DollarSign},
         {label:"Clientes únicos",value:clientes,color:"text-purple-600",bg:"bg-purple-100",icon:Users},
         {label:"Tipos Dcto.",value:new Set(filtrados.map(r=>r.venta_tipo_dcto||r.tipo_dcto)).size,color:"text-blue-600",bg:"bg-blue-100",icon:FileText},
       ];
@@ -103,7 +103,7 @@ export default function VentasPage() {
       const total = filtrados.reduce((s,r)=>s+Number(r.cotizacion_total||r.total||0),0);
       return [
         {label:"Total Cotizaciones",value:filtrados.length,color:"text-slate-700",bg:"bg-slate-100",icon:FileText},
-        {label:"Monto Total",value:fmt(total),color:"text-[#4F46E5]",bg:"bg-[#EEF2FF]",icon:DollarSign},
+        {label:"Monto Total",value:fmt(total),color:"text-[#2563EB]",bg:"bg-[#EFF6FF]",icon:DollarSign},
         {label:"Clientes",value:new Set(filtrados.map(r=>r.cliente_rut||r.cotizacion_cliente)).size,color:"text-purple-600",bg:"bg-purple-100",icon:Users},
         {label:"Vigentes",value:filtrados.filter(r=>r.cotizacion_estado==="VIGENTE").length,color:"text-emerald-600",bg:"bg-emerald-100",icon:CheckCircle2},
       ];
@@ -112,7 +112,7 @@ export default function VentasPage() {
     const total = filtrados.reduce((s,r)=>s+Number(r.vc_total||r.monto||0),0);
     return [
       {label:"Total Cobros",value:filtrados.length,color:"text-slate-700",bg:"bg-slate-100",icon:CreditCard},
-      {label:"Monto Total",value:fmt(total),color:"text-[#4F46E5]",bg:"bg-[#EEF2FF]",icon:DollarSign},
+      {label:"Monto Total",value:fmt(total),color:"text-[#2563EB]",bg:"bg-[#EFF6FF]",icon:DollarSign},
       {label:"Orígenes",value:new Set(filtrados.map(r=>r.vc_origen_nombre||r.origen)).size,color:"text-blue-600",bg:"bg-blue-100",icon:Hash},
       {label:"Mes/Año",value:`${mes||"*"}/${ano}`,color:"text-slate-500",bg:"bg-slate-100",icon:Receipt},
     ];
@@ -139,7 +139,7 @@ export default function VentasPage() {
         {TABS.map(t => (
           <button key={t.id} onClick={()=>{setTab(t.id);setDatos([]);setDebugMode(false);}}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wide transition-all ${
-              tab===t.id?"bg-[#4F46E5] text-white shadow-md":"bg-white text-slate-500 border border-slate-200 hover:border-[#4F46E5] hover:text-[#4F46E5]"
+              tab===t.id?"bg-[#2563EB] text-white shadow-md":"bg-white text-slate-500 border border-slate-200 hover:border-[#2563EB] hover:text-[#2563EB]"
             }`}>
             <t.icon size={14}/>{t.label}
           </button>
@@ -189,11 +189,11 @@ export default function VentasPage() {
               <Filter size={13}/> Limpiar
             </button>
             <button onClick={cargar} disabled={loading}
-              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#4F46E5] disabled:opacity-50">
+              className="px-3 py-2.5 text-xs font-bold text-white bg-slate-800 rounded-xl flex items-center gap-1.5 hover:bg-[#2563EB] disabled:opacity-50">
               <RefreshCcw size={13} className={loading?"animate-spin":""}/> Buscar
             </button>
             <button onClick={exportar}
-              className="px-4 py-2.5 text-xs font-bold bg-[#4F46E5] text-white rounded-xl flex items-center gap-1.5">
+              className="px-4 py-2.5 text-xs font-bold bg-[#2563EB] text-white rounded-xl flex items-center gap-1.5">
               <Download size={13}/> Excel
             </button>
             <button onClick={()=>setDebugMode(d=>!d)}
@@ -230,14 +230,14 @@ export default function VentasPage() {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr><td colSpan={6} className="p-16 text-center">
-                  <Loader2 className="animate-spin text-[#4F46E5] mx-auto mb-2" size={32}/>
+                  <Loader2 className="animate-spin text-[#2563EB] mx-auto mb-2" size={32}/>
                   <p className="text-slate-400 text-xs">Consultando API Obuma...</p>
                 </td></tr>
               ) : error ? (
                 <tr><td colSpan={6} className="p-16 text-center">
                   <AlertCircle className="mx-auto text-rose-400 mb-2" size={32}/>
                   <p className="text-rose-500 text-sm">{error}</p>
-                  <button onClick={cargar} className="mt-2 text-xs text-[#4F46E5] font-bold">Reintentar</button>
+                  <button onClick={cargar} className="mt-2 text-xs text-[#2563EB] font-bold">Reintentar</button>
                 </td></tr>
               ) : pagActual.length === 0 ? (
                 <tr><td colSpan={6} className="p-16 text-center text-slate-400">Sin resultados.</td></tr>
@@ -255,7 +255,7 @@ export default function VentasPage() {
                   <tr key={id||i} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-5 py-3.5">
                       {tipo && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded mr-1">{TIPO_DTE[tipo]||tipo}</span>}
-                      <span className="text-xs font-bold text-[#4F46E5]">#{folio}</span>
+                      <span className="text-xs font-bold text-[#2563EB]">#{folio}</span>
                     </td>
                     <td className="px-5 py-3.5 text-xs text-slate-600">{fmtF(fecha)}</td>
                     <td className="px-5 py-3.5">
@@ -268,7 +268,7 @@ export default function VentasPage() {
                     </td>
                     <td className="px-5 py-3.5 text-center">
                       {id && <button onClick={()=>verDetalle(String(id))}
-                        className="p-2 rounded-lg bg-slate-100 hover:bg-[#EEF2FF] text-slate-500 hover:text-[#4F46E5] transition-all">
+                        className="p-2 rounded-lg bg-slate-100 hover:bg-[#EFF6FF] text-slate-500 hover:text-[#2563EB] transition-all">
                         <Eye size={14}/>
                       </button>}
                     </td>
@@ -303,7 +303,7 @@ export default function VentasPage() {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {modalDetalle.loading ? (
-                <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#4F46E5]" size={36}/></div>
+                <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#2563EB]" size={36}/></div>
               ) : modalDetalle.data ? (
                 <pre className="text-[10px] font-mono text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-xl p-4 overflow-x-auto">
                   {JSON.stringify(modalDetalle.data, null, 2)}
