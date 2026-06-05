@@ -2,7 +2,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Minimize2, Maximize2, Bot, History, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { X, Send, Minimize2, Maximize2, Sparkles, History, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Mensaje {
@@ -45,651 +46,417 @@ interface Usuario {
   rol?: string;
 }
 
-export default function ChatBot() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [mensajes, setMensajes] = useState<Mensaje[]>([
-    {
-      id: '1',
-      texto: '👋 ¡Hola! Soy tu asistente inteligente. Puedo ayudarte a buscar productos, consultar clientes, verificar SKUs o responder preguntas sobre tu inventario y base de datos.\n\n✨ **Qué puedo hacer:**\n• Buscar productos por nombre o SKU\n• Consultar clientes por RUT o razón social\n• Cambiar precios o actualizar stock\n• Ver estadísticas de inventario\n• Responder preguntas sobre tu base de datos\n\n¿En qué te ayudo?',
-      esUsuario: false,
-      timestamp: new Date()
-    }
-  ]);
-  const [input, setInput] = useState('');
-  const [cargando, setCargando] = useState(false);
-  const [productos, setProductos] = useState<ProductoReal[]>([]);
-  const [clientes, setClientes] = useState<ClienteReal[]>([]);
-  const [cargandoDatos, setCargandoDatos] = useState(true);
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [recargandoLista, setRecargandoLista] = useState(false);
-  const mensajesEndRef = useRef<HTMLDivElement>(null);
+const SUGGESTIONS = [
+  '¿Cuántos productos tenemos?',
+  '¿Cuántos clientes activos?',
+  'Productos sin stock',
+  'Tareas pendientes',
+];
 
-  // Obtener usuario actual
+export default function ChatBot() {
+  const [isOpen, setIsOpen]       = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [mensajes, setMensajes]   = useState<Mensaje[]>([{
+    id: '1',
+    texto: '✨ Hola, soy tu asistente Gemini. Puedo buscar productos, clientes, consultar stock, cambiar precios y responder preguntas sobre tu base de datos.\n\n¿En qué te ayudo?',
+    esUsuario: false,
+    timestamp: new Date(),
+  }]);
+  const [input, setInput]         = useState('');
+  const [cargando, setCargando]   = useState(false);
+  const [productos, setProductos] = useState<ProductoReal[]>([]);
+  const [clientes, setClientes]   = useState<ClienteReal[]>([]);
+  const [cargandoDatos, setCargandoDatos] = useState(true);
+  const [usuario, setUsuario]     = useState<Usuario | null>(null);
+  const [recargando, setRecargando] = useState(false);
+  const messagesEndRef            = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const getUsuario = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          // Traer rol/nombre del perfil para personalizar el asistente
-          const { data: perfil } = await supabase
-            .from('perfiles')
-            .select('nombre, rol')
-            .eq('user_id', session.user.id)
-            .single();
-          setUsuario({
-            id: session.user.id,
-            email: session.user.email || '',
-            nombre: perfil?.nombre || session.user.user_metadata?.nombre || session.user.email?.split('@')[0] || 'Usuario',
-            rol: perfil?.rol || 'usuario'
-          });
-        }
-      } catch (error) {
-        console.error("Error obteniendo usuario:", error);
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: perfil } = await supabase
+          .from('perfiles').select('nombre, rol').eq('user_id', session.user.id).single();
+        setUsuario({
+          id: session.user.id,
+          email: session.user.email || '',
+          nombre: perfil?.nombre || session.user.email?.split('@')[0] || 'Usuario',
+          rol: perfil?.rol || 'usuario',
+        });
       }
-    };
-    getUsuario();
+    })();
   }, []);
 
-  // Cargar productos desde Supabase
   const cargarProductos = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('productos_obuma')
-        .select('id, nombre, sku, precio_total, stock_actual, categoria_nombre')
-        .eq('activo', true)
-        .order('nombre');
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const productosMap: ProductoReal[] = data.map((p: any) => ({
-          id: p.id,
-          nombre: p.nombre,
-          sku: p.sku,
-          precio: p.precio_total,
-          stock: p.stock_actual,
-          categoria: p.categoria_nombre
-        }));
-        setProductos(productosMap);
-        console.log(`✅ ChatBot: ${productosMap.length} productos cargados`);
-        return productosMap.length;
-      }
-      return 0;
-    } catch (error) {
-      console.error("Error cargando productos:", error);
-      return 0;
+    const { data } = await supabase
+      .from('productos_obuma')
+      .select('id, nombre, sku, precio_total, stock_actual, categoria_nombre')
+      .eq('activo', true).order('nombre');
+    if (data) {
+      setProductos(data.map((p: any) => ({
+        id: p.id, nombre: p.nombre, sku: p.sku,
+        precio: p.precio_total, stock: p.stock_actual, categoria: p.categoria_nombre,
+      })));
     }
   };
 
-  // Cargar clientes desde Supabase
   const cargarClientes = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('clientes_obuma')
-        .select('id, razon_social, rut, email, telefono, estado, total_contactos, total_direcciones')
-        .eq('estado', true)
-        .order('razon_social');
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const clientesMap: ClienteReal[] = data.map((c: any) => ({
-          id: c.id,
-          razon_social: c.razon_social,
-          rut: c.rut || '',
-          email: c.email || '',
-          telefono: c.telefono || '',
-          estado: c.estado,
-          total_contactos: c.total_contactos || 0,
-          total_direcciones: c.total_direcciones || 0
-        }));
-        setClientes(clientesMap);
-        console.log(`✅ ChatBot: ${clientesMap.length} clientes cargados`);
-        return clientesMap.length;
-      }
-      return 0;
-    } catch (error) {
-      console.error("Error cargando clientes:", error);
-      return 0;
+    const { data } = await supabase
+      .from('clientes_obuma')
+      .select('id, razon_social, rut, email, telefono, estado, total_contactos, total_direcciones')
+      .eq('estado', true).order('razon_social');
+    if (data) {
+      setClientes(data.map((c: any) => ({
+        id: c.id, razon_social: c.razon_social, rut: c.rut || '',
+        email: c.email || '', telefono: c.telefono || '',
+        estado: c.estado, total_contactos: c.total_contactos || 0, total_direcciones: c.total_direcciones || 0,
+      })));
     }
   };
 
-  // Cargar todos los datos al inicio
   useEffect(() => {
-    const inicializar = async () => {
+    (async () => {
       setCargandoDatos(true);
       await Promise.all([cargarProductos(), cargarClientes()]);
       setCargandoDatos(false);
-    };
-    inicializar();
+    })();
   }, []);
 
   useEffect(() => {
-    mensajesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
 
-  // Guardar mensaje en historial
-  const guardarEnHistorial = async (pregunta: string, respuesta: string, productosEncontrados: number = 0) => {
-    if (!usuario) return;
-    
-    try {
-      await fetch('/api/chatbot/historial', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usuario_id: usuario.id,
-          usuario_nombre: usuario.nombre,
-          pregunta,
-          respuesta,
-          productos_encontrados: productosEncontrados
-        })
-      });
-    } catch (error) {
-      console.error("Error guardando historial:", error);
-    }
-  };
-
-  // Recargar todos los datos
-  const recargarTodosLosDatos = async (): Promise<boolean> => {
-    setRecargandoLista(true);
-    await Promise.all([cargarProductos(), cargarClientes()]);
-    setRecargandoLista(false);
-    return true;
-  };
-
-  // Detectar y ejecutar acciones (cambiar precio/stock)
   const detectarYEjecutarAccion = async (pregunta: string): Promise<{ esAccion: boolean; respuesta: string; exitosa: boolean }> => {
-    const preguntaLower = pregunta.toLowerCase();
-    
-    // Detectar cambio de precio
-    const precioMatch = preguntaLower.match(/(?:cambia|actualiza|modifica|setea).*?precio.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+(?:\.\d+)?)/i);
+    const p = pregunta.toLowerCase();
+    const precioMatch = p.match(/(?:cambia|actualiza|modifica|setea).*?precio.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+(?:\.\d+)?)/i);
     if (precioMatch) {
       const sku = precioMatch[1];
       const nuevoPrecio = parseInt(precioMatch[2]);
-      const producto = productos.find(p => p.sku === sku);
-      
-      if (!producto) {
-        return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}. Verifica el código.`, exitosa: false };
-      }
-      
+      const producto = productos.find(x => x.sku === sku);
+      if (!producto) return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}.`, exitosa: false };
       try {
         const getRes = await fetch(`/api/obuma/productos/list?codigo_sku=${sku}`);
         const getData = await getRes.json();
         const productoActual = getData.data?.[0];
-        
-        if (!productoActual) {
-          return { esAccion: true, respuesta: `❌ No se encontraron datos del producto.`, exitosa: false };
-        }
-        
+        if (!productoActual) return { esAccion: true, respuesta: `❌ No se encontraron datos del producto.`, exitosa: false };
         const nuevoPrecioBruto = Math.round(nuevoPrecio * 1.19);
-        
         const updateRes = await fetch(`/api/obuma/productos/${producto.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...productoActual,
-            precio_venta: nuevoPrecioBruto,
-            precio_neto: nuevoPrecio,
-            venta_incluye_iva: true,
-            nombre_completo: producto.nombre,
-            sku: producto.sku,
-            tipo: productoActual.tipo || 'Producto',
-            categoria_id: productoActual.categoria_id || '',
-            subcategoria_id: productoActual.subcategoria_id || '',
-            se_puede_vender: true,
-            se_puede_comprar: true,
-            se_mantiene_stock: true
-          })
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...productoActual, precio_venta: nuevoPrecioBruto, precio_neto: nuevoPrecio, venta_incluye_iva: true, nombre_completo: producto.nombre, sku: producto.sku, tipo: productoActual.tipo || 'Producto', categoria_id: productoActual.categoria_id || '', subcategoria_id: productoActual.subcategoria_id || '', se_puede_vender: true, se_puede_comprar: true, se_mantiene_stock: true }),
         });
-        
-        const data = await updateRes.json();
-        
         if (updateRes.ok) {
-          await recargarTodosLosDatos();
-          return { 
-            esAccion: true, 
-            respuesta: `✅ Precio actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}\n\n🔄 La lista se ha actualizado.`,
-            exitosa: true 
-          };
+          await Promise.all([cargarProductos(), cargarClientes()]);
+          return { esAccion: true, respuesta: `✅ Precio actualizado!\n\n📦 ${producto.nombre}\n💰 Nuevo precio: $${nuevoPrecioBruto.toLocaleString('es-CL')}\n📌 SKU: ${sku}`, exitosa: true };
         }
-        return { esAccion: true, respuesta: `❌ Error al actualizar el precio: ${data.error || 'Intenta nuevamente'}`, exitosa: false };
-      } catch (error) {
-        console.error("Error actualizando precio:", error);
-        return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el precio.`, exitosa: false };
-      }
+        return { esAccion: true, respuesta: `❌ Error al actualizar el precio.`, exitosa: false };
+      } catch { return { esAccion: true, respuesta: `❌ Error de conexión.`, exitosa: false }; }
     }
-    
-    // Detectar actualización de stock
-    const stockMatch = preguntaLower.match(/(?:cambia|actualiza|modifica|setea).*?stock.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+)/i);
+
+    const stockMatch = p.match(/(?:cambia|actualiza|modifica|setea).*?stock.*?(?:sku|codigo|producto)\s*(\d{7,}).*?a\s*(\d+)/i);
     if (stockMatch) {
       const sku = stockMatch[1];
       const nuevoStock = parseInt(stockMatch[2]);
-      const producto = productos.find(p => p.sku === sku);
-      const stockActual = producto?.stock || 0;
-      const diferencia = nuevoStock - stockActual;
-      
-      if (!producto) {
-        return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}. Verifica el código.`, exitosa: false };
-      }
-      
-      if (diferencia === 0) {
-        return { esAccion: true, respuesta: `ℹ️ El producto ya tiene ${nuevoStock} unidades en stock. No se requiere cambio.`, exitosa: true };
-      }
-      
+      const producto = productos.find(x => x.sku === sku);
+      if (!producto) return { esAccion: true, respuesta: `❌ No encontré el producto con SKU ${sku}.`, exitosa: false };
+      const diferencia = nuevoStock - (producto.stock || 0);
+      if (diferencia === 0) return { esAccion: true, respuesta: `ℹ️ El producto ya tiene ${nuevoStock} unidades.`, exitosa: true };
       try {
-        const stockRes = await fetch('/api/obuma/stock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sku: sku,
-            cantidad: Math.abs(diferencia),
-            tipo_movimiento: diferencia > 0 ? "ENTRADA" : "SALIDA",
-            concepto: "Actualización por ChatBot",
-            referencia: `Ajuste de stock a ${nuevoStock} unidades`
-          })
+        const res = await fetch('/api/obuma/stock', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sku, cantidad: Math.abs(diferencia), tipo_movimiento: diferencia > 0 ? 'ENTRADA' : 'SALIDA', concepto: 'Actualización por ChatBot', referencia: `Ajuste a ${nuevoStock} unidades` }),
         });
-        
-        const data = await stockRes.json();
-        
+        const data = await res.json();
         if (data.success) {
-          await recargarTodosLosDatos();
-          const direccion = diferencia > 0 ? "aumentado" : "disminuido";
-          return { 
-            esAccion: true, 
-            respuesta: `✅ Stock actualizado correctamente!\n\n📦 Producto: ${producto.nombre}\n📊 Stock ${direccion}: ${stockActual} → ${nuevoStock} unidades\n📌 SKU: ${sku}\n\n🔄 La lista se ha actualizado.`,
-            exitosa: true 
-          };
+          await Promise.all([cargarProductos(), cargarClientes()]);
+          return { esAccion: true, respuesta: `✅ Stock actualizado!\n\n📦 ${producto.nombre}\n📊 ${producto.stock} → ${nuevoStock} unidades`, exitosa: true };
         }
-        return { esAccion: true, respuesta: `❌ Error al actualizar el stock: ${data.error || 'Intenta nuevamente'}`, exitosa: false };
-      } catch (error) {
-        console.error("Error actualizando stock:", error);
-        return { esAccion: true, respuesta: `❌ Error de conexión. No se pudo actualizar el stock.`, exitosa: false };
-      }
+        return { esAccion: true, respuesta: `❌ Error al actualizar stock.`, exitosa: false };
+      } catch { return { esAccion: true, respuesta: `❌ Error de conexión.`, exitosa: false }; }
     }
-    
+
     return { esAccion: false, respuesta: '', exitosa: false };
   };
 
-  // Cargar historial
+  const guardarHistorial = async (pregunta: string, respuesta: string, productosEncontrados = 0) => {
+    if (!usuario) return;
+    await fetch('/api/chatbot/historial', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: usuario.id, usuario_nombre: usuario.nombre, pregunta, respuesta, productos_encontrados: productosEncontrados }),
+    }).catch(() => {});
+  };
+
   const cargarHistorial = async () => {
-    if (!usuario) {
-      const noUserMsg: Mensaje = {
-        id: Date.now().toString(),
-        texto: "🔐 Inicia sesión para ver tu historial de conversaciones.",
-        esUsuario: false,
-        timestamp: new Date()
-      };
-      setMensajes(prev => [...prev, noUserMsg]);
-      return;
-    }
-    
+    if (!usuario) return;
     setCargando(true);
     try {
       const res = await fetch(`/api/chatbot/historial?usuario_id=${usuario.id}&limit=15`);
       const data = await res.json();
-      
-      if (data.historial && data.historial.length > 0) {
-        const historialTexto = data.historial.map((h: any, i: number) => 
-          `${i + 1}. ❓ **${h.pregunta.length > 60 ? h.pregunta.substring(0, 60) + '...' : h.pregunta}**\n   💡 ${h.respuesta.substring(0, 100)}...`
-        ).join('\n\n');
-        
-        const historialMsg: Mensaje = {
-          id: Date.now().toString(),
-          texto: `📜 **Tus últimas conversaciones:**\n\n${historialTexto}\n\n---\n💡 *Pregúntame "ver historial" para actualizar*`,
-          esUsuario: false,
-          timestamp: new Date()
-        };
-        setMensajes(prev => [...prev, historialMsg]);
-      } else {
-        const emptyMsg: Mensaje = {
-          id: Date.now().toString(),
-          texto: "📜 No hay conversaciones previas en tu historial. ¡Empieza a preguntarme!",
-          esUsuario: false,
-          timestamp: new Date()
-        };
-        setMensajes(prev => [...prev, emptyMsg]);
-      }
-    } catch (error) {
-      console.error("Error cargando historial:", error);
-      const errorMsg: Mensaje = {
-        id: Date.now().toString(),
-        texto: "❌ Error al cargar el historial. Intenta nuevamente.",
-        esUsuario: false,
-        timestamp: new Date()
-      };
-      setMensajes(prev => [...prev, errorMsg]);
+      const texto = data.historial?.length
+        ? `📜 **Últimas conversaciones:**\n\n${data.historial.map((h: any, i: number) => `${i + 1}. ❓ **${h.pregunta.slice(0, 60)}${h.pregunta.length > 60 ? '...' : ''}**\n   💡 ${h.respuesta.slice(0, 100)}...`).join('\n\n')}`
+        : '📜 No hay conversaciones previas aún.';
+      setMensajes(prev => [...prev, { id: Date.now().toString(), texto, esUsuario: false, timestamp: new Date() }]);
+    } catch {
+      setMensajes(prev => [...prev, { id: Date.now().toString(), texto: '❌ Error al cargar el historial.', esUsuario: false, timestamp: new Date() }]);
     } finally {
       setCargando(false);
     }
   };
 
-  const enviarMensaje = async () => {
-    if (!input.trim() || cargando) return;
-
-    const pregunta = input.trim();
+  const enviarMensaje = async (textoOverride?: string) => {
+    const pregunta = (textoOverride ?? input).trim();
+    if (!pregunta || cargando) return;
     setInput('');
-    
-    const userMsg: Mensaje = {
-      id: Date.now().toString(),
-      texto: pregunta,
-      esUsuario: true,
-      timestamp: new Date()
-    };
+
+    const userMsg: Mensaje = { id: Date.now().toString(), texto: pregunta, esUsuario: true, timestamp: new Date() };
     setMensajes(prev => [...prev, userMsg]);
     setCargando(true);
 
     try {
       const { esAccion, respuesta: accionRespuesta, exitosa } = await detectarYEjecutarAccion(pregunta);
-      
       if (esAccion) {
-        const botMsg: Mensaje = {
-          id: (Date.now() + 1).toString(),
-          texto: accionRespuesta,
-          esUsuario: false,
-          timestamp: new Date(),
-          detalles: { esAccion: true, accionExitosa: exitosa }
-        };
-        setMensajes(prev => [...prev, botMsg]);
-        await guardarEnHistorial(pregunta, accionRespuesta, 0);
+        setMensajes(prev => [...prev, { id: (Date.now() + 1).toString(), texto: accionRespuesta, esUsuario: false, timestamp: new Date(), detalles: { esAccion: true, accionExitosa: exitosa } }]);
+        await guardarHistorial(pregunta, accionRespuesta);
         setCargando(false);
         return;
       }
-      
-      // Memoria: últimos 6 mensajes como contexto de conversación
-      const historialReciente = mensajes.slice(-6).map(m => ({
-        role: m.esUsuario ? 'user' : 'assistant',
-        content: m.texto,
-      }));
 
-      // Consultar a DeepSeek con todos los datos
+      const historialReciente = mensajes.slice(-6).map(m => ({ role: m.esUsuario ? 'user' : 'assistant', content: m.texto }));
+
       const response = await fetch('/api/deepseek/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pregunta,
-          usuario_rol: usuario?.rol || 'usuario',
-          historial_reciente: historialReciente,
-          contexto: {
-            productos: productos,
-            clientes: clientes
-          }
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pregunta, usuario_rol: usuario?.rol || 'usuario', historial_reciente: historialReciente, contexto: { productos, clientes } }),
       });
-
       const data = await response.json();
-      let respuestaTexto = data.respuesta || "Lo siento, no pude procesar tu pregunta.";
-      
-      await guardarEnHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
-      
-      const botMsg: Mensaje = {
-        id: (Date.now() + 1).toString(),
-        texto: respuestaTexto,
-        esUsuario: false,
-        timestamp: new Date(),
-        detalles: {
-          productosEncontrados: data.productos_encontrados || 0,
-          criterio: data.criterio_busqueda
-        }
-      };
-      setMensajes(prev => [...prev, botMsg]);
-      
-    } catch (error) {
-      console.error("Error en enviarMensaje:", error);
-      const errorMsg: Mensaje = {
-        id: (Date.now() + 1).toString(),
-        texto: "❌ Error de conexión. Intenta nuevamente.",
-        esUsuario: false,
-        timestamp: new Date()
-      };
-      setMensajes(prev => [...prev, errorMsg]);
+      const respuestaTexto = data.respuesta || 'Lo siento, no pude procesar tu pregunta.';
+
+      await guardarHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
+      setMensajes(prev => [...prev, { id: (Date.now() + 1).toString(), texto: respuestaTexto, esUsuario: false, timestamp: new Date(), detalles: { productosEncontrados: data.productos_encontrados || 0, criterio: data.criterio_busqueda } }]);
+    } catch {
+      setMensajes(prev => [...prev, { id: (Date.now() + 1).toString(), texto: '❌ Error de conexión. Intenta nuevamente.', esUsuario: false, timestamp: new Date() }]);
     } finally {
       setCargando(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      enviarMensaje();
-    }
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensaje(); }
   };
 
-  const renderMensaje = (msg: Mensaje) => {
-    let contenido = msg.texto;
-    
-    contenido = contenido.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    contenido = contenido.replace(/\n/g, '<br/>');
-    contenido = contenido.replace(/^\d+\. /gm, '• ');
-    contenido = contenido.replace(/•/g, '<span class="text-blue-500 mr-1">•</span>');
-    contenido = contenido.replace(/---/g, '<hr class="my-2 border-slate-200"/>');
-    contenido = contenido.replace(/\b(\d{7,})\b/g, '<code class="bg-slate-100 px-1 rounded text-xs font-mono">$1</code>');
-    contenido = contenido.replace(/\$\d{1,3}(?:\.\d{3})*/g, match => `<span class="font-bold text-emerald-600">${match}</span>`);
-    
-    const bgColor = msg.esUsuario 
-      ? 'bg-[#00338d] text-white rounded-br-none'
-      : msg.detalles?.esAccion 
-        ? msg.detalles.accionExitosa 
+  const formatMensaje = (msg: Mensaje) => {
+    let html = msg.texto
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br/>')
+      .replace(/•/g, '<span class="text-[#6366F1] mr-1">•</span>')
+      .replace(/---/g, '<hr class="my-2 border-slate-200"/>')
+      .replace(/\b(\d{7,})\b/g, '<code class="bg-slate-100 px-1 rounded text-xs font-mono">$1</code>')
+      .replace(/\$\d{1,3}(?:\.\d{3})*/g, m => `<span class="font-bold text-emerald-600">${m}</span>`);
+
+    const bubble = msg.esUsuario
+      ? 'bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-br-none shadow-md shadow-indigo-500/20'
+      : msg.detalles?.esAccion
+        ? msg.detalles.accionExitosa
           ? 'bg-emerald-50 border border-emerald-200 text-slate-700 rounded-bl-none'
           : 'bg-amber-50 border border-amber-200 text-slate-700 rounded-bl-none'
         : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm';
-    
+
     return (
-      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${bgColor}`}>
-        <div 
-          className="whitespace-pre-wrap break-words"
-          dangerouslySetInnerHTML={{ __html: contenido }}
-        />
-        <div className={`text-[9px] mt-1 flex justify-between items-center ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
+      <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm ${bubble}`}>
+        <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={`text-[9px] mt-1.5 flex justify-between items-center gap-2 ${msg.esUsuario ? 'text-indigo-200' : 'text-slate-400'}`}>
           <span>{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           {msg.detalles?.productosEncontrados !== undefined && msg.detalles.productosEncontrados > 0 && (
-            <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">
+            <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
               🎯 {msg.detalles.productosEncontrados} resultados
             </span>
           )}
           {msg.detalles?.esAccion && msg.detalles.accionExitosa && (
-            <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">
-              ✅ Acción completada
-            </span>
-          )}
-          {recargandoLista && (
-            <span className="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">
-              🔄 Actualizando...
-            </span>
+            <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">✅ Completado</span>
           )}
         </div>
       </div>
     );
   };
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-[#00338d] text-white p-4 rounded-full shadow-2xl hover:bg-blue-800 transition-all z-50 group"
-      >
-        <Bot size={28} />
-        <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-          IA
-        </span>
-      </button>
-    );
-  }
-
   return (
-    <div className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-14' : 'w-[550px] h-[680px]'
-    }`}>
-      <div className="bg-[#00338d] text-white p-4 rounded-t-2xl flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <Bot size={18} />
-          <span className="font-bold text-sm">Asistente Obuma IA</span>
-          {!cargandoDatos && (
-            <div className="flex gap-1">
-              {productos.length > 0 && (
-                <span className="bg-emerald-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
-                  📦 {productos.length}
-                </span>
-              )}
-              {clientes.length > 0 && (
-                <span className="bg-blue-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
-                  👥 {clientes.length}
-                </span>
-              )}
-            </div>
-          )}
-          {recargandoLista && (
-            <span className="bg-blue-400/30 text-[9px] font-bold px-2 py-0.5 rounded-full animate-pulse">
-              🔄
+    <>
+      {/* Botón flotante */}
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsOpen(true)}
+            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-2xl shadow-xl shadow-indigo-500/40 flex items-center justify-center z-50"
+          >
+            <Sparkles size={24} />
+            <span className="absolute -top-1 -right-1 bg-emerald-400 text-white text-[9px] font-black rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+              IA
             </span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={cargarHistorial}
-            className="hover:bg-blue-700 p-1 rounded transition-colors"
-            title="Ver historial"
-          >
-            <History size={16} />
-          </button>
-          <button
-            onClick={async () => {
-              setRecargandoLista(true);
-              await recargarTodosLosDatos();
-              setRecargandoLista(false);
-              const refreshMsg: Mensaje = {
-                id: Date.now().toString(),
-                texto: `🔄 Datos actualizados: ${productos.length} productos, ${clientes.length} clientes.`,
-                esUsuario: false,
-                timestamp: new Date()
-              };
-              setMensajes(prev => [...prev, refreshMsg]);
-            }}
-            className="hover:bg-blue-700 p-1 rounded transition-colors"
-            title="Recargar datos"
-          >
-            <RefreshCw size={16} className={recargandoLista ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={() => setIsMinimized(!isMinimized)}
-            className="hover:bg-blue-700 p-1 rounded transition-colors"
-          >
-            {isMinimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
-          </button>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="hover:bg-blue-700 p-1 rounded transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </div>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-      {!isMinimized && (
-        <>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-            {cargandoDatos ? (
-              <div className="flex justify-center items-center h-32">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100" />
-                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200" />
+      {/* Ventana chat */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85, y: 30, originX: 1, originY: 1 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85, y: 30 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 overflow-hidden transition-all duration-300 ${
+              isMinimized ? 'w-80 h-14' : 'w-[520px] h-[660px]'
+            }`}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#1E293B] to-[#0F172A] text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#4F46E5] to-[#6366F1] flex items-center justify-center shadow-lg shadow-indigo-900/30">
+                  <Sparkles size={15} />
                 </div>
-              </div>
-            ) : (
-              <>
-                {mensajes.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.esUsuario ? 'justify-end' : 'justify-start'}`}
-                  >
-                    {renderMensaje(msg)}
-                  </div>
-                ))}
-                {cargando && (
-                  <div className="flex justify-start">
-                    <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none shadow-sm">
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
-                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100" />
-                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200" />
-                      </div>
-                    </div>
+                <div>
+                  <p className="font-bold text-sm leading-none">Asistente Gemini</p>
+                  <p className="text-[9px] text-slate-400 mt-0.5">Grupo ICA · IA</p>
+                </div>
+                {!cargandoDatos && (
+                  <div className="flex gap-1 ml-1">
+                    {productos.length > 0 && (
+                      <span className="bg-white/10 text-[9px] font-bold px-2 py-0.5 rounded-full">📦 {productos.length}</span>
+                    )}
+                    {clientes.length > 0 && (
+                      <span className="bg-white/10 text-[9px] font-bold px-2 py-0.5 rounded-full">👥 {clientes.length}</span>
+                    )}
                   </div>
                 )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={cargarHistorial} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors" title="Historial">
+                  <History size={14} />
+                </button>
+                <button
+                  onClick={async () => {
+                    setRecargando(true);
+                    await Promise.all([cargarProductos(), cargarClientes()]);
+                    setRecargando(false);
+                    setMensajes(prev => [...prev, { id: Date.now().toString(), texto: `🔄 Datos actualizados: ${productos.length} productos, ${clientes.length} clientes.`, esUsuario: false, timestamp: new Date() }]);
+                  }}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                  title="Actualizar datos"
+                >
+                  <RefreshCw size={14} className={recargando ? 'animate-spin' : ''} />
+                </button>
+                <button onClick={() => setIsMinimized(s => !s)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+                </button>
+                <button onClick={() => setIsOpen(false)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {!isMinimized && (
+              <>
+                {/* Mensajes */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/80">
+                  {cargandoDatos ? (
+                    <div className="flex justify-center items-center h-32">
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map(i => (
+                          <motion.div
+                            key={i}
+                            animate={{ y: [0, -8, 0] }}
+                            transition={{ repeat: Infinity, duration: 0.7, delay: i * 0.15 }}
+                            className="w-2 h-2 bg-[#4F46E5]/40 rounded-full"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <AnimatePresence initial={false}>
+                        {mensajes.map((msg) => (
+                          <motion.div
+                            key={msg.id}
+                            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                            className={`flex ${msg.esUsuario ? 'justify-end' : 'justify-start'}`}
+                          >
+                            {formatMensaje(msg)}
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+
+                      {cargando && (
+                        <div className="flex justify-start">
+                          <div className="bg-white border border-slate-200 p-3.5 rounded-2xl rounded-bl-none shadow-sm">
+                            <div className="flex gap-1">
+                              {[0, 1, 2].map(i => (
+                                <motion.div
+                                  key={i}
+                                  animate={{ y: [0, -6, 0] }}
+                                  transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.13 }}
+                                  className="w-1.5 h-1.5 bg-[#4F46E5]/50 rounded-full"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Sugerencias */}
+                <div className="px-4 pt-2 pb-1 bg-white border-t border-slate-100">
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUGGESTIONS.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => enviarMensaje(s)}
+                        className="text-[10px] bg-slate-50 hover:bg-[#EEF2FF] hover:text-[#4F46E5] border border-slate-200 hover:border-[#4F46E5]/30 text-slate-500 px-2.5 py-1 rounded-full transition-all font-medium"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Input */}
+                <div className="p-3 bg-white border-t border-slate-100">
+                  <div className="flex gap-2 items-end">
+                    <textarea
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={handleKey}
+                      placeholder="Pregunta o da una instrucción..."
+                      className="flex-1 p-2.5 bg-slate-50 border border-slate-200 focus:border-[#4F46E5]/40 focus:bg-white rounded-xl text-sm outline-none resize-none transition-all"
+                      rows={1}
+                      disabled={cargando}
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.92 }}
+                      onClick={() => enviarMensaje()}
+                      disabled={cargando || !input.trim()}
+                      className="w-10 h-10 bg-gradient-to-br from-[#4F46E5] to-[#6366F1] text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-500/25 disabled:opacity-40 transition-opacity flex-shrink-0"
+                    >
+                      <Send size={16} />
+                    </motion.button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 text-center mt-2 flex items-center justify-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Gemini 2.0 Flash · {productos.length} prods · {clientes.length} clientes
+                  </p>
+                </div>
               </>
             )}
-            <div ref={mensajesEndRef} />
-          </div>
-
-          <div className="px-4 pt-2 pb-1 bg-slate-50 border-t border-slate-100">
-            <div className="flex flex-wrap gap-1">
-              {["¿Cuántos productos tenemos?", "¿Cuántos clientes tenemos?", "Productos con poco stock", "Buscar por SKU", "Ver mi historial"].map((sug) => (
-                <button
-                  key={sug}
-                  onClick={() => {
-                    if (sug === "Ver mi historial") {
-                      cargarHistorial();
-                    } else {
-                      setInput(sug);
-                      enviarMensaje();
-                    }
-                  }}
-                  className="text-[8px] bg-slate-100 hover:bg-slate-200 text-slate-500 px-2 py-1 rounded-full transition-colors"
-                >
-                  {sug}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-4 border-t border-slate-200 bg-white rounded-b-2xl">
-            <div className="flex gap-2">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ej: 'busca cliente ENVAPOL' o 'cambia el precio del SKU 6026423727 a 15000' o 'actualiza stock del SKU 6026423727 a 50'"
-                className="flex-1 p-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#00338d] resize-none"
-                rows={1}
-                disabled={cargando}
-              />
-              <button
-                onClick={enviarMensaje}
-                disabled={cargando || !input.trim()}
-                className="bg-[#00338d] text-white p-2 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-50"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-            <div className="text-[9px] text-slate-400 mt-2 text-center flex items-center justify-center gap-2">
-              <span>🤖</span>
-              <span>
-                {productos.length > 0 || clientes.length > 0 
-                  ? `${productos.length} productos | ${clientes.length} clientes` 
-                  : "Cargando..."}
-              </span>
-              <button
-                onClick={async () => {
-                  setRecargandoLista(true);
-                  await recargarTodosLosDatos();
-                  setRecargandoLista(false);
-                  const refreshMsg: Mensaje = {
-                    id: Date.now().toString(),
-                    texto: `🔄 Actualizado: ${productos.length} productos, ${clientes.length} clientes.`,
-                    esUsuario: false,
-                    timestamp: new Date()
-                  };
-                  setMensajes(prev => [...prev, refreshMsg]);
-                }}
-                className="text-[8px] text-blue-500 hover:text-blue-700 underline"
-              >
-                ↻ actualizar
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

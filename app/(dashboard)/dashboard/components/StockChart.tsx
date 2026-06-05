@@ -36,7 +36,7 @@ export default function StockChart() {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="animate-spin text-[#059669]" />
+          <Loader2 className="animate-spin text-[#4F46E5]" />
         </div>
       </div>
     );
@@ -50,7 +50,7 @@ export default function StockChart() {
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
       <div className="flex items-center gap-2 mb-4">
-        <span className="w-8 h-8 rounded-lg bg-[#D1FAE5] text-[#059669] flex items-center justify-center"><PieChart size={17} /></span>
+        <span className="w-8 h-8 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center"><PieChart size={17} /></span>
         <h3 className="text-sm font-black uppercase text-slate-600">Estado del Stock</h3>
       </div>
       

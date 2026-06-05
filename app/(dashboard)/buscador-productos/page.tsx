@@ -351,7 +351,7 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
           <select
             value={region}
             onChange={e => setRegion(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#059669]/20 text-slate-700"
+            className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#4F46E5]/20 text-slate-700"
           >
             <option value="">🌎 Todo Chile (sin filtro)</option>
             {REGIONES_MODAL.map(r => (
@@ -362,7 +362,7 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
           <div className="flex flex-wrap gap-1 mt-1.5">
             {['Valparaíso','Metropolitana','Biobío','Aysén','Maule'].map(r => (
               <button key={r} onClick={() => setRegion(region === r ? '' : r)}
-                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-[#059669] hover:text-[#059669]'}`}>
+                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#4F46E5] text-white border-[#4F46E5]' : 'border-slate-200 text-slate-500 hover:border-[#4F46E5] hover:text-[#4F46E5]'}`}>
                 {r}
               </button>
             ))}
@@ -376,14 +376,14 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
           <div className="flex flex-wrap gap-1 mb-1.5">
             {['ferretería construcción','señalética vial','pinturas y químicos','maderas','EPP seguridad','agrícola'].map(t => (
               <button key={t} onClick={() => setContexto(contexto === t ? '' : t)}
-                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${contexto === t ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-[#059669] hover:text-[#059669]'}`}>
+                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${contexto === t ? 'bg-[#4F46E5] text-white border-[#4F46E5]' : 'border-slate-200 text-slate-500 hover:border-[#4F46E5] hover:text-[#4F46E5]'}`}>
                 {t}
               </button>
             ))}
           </div>
           <textarea value={contexto} onChange={e => setContexto(e.target.value)}
             placeholder="O escribe el contexto libre..."
-            className="w-full h-10 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-[#059669]/20" />
+            className="w-full h-10 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-[#4F46E5]/20" />
         </div>
       </div>
 
@@ -424,13 +424,13 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
       {/* Footer */}
       <div className="flex justify-between items-center gap-3 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
-          {region && <span className="bg-[#D1FAE5] text-[#059669] px-2 py-0.5 rounded-full font-bold">📍 {region}</span>}
+          {region && <span className="bg-[#EEF2FF] text-[#4F46E5] px-2 py-0.5 rounded-full font-bold">📍 {region}</span>}
           {contexto && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">🏷️ {contexto.slice(0, 20)}</span>}
-          {basesOk && <span className="text-[#059669] font-bold">✅ Bases PDF cargadas</span>}
+          {basesOk && <span className="text-[#4F46E5] font-bold">✅ Bases PDF cargadas</span>}
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-sm">
+          <button onClick={onConfirm} className="px-6 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-sm">
             <Search size={15} /> Iniciar búsqueda ({productos.length})
           </button>
         </div>
@@ -1476,8 +1476,8 @@ export default function MonitorMasivoICA() {
             <div className="bg-[#111827] p-2 rounded-lg"><BarChart3 size={20} className="text-white" /></div>
             <div>
               <h1 className="font-bold text-slate-900 text-base leading-tight">
-                MONITOR <span className="text-[#059669]">ICA</span>
-                <span className="ml-2 text-[9px] bg-[#059669] text-white px-1.5 py-0.5 rounded font-bold">IA + Scrapers</span>
+                MONITOR <span className="text-[#4F46E5]">ICA</span>
+                <span className="ml-2 text-[9px] bg-[#4F46E5] text-white px-1.5 py-0.5 rounded font-bold">IA + Scrapers</span>
               </h1>
               <p className="text-[10px] text-slate-400">Sodimac · Easy · Construmart · Imperial · MercadoLibre</p>
             </div>
@@ -1485,7 +1485,7 @@ export default function MonitorMasivoICA() {
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Búsqueda rápida */}
-            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 focus-within:ring-2 focus-within:ring-[#059669]/25 bg-white">
+            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 focus-within:ring-2 focus-within:ring-[#4F46E5]/25 bg-white">
               <Search size={14} className="text-slate-400" />
               <input
                 className="py-2.5 text-sm outline-none w-64 bg-transparent placeholder:text-slate-400 text-slate-700"
@@ -1495,7 +1495,7 @@ export default function MonitorMasivoICA() {
                 onKeyDown={e => e.key === 'Enter' && buscarUno()}
               />
               <button onClick={buscarUno} disabled={buscandoUno || !inputManual.trim()}
-                className="bg-slate-900 text-white px-2 py-1 rounded text-xs disabled:bg-slate-200 hover:bg-[#059669] transition-colors">
+                className="bg-slate-900 text-white px-2 py-1 rounded text-xs disabled:bg-slate-200 hover:bg-[#4F46E5] transition-colors">
                 {buscandoUno ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
               </button>
             </div>
@@ -1523,7 +1523,7 @@ export default function MonitorMasivoICA() {
             {/* Menú de descargas */}
             <div className="relative">
               <button onClick={() => setMenuDescarga(v => !v)} disabled={!itemsLista.length}
-                className="flex items-center gap-1.5 px-3 py-2.5 bg-[#111827] hover:bg-[#1F2937] disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-[#111827] hover:bg-[#1E293B] disabled:bg-slate-200 text-white rounded-lg text-xs font-semibold transition-colors">
                 <Download size={14} /> Descargar Excel <ChevronDown size={13} />
               </button>
               {menuDescarga && itemsLista.length > 0 && (
@@ -1535,9 +1535,9 @@ export default function MonitorMasivoICA() {
                     </div>
                     {[
                       { modo: 'mejor_match', label: 'Mejor coincidencia', desc: 'El de mayor % match por ítem', icon: <CheckCircle2 size={14} className="text-emerald-600" /> },
-                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-[#059669]" /> },
+                      { modo: 'menor_precio', label: 'Menor precio', desc: 'El más barato por ítem', icon: <TrendingDown size={14} className="text-[#4F46E5]" /> },
                       { modo: 'equilibrado', label: 'Equilibrado', desc: 'Mejor match sin outliers ni alertas', icon: <Sparkles size={14} className="text-violet-600" /> },
-                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-[#059669]" /> },
+                      { modo: 'manual', label: 'Selección manual', desc: 'Lo que marcaste con el check', icon: <Eye size={14} className="text-[#4F46E5]" /> },
                     ].map(o => (
                       <button key={o.modo} onClick={() => exportarMismoExcel(o.modo)} disabled={!archivoExcel}
                         className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 disabled:opacity-40 text-left transition-colors border-b border-slate-50">
@@ -1561,7 +1561,7 @@ export default function MonitorMasivoICA() {
                     </button>
                     <button onClick={() => { setMenuDescarga(false); exportarTodos(); }}
                       className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors">
-                      <Download size={14} className="text-[#059669] mt-0.5" />
+                      <Download size={14} className="text-[#4F46E5] mt-0.5" />
                       <span>
                         <span className="block text-xs font-semibold text-slate-700">Lista completa</span>
                         <span className="block text-[10px] text-slate-400">Todos los resultados de cada producto</span>
@@ -1644,7 +1644,7 @@ export default function MonitorMasivoICA() {
               <div className="mt-3">
                 <p className="text-[10px] text-slate-400 font-medium mb-1">Pestaña:</p>
                 <select value={sheetNameActual} onChange={e => cambiarPestana(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#059669]/20">
+                  className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#4F46E5]/20">
                   {pestanas.map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
@@ -1654,7 +1654,7 @@ export default function MonitorMasivoICA() {
               <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs text-slate-600 font-medium">{productosExcel.length} productos</span>
-                  <button onClick={() => setShowModal(true)} className="text-[10px] text-[#059669] hover:underline flex items-center gap-1">
+                  <button onClick={() => setShowModal(true)} className="text-[10px] text-[#4F46E5] hover:underline flex items-center gap-1">
                     <Eye size={11} /> Ver
                   </button>
                 </div>
@@ -1666,7 +1666,7 @@ export default function MonitorMasivoICA() {
                 </div>
                 <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion })))}
                   disabled={procesando}
-                  className="mt-2 w-full bg-[#059669] hover:bg-[#047857] disabled:bg-slate-200 text-white py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                  className="mt-2 w-full bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-slate-200 text-white py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
                   <Sparkles size={12} /> Buscar todos
                 </button>
               </div>
@@ -1677,7 +1677,7 @@ export default function MonitorMasivoICA() {
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Lista manual</p>
             <textarea
-              className="w-full h-32 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]/20 resize-none"
+              className="w-full h-32 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#4F46E5]/20 resize-none"
               placeholder={`1\tLetrero de obra\n2\tMadera Pino 2"x3"\n3\tAnticorrosivo`}
               value={inputMasivo} onChange={e => setInputMasivo(e.target.value)} disabled={procesando}
             />
@@ -1685,19 +1685,19 @@ export default function MonitorMasivoICA() {
             <div className="mt-2 flex flex-wrap gap-1">
               {['Valparaíso','Metropolitana','Biobío','Aysén','Maule'].map(r => (
                 <button key={r} onClick={() => cambiarRegion(region === r ? '' : r)}
-                  className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-400 hover:border-[#059669] hover:text-[#059669]'}`}>
+                  className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#4F46E5] text-white border-[#4F46E5]' : 'border-slate-200 text-slate-400 hover:border-[#4F46E5] hover:text-[#4F46E5]'}`}>
                   📍 {r}
                 </button>
               ))}
             </div>
             <button onClick={iniciarTexto} disabled={procesando || !inputMasivo.trim()}
-              className="mt-2 w-full bg-slate-900 hover:bg-[#059669] disabled:bg-slate-200 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+              className="mt-2 w-full bg-slate-900 hover:bg-[#4F46E5] disabled:bg-slate-200 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
               {procesando ? <><Loader2 size={15} className="animate-spin" /> {progreso.actual}/{progreso.total}</> : <><Search size={15} /> Iniciar barrido</>}
             </button>
             {procesando && (
               <div className="mt-2">
                 <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div className="bg-[#059669] h-1.5 rounded-full transition-all" style={{ width: `${progreso.total ? (progreso.actual/progreso.total)*100 : 0}%` }} />
+                  <div className="bg-[#4F46E5] h-1.5 rounded-full transition-all" style={{ width: `${progreso.total ? (progreso.actual/progreso.total)*100 : 0}%` }} />
                 </div>
                 <button onClick={cancelar} className="mt-1 text-xs text-red-500 hover:text-red-700 w-full text-center">Cancelar</button>
               </div>
@@ -1837,10 +1837,10 @@ export default function MonitorMasivoICA() {
 
           {/* Indicador compacto de configuración activa */}
           {(region || contexto) && (
-            <div className="bg-[#D1FAE5] border border-[#059669]/20 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+            <div className="bg-[#EEF2FF] border border-[#4F46E5]/20 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1.5 text-[10px]">
-                {region && <span className="font-bold text-[#047857]">📍 {region}</span>}
-                {contexto && <span className="text-[#059669] font-medium">🏷️ {contexto.slice(0, 18)}</span>}
+                {region && <span className="font-bold text-[#4338CA]">📍 {region}</span>}
+                {contexto && <span className="text-[#4F46E5] font-medium">🏷️ {contexto.slice(0, 18)}</span>}
               </div>
               <button onClick={() => { setContexto(''); cambiarRegion(''); }} className="text-[10px] text-slate-400 hover:text-red-500">✕</button>
             </div>
@@ -1855,7 +1855,7 @@ export default function MonitorMasivoICA() {
                   { label: 'Total', val: stats.total, color: 'text-slate-900' },
                   { label: 'Con resultados', val: stats.con, color: 'text-emerald-700' },
                   { label: 'Sin resultados', val: stats.sin, color: stats.sin > 0 ? 'text-red-600' : 'text-slate-400' },
-                  { label: 'Match prom.', val: `${stats.avgPct}%`, color: 'text-[#047857]' },
+                  { label: 'Match prom.', val: `${stats.avgPct}%`, color: 'text-[#4338CA]' },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-50 rounded-lg p-3 text-center">
                     <p className={`font-bold text-xl ${s.color}`}>{s.val}</p>
@@ -1923,7 +1923,7 @@ export default function MonitorMasivoICA() {
                           )}
                         </div>
                         {item.procesando ? (
-                          <span className="text-[10px] text-[#059669] flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] text-[#4F46E5] flex items-center gap-1 mt-0.5">
                             <Loader2 size={10} className="animate-spin" /> Buscando...
                           </span>
                         ) : (
@@ -2000,7 +2000,7 @@ export default function MonitorMasivoICA() {
                                 <td className="px-3 py-3 text-center">
                                   <button
                                     onClick={() => setSeleccion(prev => { const m = new Map(prev); m.get(item.numero)===r ? m.delete(item.numero) : m.set(item.numero, r); return m; })}
-                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-300 hover:border-[#059669]'}`}
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSel ? 'bg-[#4F46E5] border-[#4F46E5] text-white' : 'border-slate-300 hover:border-[#4F46E5]'}`}
                                   >
                                     {isSel && <CheckCircle2 size={11} />}
                                   </button>
@@ -2011,7 +2011,7 @@ export default function MonitorMasivoICA() {
                                   <div className="flex items-center gap-1 mt-0.5">
                                     <span className="text-[9px] text-slate-400 uppercase">{r.canal}</span>
                                     {r.es_local_region && region && (
-                                      <span className="text-[8px] font-bold bg-[#D1FAE5] text-[#059669] px-1.5 py-0.5 rounded-full border border-[#059669]/20">
+                                      <span className="text-[8px] font-bold bg-[#EEF2FF] text-[#4F46E5] px-1.5 py-0.5 rounded-full border border-[#4F46E5]/20">
                                         📍 Local
                                       </span>
                                     )}
@@ -2073,7 +2073,7 @@ export default function MonitorMasivoICA() {
                       </div>
                       <button
                         onClick={() => buscarProducto(item.nombre, item.numero, item.conversion).then(r => setItemsLista(prev => prev.map(p => p.numero===item.numero ? r : p)))}
-                        className="ml-auto text-xs text-[#059669] hover:text-[#065F46] flex items-center gap-1 flex-shrink-0"
+                        className="ml-auto text-xs text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 flex-shrink-0"
                       >
                         <RefreshCw size={13} /> Reintentar
                       </button>

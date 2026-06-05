@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 55;
 
 const SERPER_KEY = process.env.SERPER_API_KEY || '';
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || '';
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const IVA = 1.19;
 
 const INDICADORES_EXTRANJEROS = [
@@ -418,13 +418,14 @@ interface ItemRaw {
 
 async function entenderConsultaIA(producto: string, contexto: string, region?: string): Promise<Entidades> {
   const fallback: Entidades = { marca: null, modelo: null, sku: null, specs: [], variantes: [producto], categoria_ia: null, es_especifico: false };
-  if (!DEEPSEEK_KEY) return fallback;
+  if (!GEMINI_KEY) return fallback;
   try {
     const regionCtx = region?.trim() ? ` Búsqueda específica para la región de ${region}, Chile.` : '';
     const ctxLine = contexto?.trim()
       ? `Contexto del usuario: ${contexto}.${regionCtx}`
       : `Rubro: ferretería y construcción en Chile.${regionCtx}`;
-    const prompt = `Eres experto en materiales de construcción, ferretería y licitaciones públicas de Chile. ${ctxLine}
+
+    const systemPrompt = `Eres experto en materiales de construcción, ferretería y licitaciones públicas de Chile. ${ctxLine}
 El producto proviene de un Excel de cotización de licitación chilena (MercadoPúblico). Puede contener:
 - Códigos internos al inicio: "B ", "C2 ", "B SC ", "B MSD " — IGNÓRALOS al generar variantes
 - Dimensiones en formatos no-comerciales: [MM], comas decimales, X mayúscula — normalízalos
@@ -440,15 +441,15 @@ b sc hormigon=hormigon premix saco | prensa estopa=prensaestopa | conduit emt=co
 salas de baño=módulo inodoro distancia entre ejes
 
 Analiza el producto y genera variantes comerciales para Google Shopping Chile.
-Responde SOLO JSON:
+Responde SOLO JSON válido con esta estructura exacta:
 {
-  "marca": "marca detectada o null (ignora prefijos B/C2/MSD como marca)",
+  "marca": "marca detectada o null",
   "modelo": "número de modelo/referencia o null",
   "sku": "código SKU o null",
   "specs": ["especificaciones técnicas clave"],
   "variantes": ["3 consultas comerciales para Google Shopping Chile, de más específica a más general"],
   "categoria_ia": "categoría comercial del producto",
-  "es_especifico": true/false,
+  "es_especifico": true,
   "nombre_comercial": "nombre comercial limpio sin códigos internos"
 }
 
@@ -459,38 +460,35 @@ REGLAS para variantes:
 4. Segunda variante: producto genérico + dimensiones + precio Chile
 5. Tercera variante: solo producto genérico + Chile (más amplia)
 6. Para dimensiones: usar formato "NxN mm" o "N pulg" en vez de formatos técnicos
-
-Ejemplos:
-- "B Pino Impregnado 2 x 3 x 3.20 mts" → ["Pino impregnado CCA 2x3 3.20m Chile precio", "Madera pino 2x3 impregnado precio Chile", "pino impregnado 2x3 Chile ferretería"]
-- "TINETA ESMALTE SINTÉTICO NEGRO" → ["Esmalte sintético negro tineta 4L Chile precio", "Pintura esmalte negro bidón Chile", "esmalte sintético negro Chile"]
-- "PLANCHA ZINC ACANALADA 0.35 X 0.85 X 3.6m" → ["Plancha zinc ondulada 0.35mm 3.6m Chile precio", "Cubierta zinc 3.6m acanalada precio Chile", "zinc acanalado 3.6 metros Chile"]
-- "MALLA ACMA 1.85x5m 3G9" → ["Malla electrosoldada galvanizada 1.85x5m Chile precio", "Malla ACMA 1.85x5 precio Chile", "malla soldada galvanizada Chile"]
-- "DISCO CORTE METAL INOX 7" → ["Disco corte metal inoxidable 7 pulgadas Chile precio", "Disco amoladora 7 pulgadas inox Chile", "disco corte 180mm metal Chile"]
 ${region ? `\nRegión: ${region} — incluir en al menos una variante.` : ''}`;
 
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
-    const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'system', content: prompt }, { role: 'user', content: `Producto de licitación: "${producto}"` }],
-        temperature: 0.1, max_tokens: 600, response_format: { type: 'json_object' },
-      }),
-    });
+
+    const body = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: `Producto de licitación: "${producto}"` }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 600, responseMimeType: 'application/json' },
+    };
+
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal }
+    );
     clearTimeout(tid);
+
     if (!r.ok) return fallback;
     const d = await r.json();
-    const parsed = JSON.parse(d.choices?.[0]?.message?.content || '{}');
-    const variantes: string[] = Array.isArray(parsed.variantes) ? parsed.variantes.filter((v: unknown) => typeof v === 'string' && v.trim()) : [];
-    // Agregar el nombre comercial limpio como variante adicional si es diferente al producto original
+    const rawText: string = d.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+    const parsed = JSON.parse(rawText);
+
+    const variantes: string[] = Array.isArray(parsed.variantes)
+      ? parsed.variantes.filter((v: unknown) => typeof v === 'string' && v.trim())
+      : [];
     const nombreComercial = typeof parsed.nombre_comercial === 'string' ? parsed.nombre_comercial.trim() : '';
     if (nombreComercial && nombreComercial !== producto && !variantes.includes(nombreComercial)) {
       variantes.push(nombreComercial);
     }
-    // NO agregar el producto original con prefijos internos como variante
     const productoSinCodigo = preprocesarProducto(producto);
     if (productoSinCodigo && !variantes.some(v => v.toLowerCase().includes(productoSinCodigo.toLowerCase().slice(0, 15)))) {
       variantes.push(productoSinCodigo);
@@ -500,7 +498,7 @@ ${region ? `\nRegión: ${region} — incluir en al menos una variante.` : ''}`;
       modelo: parsed.modelo || null,
       sku: parsed.sku || null,
       specs: Array.isArray(parsed.specs) ? parsed.specs.filter(Boolean) : [],
-      variantes: variantes.slice(0, 4), // Subir a 4 variantes para mayor cobertura
+      variantes: variantes.slice(0, 4),
       categoria_ia: parsed.categoria_ia || null,
       es_especifico: Boolean(parsed.es_especifico),
     };
@@ -603,14 +601,14 @@ async function buscarSerperOrganico(query: string, limite: number, region?: stri
 // ─── ETAPA 2: Validación por lote con IA ─────────────────────────────────────
 
 async function validarLoteIA(producto: string, entidades: Entidades, resultados: ResultadoMapeado[]): Promise<ResultadoMapeado[]> {
-  if (!DEEPSEEK_KEY || !resultados.length) return resultados;
+  if (!GEMINI_KEY || !resultados.length) return resultados;
   const scoreTop = resultados[0]?.score ?? 100;
   const tieneEntidad = Boolean(entidades.marca || entidades.modelo || entidades.sku);
   if (scoreTop >= 80 && !tieneEntidad) return resultados;
   try {
     const top = resultados.slice(0, 15);
     const payload = top.map((r, i) => ({ id: i, nombre: r.nombre.substring(0, 100), tienda: r.tienda.substring(0, 30), precio: r.precio_valor }));
-    const prompt = `Eres validador experto de productos industriales para el mercado chileno.
+    const systemPrompt = `Eres validador experto de productos industriales para el mercado chileno.
 
 Producto buscado: "${producto}"
 Marca: ${entidades.marca || 'no especificada'}
@@ -619,7 +617,7 @@ SKU: ${entidades.sku || 'no especificado'}
 Specs: ${entidades.specs.join(', ') || 'ninguna'}
 
 Para cada resultado determina si es exactamente el producto correcto.
-Responde SOLO JSON:
+Responde SOLO JSON válido con esta estructura:
 {
   "validaciones": [
     {"id": 0, "producto_correcto": true, "confianza": 90, "motivo": "Coincide marca y modelo"},
@@ -629,23 +627,20 @@ Responde SOLO JSON:
 
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
-    const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: `Valida estos ${payload.length} resultados:\n${JSON.stringify(payload)}` },
-        ],
-        temperature: 0.05, max_tokens: 800, response_format: { type: 'json_object' },
-      }),
-    });
+    const body = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: `Valida estos ${payload.length} resultados:\n${JSON.stringify(payload)}` }] }],
+      generationConfig: { temperature: 0.05, maxOutputTokens: 800, responseMimeType: 'application/json' },
+    };
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal }
+    );
     clearTimeout(tid);
     if (!r.ok) return resultados;
     const d = await r.json();
-    const parsed = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+    const rawText: string = d.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+    const parsed = JSON.parse(rawText);
     const validaciones = new Map<number, { confianza: number; producto_correcto: boolean; motivo: string }>(
       (parsed.validaciones || []).filter((v: { id?: number }) => typeof v?.id === 'number').map((v: { id: number; confianza: number; producto_correcto: boolean; motivo: string }) => [v.id, v])
     );

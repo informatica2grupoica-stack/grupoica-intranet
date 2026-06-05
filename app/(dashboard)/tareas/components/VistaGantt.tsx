@@ -116,7 +116,7 @@ export default function VistaGantt({ tareas, onTaskClick }: VistaGanttProps) {
     if (tarea.estado === 'en_proceso') return 'bg-amber-500';
     if (tarea.prioridad === 'alta') return 'bg-red-500';
     if (tarea.prioridad === 'media') return 'bg-orange-400';
-    return 'bg-[#059669]';
+    return 'bg-[#4F46E5]';
   };
 
   const getProgreso = (tarea: any) => {
@@ -259,7 +259,7 @@ export default function VistaGantt({ tareas, onTaskClick }: VistaGanttProps) {
                   <div className="w-80 flex-shrink-0 p-3 border-r border-slate-100">
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${color.replace('bg-', 'bg-')}`} />
-                      <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-[#059669] transition-colors">
+                      <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-[#4F46E5] transition-colors">
                         {tarea.titulo}
                       </p>
                     </div>
@@ -339,7 +339,7 @@ export default function VistaGantt({ tareas, onTaskClick }: VistaGanttProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 border-t border-slate-200">
         <div className="flex flex-wrap gap-4 text-[10px] font-medium">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-[#059669]" />
+            <div className="w-3 h-3 rounded bg-[#4F46E5]" />
             <span className="text-slate-600">Normal</span>
           </div>
           <div className="flex items-center gap-1.5">

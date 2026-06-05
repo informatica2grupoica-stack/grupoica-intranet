@@ -150,10 +150,10 @@ export default function ChatPage() {
       )}
 
       {/* BARRA LATERAL */}
-      <aside className="w-80 bg-[#059669] flex flex-col relative overflow-hidden">
+      <aside className="w-80 bg-[#4F46E5] flex flex-col relative overflow-hidden">
         <div className="p-8 relative z-10">
           <h2 className="text-white text-xl font-black tracking-tighter mb-6 flex items-center gap-2">
-            <Hash className="w-5 h-5 text-[#6EE7B7]" />
+            <Hash className="w-5 h-5 text-[#A5B4FC]" />
             MENSAJERÍA
           </h2>
           <div className="relative">
@@ -175,12 +175,12 @@ export default function ChatPage() {
                 onClick={() => cargarChat(u)}
                 className={`w-full flex items-center gap-3 p-4 rounded-[1.8rem] transition-all relative ${
                   seleccionado?.user_id === u.user_id 
-                  ? 'bg-white text-[#059669] shadow-xl' 
+                  ? 'bg-white text-[#4F46E5] shadow-xl' 
                   : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
               >
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-xs ${
-                  seleccionado?.user_id === u.user_id ? 'bg-[#059669] text-white' : 'bg-white/10 text-white'
+                  seleccionado?.user_id === u.user_id ? 'bg-[#4F46E5] text-white' : 'bg-white/10 text-white'
                 }`}>
                   {u.nombre[0]}{u.apellido[0]}
                 </div>
@@ -189,7 +189,7 @@ export default function ChatPage() {
                   <p className="text-[9px] uppercase font-black tracking-widest opacity-40">{u.cargo || 'Staff'}</p>
                 </div>
                 {count > 0 && (
-                  <div className="bg-[#059669] text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg animate-bounce">
+                  <div className="bg-[#4F46E5] text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg animate-bounce">
                     {count}
                   </div>
                 )}
@@ -205,21 +205,21 @@ export default function ChatPage() {
           <>
             <div className="px-10 py-6 border-b border-slate-100 flex items-center gap-4 bg-white/80 backdrop-blur-md">
               <div className="relative">
-                <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-[#059669]">
+                <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-[#4F46E5]">
                   {seleccionado.nombre[0]}{seleccionado.apellido[0]}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white rounded-full" />
               </div>
               <div>
                 <p className="font-black text-slate-800 text-sm uppercase tracking-tighter">{seleccionado.nombre} {seleccionado.apellido}</p>
-                <p className="text-[10px] text-[#059669] font-black uppercase tracking-widest">{seleccionado.cargo}</p>
+                <p className="text-[10px] text-[#4F46E5] font-black uppercase tracking-widest">{seleccionado.cargo}</p>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-[#fcfdfe]">
               {cargandoMensajes ? (
                 <div className="flex justify-center items-center h-full">
-                  <Loader2 className="w-8 h-8 animate-spin text-[#059669] opacity-20" />
+                  <Loader2 className="w-8 h-8 animate-spin text-[#4F46E5] opacity-20" />
                 </div>
               ) : (
                 mensajes.map((m, idx) => (
@@ -227,14 +227,14 @@ export default function ChatPage() {
                     <div className="max-w-[65%]">
                       <div className={`px-6 py-4 rounded-[2rem] text-sm font-medium shadow-sm animate-in slide-in-from-bottom-2 ${
                         m.emisor_id === myUserId 
-                        ? 'bg-[#059669] text-white rounded-tr-none shadow-blue-900/10' 
+                        ? 'bg-[#4F46E5] text-white rounded-tr-none shadow-blue-900/10' 
                         : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'
                       }`}>
                         {m.contenido}
                       </div>
                       <p className={`text-[9px] mt-2 font-bold uppercase text-slate-400 ${m.emisor_id === myUserId ? 'text-right mr-2' : 'text-left ml-2'}`}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {m.emisor_id === myUserId && <CheckCheck className={`w-3 h-3 inline ml-1 ${m.leido ? 'text-[#34D399]' : 'text-slate-300'}`} />}
+                        {m.emisor_id === myUserId && <CheckCheck className={`w-3 h-3 inline ml-1 ${m.leido ? 'text-[#818CF8]' : 'text-slate-300'}`} />}
                       </p>
                     </div>
                   </div>
@@ -245,7 +245,7 @@ export default function ChatPage() {
 
             {/* FORMULARIO DE MENSAJE MEJORADO (UX/Contraste) */}
             <form onSubmit={enviarMensaje} className="p-8 bg-white border-t border-slate-100/60 shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
-              <div className="relative flex items-center bg-slate-100/80 rounded-[2rem] p-2 pr-3 border-2 border-slate-200/50 focus-within:border-[#059669]/20 focus-within:bg-white focus-within:ring-8 ring-[#D1FAE5]/50 transition-all duration-300">
+              <div className="relative flex items-center bg-slate-100/80 rounded-[2rem] p-2 pr-3 border-2 border-slate-200/50 focus-within:border-[#4F46E5]/20 focus-within:bg-white focus-within:ring-8 ring-[#EEF2FF]/50 transition-all duration-300">
                 <input 
                   value={nuevoMensaje} 
                   onChange={(e) => setNuevoMensaje(e.target.value)} 
@@ -257,7 +257,7 @@ export default function ChatPage() {
                   disabled={!nuevoMensaje.trim()} 
                   className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-lg ${
                     nuevoMensaje.trim() 
-                    ? 'bg-[#059669] text-white shadow-blue-900/30 hover:scale-105 active:scale-95' 
+                    ? 'bg-[#4F46E5] text-white shadow-blue-900/30 hover:scale-105 active:scale-95' 
                     : 'bg-slate-200 text-slate-400 shadow-none opacity-50 cursor-not-allowed'
                   }`}
                 >
@@ -273,8 +273,8 @@ export default function ChatPage() {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="w-24 h-24 bg-[#ECFDF5] rounded-[2.5rem] flex items-center justify-center mb-6">
-              <MessageSquare className="w-10 h-10 text-[#059669] opacity-20" />
+            <div className="w-24 h-24 bg-[#EEF2FF] rounded-[2.5rem] flex items-center justify-center mb-6">
+              <MessageSquare className="w-10 h-10 text-[#4F46E5] opacity-20" />
             </div>
             <h3 className="text-slate-800 font-black text-xs uppercase tracking-[0.2em]">Selecciona un colega</h3>
             <p className="text-slate-400 text-[10px] mt-2 font-bold uppercase">Chat interno privado y seguro</p>

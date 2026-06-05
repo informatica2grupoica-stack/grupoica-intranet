@@ -286,7 +286,7 @@ export default function GestionUsuarios() {
           {soyAdminOSuper && (
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-[#059669] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-100"
+              className="flex items-center gap-2 bg-[#4F46E5] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-100"
             >
               <UserPlus className="w-4 h-4" /> Nuevo Miembro
             </button>
@@ -315,7 +315,7 @@ export default function GestionUsuarios() {
               {loadingLista ? (
                 <tr>
                   <td colSpan={9} className="py-24 text-center">
-                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-[#059669] mb-2 opacity-20" />
+                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-[#4F46E5] mb-2 opacity-20" />
                     <p className="text-slate-400 text-xs">Cargando usuarios...</p>
                   </td>
                 </tr>
@@ -332,11 +332,11 @@ export default function GestionUsuarios() {
                   const esCompleto  = accesoLabel === "Completo";
 
                   return (
-                    <tr key={user.id} className="hover:bg-[#ECFDF5]/30 transition-colors group">
+                    <tr key={user.id} className="hover:bg-[#EEF2FF]/30 transition-colors group">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-9 h-9 rounded-full flex items-center justify-center text-slate-500 font-bold text-xs border border-white shadow-sm transition-all ${
-                            esSuperUser ? "bg-[#111827] text-white" : "bg-slate-100 group-hover:bg-[#059669] group-hover:text-white"
+                            esSuperUser ? "bg-[#111827] text-white" : "bg-slate-100 group-hover:bg-[#4F46E5] group-hover:text-white"
                           }`}>
                             {user.nombre?.substring(0, 1)}{user.apellido?.substring(0, 1)}
                           </div>
@@ -366,8 +366,8 @@ export default function GestionUsuarios() {
                       </td>
                       <td className="px-3 py-4 text-center">
                         <span className={`text-[9px] font-black px-2.5 py-1 rounded-full border ${
-                          esSuperUser          ? "bg-[#ECFDF5] border-indigo-100 text-[#059669]" :
-                          user.rol === "admin" ? "bg-[#ECFDF5] border-[#D1FAE5] text-[#059669]" :
+                          esSuperUser          ? "bg-[#EEF2FF] border-indigo-100 text-[#4F46E5]" :
+                          user.rol === "admin" ? "bg-[#EEF2FF] border-[#EEF2FF] text-[#4F46E5]" :
                           user.rol === "rrhh"  ? "bg-purple-50 border-purple-100 text-purple-600" :
                           user.rol === "jefe"  ? "bg-orange-50 border-orange-100 text-orange-600" :
                           "bg-slate-50 border-slate-100 text-slate-500"
@@ -389,7 +389,7 @@ export default function GestionUsuarios() {
                           disabled={esSuperUser || !soyAdminOSuper}
                           onClick={() => toggleEstado(user)}
                           className={`px-3 py-1.5 rounded-xl text-[9px] font-black transition-all ${
-                            esSuperUser       ? "bg-[#D1FAE5] text-[#059669] cursor-default" :
+                            esSuperUser       ? "bg-[#EEF2FF] text-[#4F46E5] cursor-default" :
                             user.activo
                               ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white"
                               : "bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white"
@@ -402,7 +402,7 @@ export default function GestionUsuarios() {
                         <div className="flex items-center justify-end gap-1">
                           {!esSuperUser && soyAdminOSuper ? (
                             <>
-                              <button onClick={() => prepararEdicion(user)} className="p-2 text-slate-400 hover:text-[#059669] hover:bg-[#ECFDF5] rounded-xl transition-all" title="Editar">
+                              <button onClick={() => prepararEdicion(user)} className="p-2 text-slate-400 hover:text-[#4F46E5] hover:bg-[#EEF2FF] rounded-xl transition-all" title="Editar">
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button onClick={() => handleEliminar(user)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Eliminar">
@@ -444,7 +444,7 @@ export default function GestionUsuarios() {
                 onClick={() => setTabActivo("datos")}
                 className={`py-3 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${
                   tabActivo === "datos"
-                    ? "border-[#059669] text-[#059669]"
+                    ? "border-[#4F46E5] text-[#4F46E5]"
                     : "border-transparent text-slate-400 hover:text-slate-600"
                 }`}
               >
@@ -455,7 +455,7 @@ export default function GestionUsuarios() {
                 onClick={() => setTabActivo("acceso")}
                 className={`py-3 px-4 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
                   tabActivo === "acceso"
-                    ? "border-[#059669] text-[#059669]"
+                    ? "border-[#4F46E5] text-[#4F46E5]"
                     : "border-transparent text-slate-400 hover:text-slate-600"
                 }`}
               >
@@ -480,14 +480,14 @@ export default function GestionUsuarios() {
                 {tabActivo === "datos" && (
                   <>
                     {/* Datos personales */}
-                    <div className="bg-[#ECFDF5]/30 rounded-2xl p-5 space-y-4">
+                    <div className="bg-[#EEF2FF]/30 rounded-2xl p-5 space-y-4">
                       <div className="flex items-center gap-2 mb-1">
-                        <UserPlus className="w-4 h-4 text-[#059669]" />
-                        <h3 className="text-xs font-black uppercase tracking-wider text-[#047857]">Datos Personales</h3>
+                        <UserPlus className="w-4 h-4 text-[#4F46E5]" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-[#4338CA]">Datos Personales</h3>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <input placeholder="Nombre *" required className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#059669]/20" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
-                        <input placeholder="Apellido *" required className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#059669]/20" value={formData.apellido} onChange={e => setFormData({...formData, apellido: e.target.value})} />
+                        <input placeholder="Nombre *" required className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#4F46E5]/20" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
+                        <input placeholder="Apellido *" required className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ring-[#4F46E5]/20" value={formData.apellido} onChange={e => setFormData({...formData, apellido: e.target.value})} />
                         <input placeholder="RUT (ej: 12345678-9)" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" value={formData.rut} onChange={e => setFormData({...formData, rut: e.target.value})} />
                         <input type="date" className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" value={formData.fecha_nacimiento} onChange={e => setFormData({...formData, fecha_nacimiento: e.target.value})} />
                       </div>
@@ -628,7 +628,7 @@ export default function GestionUsuarios() {
                               onClick={() => toggleAccionPerm(p.key)}
                               className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl transition-all border ${
                                 activo
-                                  ? "bg-[#059669] border-emerald-500 text-white"
+                                  ? "bg-[#4F46E5] border-emerald-500 text-white"
                                   : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
                               }`}
                             >
@@ -663,7 +663,7 @@ export default function GestionUsuarios() {
               <div className="px-8 py-5 border-t border-slate-100 bg-slate-50/30 sticky bottom-0">
                 <button
                   disabled={loadingForm}
-                  className="w-full bg-[#059669] text-white py-3.5 rounded-xl font-black text-sm hover:bg-emerald-700 transition-all uppercase tracking-wider shadow-lg"
+                  className="w-full bg-[#4F46E5] text-white py-3.5 rounded-xl font-black text-sm hover:bg-emerald-700 transition-all uppercase tracking-wider shadow-lg"
                 >
                   {loadingForm
                     ? <Loader2 className="w-5 h-5 animate-spin mx-auto" />

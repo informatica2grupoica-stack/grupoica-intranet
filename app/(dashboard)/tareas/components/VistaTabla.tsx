@@ -230,7 +230,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
 
               if (editandoTarea === t.id) {
                 return (
-                  <tr key={t.id} className="bg-[#ECFDF5]/30">
+                  <tr key={t.id} className="bg-[#EEF2FF]/30">
                     <td className="px-6 py-4" colSpan={6}>
                       <div className="space-y-3">
                         <input
@@ -289,7 +289,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                           <button
                             onClick={guardarEdicion}
                             disabled={loadingEdit}
-                            className="px-4 py-2 bg-[#059669] text-white rounded-lg text-xs font-bold flex items-center gap-2"
+                            className="px-4 py-2 bg-[#4F46E5] text-white rounded-lg text-xs font-bold flex items-center gap-2"
                           >
                             {loadingEdit && <Loader2 size={12} className="animate-spin" />}
                             Guardar
@@ -302,13 +302,13 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
               }
 
               return (
-                <tr key={t.id} className="group hover:bg-[#ECFDF5]/30 transition-colors relative">
+                <tr key={t.id} className="group hover:bg-[#EEF2FF]/30 transition-colors relative">
                   <td className="px-6 py-4 cursor-pointer" onClick={() => onTaskClick(t.id)}>
-                    <div className="font-bold text-slate-900 text-sm leading-tight group-hover:text-[#047857] transition-colors">
+                    <div className="font-bold text-slate-900 text-sm leading-tight group-hover:text-[#4338CA] transition-colors">
                       {t.titulo}
                     </div>
                     {t.proyecto && (
-                      <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-[#059669] uppercase bg-[#ECFDF5] px-2 py-0.5 rounded-md italic">
+                      <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-[#4F46E5] uppercase bg-[#EEF2FF] px-2 py-0.5 rounded-md italic">
                         <Briefcase size={8}/> {t.proyecto}
                       </div>
                     )}
@@ -355,7 +355,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
                         onClick={() => onTaskClick(t.id)} 
-                        className="p-2 bg-white border border-slate-100 text-slate-400 hover:text-[#059669] hover:border-[#A7F3D0] rounded-xl transition-all relative"
+                        className="p-2 bg-white border border-slate-100 text-slate-400 hover:text-[#4F46E5] hover:border-[#A7F3D0] rounded-xl transition-all relative"
                       >
                         <MessageSquare size={14} />
                       </button>
@@ -365,7 +365,7 @@ export default function VistaTabla({ tareas, usuarios, perfilUsuario, onTaskClic
                           {t.estado === 'pendiente' && (
                             <button 
                               onClick={() => actualizarEstado(t.id, 'en_proceso')} 
-                              className="p-2 bg-[#059669] text-white hover:bg-slate-900 rounded-xl shadow-md transition-all" 
+                              className="p-2 bg-[#4F46E5] text-white hover:bg-slate-900 rounded-xl shadow-md transition-all" 
                               title="Iniciar"
                             >
                               <PlayCircle size={14} />

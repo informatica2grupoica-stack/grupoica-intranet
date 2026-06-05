@@ -127,7 +127,7 @@ export default function NuevoClientePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] p-4 md:p-6 lg:p-12">
+    <div className="min-h-screen bg-[#F1F5F9] p-4 md:p-6 lg:p-12">
       <div className="max-w-5xl mx-auto space-y-6">
         
         {/* Header */}
@@ -136,7 +136,7 @@ export default function NuevoClientePage() {
             <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tighter italic uppercase">Nuevo Cliente</h1>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Registro en Obuma</p>
           </div>
-          <Link href="/obuma-clientes" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#059669] transition-all shadow-sm">
+          <Link href="/obuma-clientes" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#4F46E5] transition-all shadow-sm">
             <ArrowLeft size={20} />
           </Link>
         </div>
@@ -160,7 +160,7 @@ export default function NuevoClientePage() {
           {/* ========== DATOS DE FACTURACIÓN ========== */}
           <div>
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-              <Building size={18} className="text-[#059669]" />
+              <Building size={18} className="text-[#4F46E5]" />
               <h2 className="text-sm font-black uppercase text-slate-600">Datos de Facturación</h2>
             </div>
             
@@ -173,7 +173,7 @@ export default function NuevoClientePage() {
                     type="checkbox"
                     checked={form.es_extranjero}
                     onChange={(e) => setForm({...form, es_extranjero: e.target.checked, rut: ''})}
-                    className="w-4 h-4 rounded border-slate-300 text-[#059669]"
+                    className="w-4 h-4 rounded border-slate-300 text-[#4F46E5]"
                   />
                   <span className="text-xs font-bold text-slate-600">Cliente Extranjero (sin RUT chileno)</span>
                 </label>
@@ -186,7 +186,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder={form.es_extranjero ? 'Pasaporte o ID' : '12.345.678-9'}
                   value={form.es_extranjero ? form.extranjero_id : form.rut}
                   onChange={(e) => {
@@ -207,7 +207,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Nombre de la empresa o persona"
                   value={form.razon_social}
                   onChange={(e) => setForm({...form, razon_social: e.target.value})}
@@ -222,7 +222,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Nombre comercial"
                   value={form.nombre_fantasia}
                   onChange={(e) => setForm({...form, nombre_fantasia: e.target.value})}
@@ -236,7 +236,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Ej: SERVICIOS PERSONALES DE EDUCACION"
                   value={form.giro_comercial}
                   onChange={(e) => setForm({...form, giro_comercial: e.target.value})}
@@ -250,7 +250,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Calle, número, oficina"
                   value={form.direccion}
                   onChange={(e) => setForm({...form, direccion: e.target.value})}
@@ -262,7 +262,7 @@ export default function NuevoClientePage() {
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Comuna</label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   value={form.comuna}
                   onChange={(e) => setForm({...form, comuna: e.target.value})}
                 />
@@ -272,7 +272,7 @@ export default function NuevoClientePage() {
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Región</label>
                 <select
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   value={form.region}
                   onChange={(e) => setForm({...form, region: e.target.value})}
                 >
@@ -301,7 +301,7 @@ export default function NuevoClientePage() {
           {/* ========== DATOS COMERCIALES ========== */}
           <div>
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-              <Briefcase size={18} className="text-[#059669]" />
+              <Briefcase size={18} className="text-[#4F46E5]" />
               <h2 className="text-sm font-black uppercase text-slate-600">Datos Comerciales</h2>
             </div>
             
@@ -315,7 +315,7 @@ export default function NuevoClientePage() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">$</span>
                   <input
                     type="number"
-                    className="w-full pl-8 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                    className="w-full pl-8 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                     placeholder="0"
                     value={form.credito_aprobado}
                     onChange={(e) => setForm({...form, credito_aprobado: parseInt(e.target.value) || 0})}
@@ -329,7 +329,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="number"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="0"
                   value={form.dias_pago}
                   onChange={(e) => setForm({...form, dias_pago: parseInt(e.target.value) || 0})}
@@ -342,7 +342,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="number"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="0"
                   value={form.plazo_pago}
                   onChange={(e) => setForm({...form, plazo_pago: parseInt(e.target.value) || 0})}
@@ -355,7 +355,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Nombre del vendedor"
                   value={form.vendedor}
                   onChange={(e) => setForm({...form, vendedor: e.target.value})}
@@ -367,7 +367,7 @@ export default function NuevoClientePage() {
                   Forma de Pago
                 </label>
                 <select
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   value={form.forma_pago}
                   onChange={(e) => setForm({...form, forma_pago: e.target.value})}
                 >
@@ -385,7 +385,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Centro de costo"
                   value={form.centro_costo}
                   onChange={(e) => setForm({...form, centro_costo: e.target.value})}
@@ -400,7 +400,7 @@ export default function NuevoClientePage() {
                   type="checkbox"
                   checked={form.agente_retenedor}
                   onChange={(e) => setForm({...form, agente_retenedor: e.target.checked})}
-                  className="w-4 h-4 rounded border-slate-300 text-[#059669]"
+                  className="w-4 h-4 rounded border-slate-300 text-[#4F46E5]"
                 />
                 <span className="text-[10px] font-bold text-slate-600">Agente Retenedor</span>
               </label>
@@ -410,7 +410,7 @@ export default function NuevoClientePage() {
                   type="checkbox"
                   checked={form.facturar_cta_cte}
                   onChange={(e) => setForm({...form, facturar_cta_cte: e.target.checked})}
-                  className="w-4 h-4 rounded border-slate-300 text-[#059669]"
+                  className="w-4 h-4 rounded border-slate-300 text-[#4F46E5]"
                 />
                 <span className="text-[10px] font-bold text-slate-600">Facturar a Cuenta Corriente</span>
               </label>
@@ -420,7 +420,7 @@ export default function NuevoClientePage() {
                   type="checkbox"
                   checked={form.bloqueado}
                   onChange={(e) => setForm({...form, bloqueado: e.target.checked})}
-                  className="w-4 h-4 rounded border-slate-300 text-[#059669]"
+                  className="w-4 h-4 rounded border-slate-300 text-[#4F46E5]"
                 />
                 <span className="text-[10px] font-bold text-slate-600">Cliente Bloqueado</span>
               </label>
@@ -430,7 +430,7 @@ export default function NuevoClientePage() {
           {/* ========== DATOS DE CONTACTO ========== */}
           <div>
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-              <Users size={18} className="text-[#059669]" />
+              <Users size={18} className="text-[#4F46E5]" />
               <h2 className="text-sm font-black uppercase text-slate-600">Datos de Contacto</h2>
             </div>
             
@@ -442,7 +442,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="text"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="Nombre de la persona de contacto"
                   value={form.nombre_contacto}
                   onChange={(e) => setForm({...form, nombre_contacto: e.target.value})}
@@ -458,7 +458,7 @@ export default function NuevoClientePage() {
                   <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="tel"
-                    className="w-full pl-9 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                    className="w-full pl-9 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                     placeholder="+56 2 1234 5678"
                     value={form.telefono}
                     onChange={(e) => setForm({...form, telefono: e.target.value})}
@@ -473,7 +473,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="tel"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="+56 9 1234 5678"
                   value={form.celular}
                   onChange={(e) => setForm({...form, celular: e.target.value})}
@@ -488,7 +488,7 @@ export default function NuevoClientePage() {
                   <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="email"
-                    className="w-full pl-9 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                    className="w-full pl-9 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                     placeholder="cliente@empresa.cl"
                     value={form.email}
                     onChange={(e) => setForm({...form, email: e.target.value})}
@@ -503,7 +503,7 @@ export default function NuevoClientePage() {
                 </label>
                 <input
                   type="url"
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all"
                   placeholder="https://www.empresa.cl"
                   value={form.sitio_web}
                   onChange={(e) => setForm({...form, sitio_web: e.target.value})}
@@ -515,12 +515,12 @@ export default function NuevoClientePage() {
           {/* ========== OBSERVACIONES ========== */}
           <div>
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-              <AlertCircle size={18} className="text-[#059669]" />
+              <AlertCircle size={18} className="text-[#4F46E5]" />
               <h2 className="text-sm font-black uppercase text-slate-600">Observaciones</h2>
             </div>
             
             <textarea
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#059669] focus:bg-white transition-all resize-none"
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#4F46E5] focus:bg-white transition-all resize-none"
               rows={3}
               placeholder="Notas internas sobre el cliente..."
               value={form.observacion}
@@ -535,7 +535,7 @@ export default function NuevoClientePage() {
                 type="checkbox"
                 checked={form.activo}
                 onChange={(e) => setForm({...form, activo: e.target.checked})}
-                className="w-4 h-4 rounded border-slate-300 text-[#059669] focus:ring-[#059669]"
+                className="w-4 h-4 rounded border-slate-300 text-[#4F46E5] focus:ring-[#4F46E5]"
               />
               <span className="text-xs font-bold text-slate-600">Cliente activo</span>
             </label>
@@ -549,7 +549,7 @@ export default function NuevoClientePage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-8 py-3 bg-[#059669] text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-blue-800 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-8 py-3 bg-[#4F46E5] text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-blue-800 transition-all disabled:opacity-50"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Crear Cliente

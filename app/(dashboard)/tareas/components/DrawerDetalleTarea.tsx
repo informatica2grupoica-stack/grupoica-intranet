@@ -133,7 +133,7 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
   const getEstadoInfo = (estado: string) => {
     switch (estado) {
       case 'completada': return { color: 'text-green-600 bg-green-50', icon: CheckCircle, text: 'Completada' };
-      case 'en_proceso': return { color: 'text-[#059669] bg-[#ECFDF5]', icon: Clock, text: 'En Proceso' };
+      case 'en_proceso': return { color: 'text-[#4F46E5] bg-[#EEF2FF]', icon: Clock, text: 'En Proceso' };
       case 'pendiente': return { color: 'text-orange-600 bg-orange-50', icon: Clock, text: 'Pendiente' };
       default: return { color: 'text-slate-600 bg-slate-50', icon: Clock, text: estado };
     }
@@ -316,8 +316,8 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
                     <div key={comentario.id} className="bg-slate-50 rounded-xl p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-[#D1FAE5] rounded-full flex items-center justify-center">
-                            <User size={14} className="text-[#059669]" />
+                          <div className="w-8 h-8 bg-[#EEF2FF] rounded-full flex items-center justify-center">
+                            <User size={14} className="text-[#4F46E5]" />
                           </div>
                           <div>
                             <p className="font-medium text-sm text-slate-800">
@@ -352,14 +352,14 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
                     value={nuevoComentario}
                     onChange={(e) => setNuevoComentario(e.target.value)}
                     placeholder="Escribe un comentario..."
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#059669] focus:border-transparent resize-none text-sm"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4F46E5] focus:border-transparent resize-none text-sm"
                     rows={3}
                   />
                   <div className="flex justify-end mt-2">
                     <button
                       onClick={enviarComentario}
                       disabled={!nuevoComentario.trim() || enviando}
-                      className="px-4 py-2 bg-[#059669] hover:bg-[#047857] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2"
                     >
                       {enviando ? (
                         <>
@@ -388,7 +388,7 @@ export default function DrawerDetalleTarea({ tarea, perfilUsuario, onClose, onUp
           {/* Footer con acciones */}
           <div className="p-6 border-t border-slate-200 bg-slate-50">
             <div className="flex gap-3">
-              <button className="flex-1 px-4 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-xl font-bold text-sm transition-colors">
+              <button className="flex-1 px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl font-bold text-sm transition-colors">
                 Editar tarea
               </button>
               <button className="flex-1 px-4 py-2 border border-slate-300 hover:bg-white text-slate-700 rounded-xl font-bold text-sm transition-colors">

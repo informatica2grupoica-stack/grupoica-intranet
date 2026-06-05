@@ -43,7 +43,7 @@ export default function AlertasStock() {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="animate-spin text-[#059669]" />
+          <Loader2 className="animate-spin text-[#4F46E5]" />
         </div>
       </div>
     );
@@ -90,7 +90,7 @@ export default function AlertasStock() {
               </div>
               <Link
                 href={`/obuma-productos?search=${prod.sku}`}
-                className="inline-block mt-2 text-[8px] font-bold uppercase text-[#059669] hover:text-[#047857] transition-colors"
+                className="inline-block mt-2 text-[8px] font-bold uppercase text-[#4F46E5] hover:text-[#4338CA] transition-colors"
               >
                 Ver producto →
               </Link>
@@ -102,7 +102,7 @@ export default function AlertasStock() {
       {productos.length > 0 && (
         <Link
           href="/obuma-productos?stock=bajo"
-          className="block text-center mt-4 text-[9px] font-bold uppercase text-[#059669] hover:text-[#047857] transition-colors"
+          className="block text-center mt-4 text-[9px] font-bold uppercase text-[#4F46E5] hover:text-[#4338CA] transition-colors"
         >
           Ver todos los productos con alerta
         </Link>

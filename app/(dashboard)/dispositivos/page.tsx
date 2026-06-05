@@ -24,7 +24,7 @@ const estadoColor = (e: string) => ({
 const tipoIcon = (t: string) => {
   if (t === "Telefono") return <Smartphone size={16} className="text-amber-500" />;
   if (t === "Monitor") return <Monitor size={16} className="text-purple-500" />;
-  if (t === "Notebook") return <Laptop size={16} className="text-[#059669]" />;
+  if (t === "Notebook") return <Laptop size={16} className="text-[#4F46E5]" />;
   return <Package size={16} className="text-slate-400" />;
 };
 
@@ -218,7 +218,7 @@ export default function DispositivosPage() {
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-      <Loader2 className="animate-spin text-[#059669]" size={40} />
+      <Loader2 className="animate-spin text-[#4F46E5]" size={40} />
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando inventario...</p>
     </div>
   );
@@ -259,7 +259,7 @@ export default function DispositivosPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
             <input type="text" placeholder="Buscar trabajador, serie, marca..." value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:border-[#6EE7B7]" />
+              className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:border-[#A5B4FC]" />
           </div>
 
           <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
@@ -280,7 +280,7 @@ export default function DispositivosPage() {
           </button>
 
           <button onClick={exportarExcel}
-            className="px-3 py-2.5 text-xs font-bold text-white bg-[#059669] rounded-xl flex items-center gap-1.5 hover:bg-[#047857] transition-all shadow-sm">
+            className="px-3 py-2.5 text-xs font-bold text-white bg-[#4F46E5] rounded-xl flex items-center gap-1.5 hover:bg-[#4338CA] transition-all shadow-sm">
             <Download size={14} /> Excel
           </button>
 
@@ -302,12 +302,12 @@ export default function DispositivosPage() {
             <div key={grupo.id} className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm hover:border-[#A7F3D0] transition-all group/card">
               <div className="flex items-start justify-between mb-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-base font-black group-hover/card:bg-[#059669] transition-colors">
+                  <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-base font-black group-hover/card:bg-[#4F46E5] transition-colors">
                     {grupo.nombre.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <h4 className="font-black text-slate-800 uppercase text-sm">{grupo.nombre}</h4>
-                    <p className="text-[10px] text-[#059669] font-bold flex items-center gap-1">
+                    <p className="text-[10px] text-[#4F46E5] font-bold flex items-center gap-1">
                       <Mail size={10} /> {grupo.email}
                     </p>
                     <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
@@ -325,10 +325,10 @@ export default function DispositivosPage() {
               <div className="space-y-2.5">
                 {grupo.equipos.map((eq: any) => (
                   <div key={eq.id}
-                    className={`group/eq relative flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-transparent transition-all ${canEdit ? "hover:border-[#D1FAE5] hover:bg-white cursor-pointer" : "cursor-default"}`}
+                    className={`group/eq relative flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-transparent transition-all ${canEdit ? "hover:border-[#EEF2FF] hover:bg-white cursor-pointer" : "cursor-default"}`}
                     onClick={() => canEdit && openEdit(eq)}
                   >
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${eq.tipo === "Telefono" ? "bg-amber-100" : eq.tipo === "Monitor" ? "bg-purple-100" : "bg-[#D1FAE5]"}`}>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${eq.tipo === "Telefono" ? "bg-amber-100" : eq.tipo === "Monitor" ? "bg-purple-100" : "bg-[#EEF2FF]"}`}>
                       {tipoIcon(eq.tipo)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -369,7 +369,7 @@ export default function DispositivosPage() {
                 {dispositivosFiltrados.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-5 py-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${d.tipo === "Telefono" ? "bg-amber-100" : d.tipo === "Monitor" ? "bg-purple-100" : "bg-[#D1FAE5]"}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${d.tipo === "Telefono" ? "bg-amber-100" : d.tipo === "Monitor" ? "bg-purple-100" : "bg-[#EEF2FF]"}`}>
                         {tipoIcon(d.tipo)}
                       </div>
                     </td>
@@ -407,7 +407,7 @@ export default function DispositivosPage() {
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-y-auto max-h-[90vh] relative">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                {editMode ? <Edit3 size={18} className="text-[#059669]" /> : <Plus size={18} className="text-[#059669]" />}
+                {editMode ? <Edit3 size={18} className="text-[#4F46E5]" /> : <Plus size={18} className="text-[#4F46E5]" />}
                 {editMode ? "Editar Dispositivo" : "Registrar Nuevo Equipo"}
               </h3>
               <button onClick={closeModal} className="text-slate-300 hover:text-rose-500 transition-colors"><X size={22} /></button>
@@ -417,7 +417,7 @@ export default function DispositivosPage() {
               {/* Asignado a */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Asignar a trabajador</label>
-                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                   value={form.trabajador_id} onChange={(e) => setForm({ ...form, trabajador_id: e.target.value })}>
                   <option value="">— BODEGA / STOCK (sin asignar) —</option>
                   {usuarios.map((u) => <option key={u.user_id} value={u.user_id}>{u.nombre} ({u.email})</option>)}
@@ -431,7 +431,7 @@ export default function DispositivosPage() {
                   <div className="flex gap-2 flex-wrap">
                     {TIPOS.map((t) => (
                       <button key={t} onClick={() => setTabActivo(t)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5 ${tabActivo === t ? "bg-[#059669] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5 ${tabActivo === t ? "bg-[#4F46E5] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                         {t === "Notebook" && <Laptop size={13} />}
                         {t === "Telefono" && <Smartphone size={13} />}
                         {t === "Monitor" && <Monitor size={13} />}
@@ -448,19 +448,19 @@ export default function DispositivosPage() {
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Nombre del equipo</label>
                   <input type="text" placeholder={`Ej: Notebook HP EliteBook`}
-                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                     value={form.nombre_equipo} onChange={(e) => setForm({ ...form, nombre_equipo: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Marca</label>
                   <input type="text" placeholder="HP, Samsung, Dell..."
-                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                     value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Modelo</label>
                   <input type="text" placeholder="ProBook 450 G8, Galaxy A54..."
-                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                     value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} />
                 </div>
                 <div>
@@ -468,20 +468,20 @@ export default function DispositivosPage() {
                     {tabActivo === "Telefono" ? "IMEI" : "N° Serie"}
                   </label>
                   <input type="text" placeholder={tabActivo === "Telefono" ? "IMEI del teléfono" : "Número de serie"}
-                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none font-mono focus:ring-2 focus:ring-[#059669]/20"
+                    className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none font-mono focus:ring-2 focus:ring-[#4F46E5]/20"
                     value={form.serie_imei} onChange={(e) => setForm({ ...form, serie_imei: e.target.value })} />
                 </div>
                 {tabActivo === "Telefono" && (
                   <div>
                     <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Número de teléfono</label>
                     <input type="text" placeholder="+56 9 XXXX XXXX"
-                      className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                      className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                       value={form.numero_telefono} onChange={(e) => setForm({ ...form, numero_telefono: e.target.value })} />
                   </div>
                 )}
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Estado</label>
-                  <select className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#059669]/20"
+                  <select className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none focus:ring-2 focus:ring-[#4F46E5]/20"
                     value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as EstadoEquipo })}>
                     <option value="operativo">Operativo</option>
                     <option value="dañado">Dañado / Con falla</option>
@@ -493,12 +493,12 @@ export default function DispositivosPage() {
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Observaciones</label>
                 <textarea rows={2} placeholder="Notas adicionales..."
-                  className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none resize-none focus:ring-2 focus:ring-[#059669]/20"
+                  className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none resize-none focus:ring-2 focus:ring-[#4F46E5]/20"
                   value={form.observacion} onChange={(e) => setForm({ ...form, observacion: e.target.value })} />
               </div>
 
               <button onClick={handleSave}
-                className="w-full py-4 bg-[#059669] text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 hover:bg-[#047857] transition-all active:scale-[0.98]">
+                className="w-full py-4 bg-[#4F46E5] text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 hover:bg-[#4338CA] transition-all active:scale-[0.98]">
                 <CheckCircle2 size={18} />
                 {editMode ? "Guardar cambios" : "Registrar equipo"}
               </button>

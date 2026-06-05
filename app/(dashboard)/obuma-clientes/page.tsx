@@ -150,9 +150,9 @@ export default function ObumaClientesListado() {
 
   if (loading && !refreshing) {
     return (
-      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F1F5F9] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="animate-spin text-[#059669] mx-auto mb-4" size={48} />
+          <Loader2 className="animate-spin text-[#4F46E5] mx-auto mb-4" size={48} />
           <p className="text-slate-500 text-sm">Cargando clientes...</p>
         </div>
       </div>
@@ -160,7 +160,7 @@ export default function ObumaClientesListado() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#F3F4F6] min-h-screen">
+    <div className="space-y-6 max-w-7xl mx-auto p-4 bg-[#F1F5F9] min-h-screen">
       
       {/* Error */}
       {error && (
@@ -199,11 +199,11 @@ export default function ObumaClientesListado() {
           <div className="text-xl md:text-2xl font-black text-rose-500">{stats?.clientes_inactivos || 0}</div>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 text-[#059669] mb-1">
+          <div className="flex items-center gap-2 text-[#4F46E5] mb-1">
             <Users size={14} />
             <span className="text-[8px] md:text-[9px] font-black uppercase">Contactos</span>
           </div>
-          <div className="text-xl md:text-2xl font-black text-[#059669]">{stats?.total_contactos || 0}</div>
+          <div className="text-xl md:text-2xl font-black text-[#4F46E5]">{stats?.total_contactos || 0}</div>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 text-purple-500 mb-1">
@@ -223,7 +223,7 @@ export default function ObumaClientesListado() {
             <input 
               type="text"
               placeholder="Buscar por razón social, RUT o email..."
-              className="w-full pl-12 pr-4 py-3 md:py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-[#059669] transition-all"
+              className="w-full pl-12 pr-4 py-3 md:py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-[#4F46E5] transition-all"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -260,7 +260,7 @@ export default function ObumaClientesListado() {
 
           <button
             onClick={exportarExcel}
-            className="bg-[#059669] hover:bg-[#047857] text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 text-xs font-bold"
+            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 text-xs font-bold"
           >
             <Download size={16} /> Excel
           </button>
@@ -286,7 +286,7 @@ export default function ObumaClientesListado() {
 
           <Link 
             href="/obuma-clientes/nuevo" 
-            className="bg-[#059669] hover:bg-[#047857] text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
+            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white p-3 md:p-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center"
           >
             <Plus size={20} />
           </Link>
@@ -310,7 +310,7 @@ export default function ObumaClientesListado() {
             <button 
               disabled={currentPage === 1} 
               onClick={() => setCurrentPage(prev => prev - 1)} 
-              className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#059669] hover:text-white disabled:opacity-30 transition-all"
+              className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#4F46E5] hover:text-white disabled:opacity-30 transition-all"
             >
               <ChevronLeft size={20} />
             </button>
@@ -322,7 +322,7 @@ export default function ObumaClientesListado() {
             <button 
               disabled={currentPage === totalPages || totalPages === 0} 
               onClick={() => setCurrentPage(prev => prev + 1)} 
-              className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#059669] hover:text-white disabled:opacity-30 transition-all"
+              className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-[#4F46E5] hover:text-white disabled:opacity-30 transition-all"
             >
               <ChevronRight size={20} />
             </button>
@@ -375,7 +375,7 @@ export default function ObumaClientesListado() {
                     )}
                   </td>
                   <td className="px-3 md:px-4 py-3 md:py-4 text-center">
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#D1FAE5] text-[#059669] rounded-full text-[8px] md:text-[9px] font-black">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#EEF2FF] text-[#4F46E5] rounded-full text-[8px] md:text-[9px] font-black">
                       <Users size={10} /> {cliente.total_contactos}
                     </span>
                   </td>
@@ -392,7 +392,7 @@ export default function ObumaClientesListado() {
                     </span>
                   </td>
                   <td className="px-4 md:px-8 py-3 md:py-4 text-center">
-                    <Link href={`/obuma-clientes/${cliente.id}`} className="p-2 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#059669] hover:text-white transition-all inline-block">
+                    <Link href={`/obuma-clientes/${cliente.id}`} className="p-2 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#4F46E5] hover:text-white transition-all inline-block">
                       <Edit3 size={16} />
                     </Link>
                   </td>

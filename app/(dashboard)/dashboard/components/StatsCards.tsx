@@ -32,7 +32,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       titulo: "Stock Total",
       valor: stats.total_stock,
       icono: TrendingUp,
-      gradient: "from-[#059669] to-[#10B981]",
+      gradient: "from-[#4F46E5] to-[#6366F1]",
       descripcion: "unidades en inventario",
       trend: "up"
     },
@@ -74,7 +74,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
             </div>
           </div>
           {card.trend === "up" && (
-            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#059669]">
+            <div className="flex items-center gap-1 mt-3 text-[9px] font-bold text-[#4F46E5]">
               <TrendingUp size={10} /> Tendencia positiva
             </div>
           )}
