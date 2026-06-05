@@ -301,29 +301,94 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
 };
 
 // ─── Modal Preview Excel ──────────────────────────────────────────────────────
-const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk }: {
+const REGIONES_MODAL = [
+  { value: 'Arica y Parinacota', abbr: 'XV' }, { value: 'Tarapacá', abbr: 'I' },
+  { value: 'Antofagasta', abbr: 'II' }, { value: 'Atacama', abbr: 'III' },
+  { value: 'Coquimbo', abbr: 'IV' }, { value: 'Valparaíso', abbr: 'V' },
+  { value: 'Metropolitana', abbr: 'RM' }, { value: "O'Higgins", abbr: 'VI' },
+  { value: 'Maule', abbr: 'VII' }, { value: 'Ñuble', abbr: 'XVI' },
+  { value: 'Biobío', abbr: 'VIII' }, { value: 'La Araucanía', abbr: 'IX' },
+  { value: 'Los Ríos', abbr: 'XIV' }, { value: 'Los Lagos', abbr: 'X' },
+  { value: 'Aysén', abbr: 'XI' }, { value: 'Magallanes', abbr: 'XII' },
+];
+
+const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, region, setRegion, contexto, setContexto }: {
   productos: ProductoExcel[];
   onClose: () => void;
   onConfirm: () => void;
   onCargarPdf: (f: File) => void;
   cargandoBases: boolean;
   basesOk: boolean;
+  region: string;
+  setRegion: (r: string) => void;
+  contexto: string;
+  setContexto: (c: string) => void;
 }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col">
-      <div className="flex justify-between items-center p-5 border-b">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-center px-5 py-4 border-b">
         <div>
-          <h2 className="font-bold text-slate-800 text-base">Vista previa — Excel COSTEO</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{productos.length} productos detectados</p>
+          <h2 className="font-bold text-slate-800 text-base">Configurar búsqueda — Excel COSTEO</h2>
+          <p className="text-xs text-slate-400 mt-0.5">{productos.length} productos · PDF bases · Región · Contexto</p>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
       </div>
 
-      <div className="pt-4">
+      {/* Paso 1: PDF bases */}
+      <div className="px-5 pt-3">
         <BannerPdf onCargarPdf={onCargarPdf} cargandoBases={cargandoBases} basesOk={basesOk} />
       </div>
 
-      <div className="overflow-auto flex-1 px-5 pb-2">
+      {/* Paso 2: Región + Contexto — en una fila */}
+      <div className="px-5 py-3 grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-slate-100">
+        {/* Región */}
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1.5">
+            📍 Región de la licitación
+          </label>
+          <select
+            value={region}
+            onChange={e => setRegion(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#059669]/20 text-slate-700"
+          >
+            <option value="">🌎 Todo Chile (sin filtro)</option>
+            {REGIONES_MODAL.map(r => (
+              <option key={r.value} value={r.value}>{r.abbr} — {r.value}</option>
+            ))}
+          </select>
+          {/* Chips rápidos */}
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {['Valparaíso','Metropolitana','Biobío','Aysén','Maule'].map(r => (
+              <button key={r} onClick={() => setRegion(region === r ? '' : r)}
+                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-[#059669] hover:text-[#059669]'}`}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Contexto */}
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1.5">
+            🏷️ Contexto del rubro
+          </label>
+          <div className="flex flex-wrap gap-1 mb-1.5">
+            {['ferretería construcción','señalética vial','pinturas y químicos','maderas','EPP seguridad','agrícola'].map(t => (
+              <button key={t} onClick={() => setContexto(contexto === t ? '' : t)}
+                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${contexto === t ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-[#059669] hover:text-[#059669]'}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <textarea value={contexto} onChange={e => setContexto(e.target.value)}
+            placeholder="O escribe el contexto libre..."
+            className="w-full h-10 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-[#059669]/20" />
+        </div>
+      </div>
+
+      {/* Paso 3: Vista previa de productos */}
+      <div className="overflow-auto flex-1 px-5 py-2">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Vista previa de productos ({productos.length})</p>
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
@@ -354,13 +419,17 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
         </table>
         {productos.length > 60 && <p className="text-center text-xs text-slate-400 mt-3">+ {productos.length - 60} más</p>}
       </div>
-      <div className="flex justify-between items-center gap-3 p-5 border-t">
-        <p className="text-[10px] text-slate-400">
-          {basesOk ? '✅ Búsqueda con corrección de nombres activada' : 'Carga el PDF para mayor precisión en los resultados'}
-        </p>
+
+      {/* Footer */}
+      <div className="flex justify-between items-center gap-3 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
+        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+          {region && <span className="bg-[#D1FAE5] text-[#059669] px-2 py-0.5 rounded-full font-bold">📍 {region}</span>}
+          {contexto && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">🏷️ {contexto.slice(0, 20)}</span>}
+          {basesOk && <span className="text-[#059669] font-bold">✅ Bases PDF cargadas</span>}
+        </div>
         <div className="flex gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-          <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
+          <button onClick={onConfirm} className="px-6 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-sm">
             <Search size={15} /> Iniciar búsqueda ({productos.length})
           </button>
         </div>
@@ -1365,6 +1434,10 @@ export default function MonitorMasivoICA() {
           onCargarPdf={cargarBases}
           cargandoBases={cargandoBases}
           basesOk={!!basesInfo}
+          region={region}
+          setRegion={cambiarRegion}
+          contexto={contexto}
+          setContexto={setContexto}
         />
       )}
       {showBasesModal && basesItems.length > 0 && (
@@ -1603,10 +1676,19 @@ export default function MonitorMasivoICA() {
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Lista manual</p>
             <textarea
-              className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]/20 resize-none"
+              className="w-full h-32 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-600 outline-none focus:ring-2 focus:ring-[#059669]/20 resize-none"
               placeholder={`1\tLetrero de obra\n2\tMadera Pino 2"x3"\n3\tAnticorrosivo`}
               value={inputMasivo} onChange={e => setInputMasivo(e.target.value)} disabled={procesando}
             />
+            {/* Región rápida para lista */}
+            <div className="mt-2 flex flex-wrap gap-1">
+              {['Valparaíso','Metropolitana','Biobío','Aysén','Maule'].map(r => (
+                <button key={r} onClick={() => cambiarRegion(region === r ? '' : r)}
+                  className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-400 hover:border-[#059669] hover:text-[#059669]'}`}>
+                  📍 {r}
+                </button>
+              ))}
+            </div>
             <button onClick={iniciarTexto} disabled={procesando || !inputMasivo.trim()}
               className="mt-2 w-full bg-slate-900 hover:bg-[#059669] disabled:bg-slate-200 text-white py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
               {procesando ? <><Loader2 size={15} className="animate-spin" /> {progreso.actual}/{progreso.total}</> : <><Search size={15} /> Iniciar barrido</>}
@@ -1752,34 +1834,16 @@ export default function MonitorMasivoICA() {
             )}
           </div>
 
-          {/* Configuración de búsqueda */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <button onClick={() => setMostrarConfig(!mostrarConfig)}
-              className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-2">
-                <Settings size={14} className="text-slate-500" />
-                <span className="text-xs font-semibold text-slate-600">Contexto de búsqueda</span>
-                {contexto && <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />}
+          {/* Indicador compacto de configuración activa */}
+          {(region || contexto) && (
+            <div className="bg-[#D1FAE5] border border-[#059669]/20 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1.5 text-[10px]">
+                {region && <span className="font-bold text-[#047857]">📍 {region}</span>}
+                {contexto && <span className="text-[#059669] font-medium">🏷️ {contexto.slice(0, 18)}</span>}
               </div>
-              {mostrarConfig ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-            </button>
-            {mostrarConfig && (
-              <div className="px-4 pb-4 border-t border-slate-100">
-                <div className="flex flex-wrap gap-1 my-3">
-                  {['ferretería construcción','señalética vial','pinturas y químicos','maderas'].map(t => (
-                    <button key={t} onClick={() => setContexto(t)}
-                      className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${contexto===t ? 'bg-[#059669] text-white border-[#059669]' : 'border-slate-200 text-slate-500 hover:border-slate-400'}`}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-                <textarea value={contexto} onChange={e => setContexto(e.target.value)}
-                  placeholder="Describe el contexto de los productos..."
-                  className="w-full h-14 p-2 border border-slate-200 rounded-lg text-xs resize-none outline-none focus:ring-2 focus:ring-[#059669]/20" />
-                {contexto && <button onClick={() => setContexto('')} className="text-[10px] text-red-500 mt-1">Limpiar</button>}
-              </div>
-            )}
-          </div>
+              <button onClick={() => { setContexto(''); cambiarRegion(''); }} className="text-[10px] text-slate-400 hover:text-red-500">✕</button>
+            </div>
+          )}
 
           {/* Estadísticas */}
           {itemsLista.length > 0 && (
