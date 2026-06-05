@@ -525,7 +525,7 @@ async function buscarSerperShopping(variantes: string[], limitePorVariante: numb
         method: 'POST',
         headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
         signal: ctrl.signal,
-        body: JSON.stringify({ q: queryConRegion, gl: 'cl', hl: 'es', location: 'Chile', num: 20 }),
+        body: JSON.stringify({ q: queryConRegion, gl: 'cl', hl: 'es', location: region?.trim() ? `${region}, Chile` : 'Chile', num: 20 }),
       });
       clearTimeout(tid);
       if (!r.ok) return;
@@ -873,12 +873,44 @@ export async function GET(req: NextRequest) {
     ? resultadosDedupTienda.slice(0, minimo)
     : resultadosFinales.slice(0, minimo);
 
+  // ── Marcar resultados locales de la región ───────────────────────────────────
+  const REGION_KEYWORDS: Record<string, string[]> = {
+    'valparaíso': ['valpo', 'valparaiso', 'viña', 'quillota', 'sanantonio', 'losandes'],
+    'metropolitana': ['santiago', 'stgo', 'providencia', 'lascondes', 'nunoa', 'maipu'],
+    'biobío': ['concepcion', 'talcahuano', 'biobio', 'lota', 'coronel'],
+    'maule': ['talca', 'curico', 'linares', 'constitucion'],
+    "o'higgins": ['rancagua', 'ohiggins', 'sanfernando'],
+    'araucanía': ['temuco', 'araucania', 'villarrica'],
+    'los lagos': ['puertomomontt', 'osorno', 'loslagos', 'chiloe'],
+    'aysén': ['aysen', 'coyhaique'],
+    'antofagasta': ['antofagasta', 'calama'],
+    'coquimbo': ['laserena', 'coquimbo', 'ovalle'],
+    'atacama': ['copiapo', 'vallenar'],
+    'tarapacá': ['iquique', 'altohospicio'],
+    'arica y parinacota': ['arica'],
+    'magallanes': ['puntaarenas', 'magallanes'],
+    'ñuble': ['chilllan', 'chilian'],
+    'los ríos': ['valdivia', 'losrios'],
+  };
+  const regionKey = (region || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const kwsRegion = REGION_KEYWORDS[regionKey] || (region ? [regionKey.replace(/\s+/g, '')] : []);
+
+  const marcarLocal = (r: ResultadoMapeado) => {
+    if (!kwsRegion.length) return r;
+    const texto = ((r.tienda || '') + ' ' + (r.nombre || '') + ' ' + (r.link || ''))
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '');
+    const esLocal = kwsRegion.some(k => texto.includes(k));
+    return esLocal ? { ...r, es_local_region: true } : r;
+  };
+
+  const resultadosConLocal = resultadosSlice.map(marcarLocal);
+
   return NextResponse.json({
     numero_item: numeroItem,
     producto,
     producto_limpio: productoLimpio !== producto ? productoLimpio : undefined,
     categoria,
-    resultados: resultadosSlice,
+    resultados: resultadosConLocal,
     total_encontrados: resultadosSlice.length,
     suficientes: resultadosSlice.length >= minimo,
     deficit: Math.max(0, minimo - resultadosSlice.length),

@@ -25,6 +25,7 @@ interface ProductoResultado {
   unidad_detectada?: string;
   alerta_unidad?: boolean;
   matching?: { porcentaje: number; nivel: string; razon: string };
+  es_local_region?: boolean;
 }
 
 type ModoOrden = 'match' | 'precio';
@@ -2007,7 +2008,14 @@ export default function MonitorMasivoICA() {
                                 <td className="px-4 py-3 text-[10px] text-slate-300 font-mono">{String(i+1).padStart(2,'0')}</td>
                                 <td className="px-4 py-3">
                                   <span className="text-sm font-medium text-slate-800 block leading-tight">{r.tienda}</span>
-                                  <span className="text-[9px] text-slate-400 uppercase">{r.canal}</span>
+                                  <div className="flex items-center gap-1 mt-0.5">
+                                    <span className="text-[9px] text-slate-400 uppercase">{r.canal}</span>
+                                    {r.es_local_region && region && (
+                                      <span className="text-[8px] font-bold bg-[#D1FAE5] text-[#059669] px-1.5 py-0.5 rounded-full border border-[#059669]/20">
+                                        📍 Local
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3">
                                   <p className="text-xs text-slate-600 leading-tight max-w-sm line-clamp-2">{r.nombre}</p>
