@@ -258,10 +258,11 @@ REGLAS ESTRICTAS:
     const result = await callGemini(systemPrompt, geminiMessages, { temperature: 0.3, maxTokens: 800 });
 
     if (result.error) {
-      return NextResponse.json(
-        { respuesta: '🔌 Tuve un problema de conexión con el asistente. Intenta de nuevo.', error: result.error },
-        { status: 500 }
-      );
+      console.error('[chatbot] Gemini error:', result.error);
+      const msg = result.error === 'RATE_LIMIT'
+        ? '⏳ El asistente está ocupado (límite de solicitudes). Espera unos segundos e intenta de nuevo.'
+        : `🔌 Error del asistente: ${result.error}`;
+      return NextResponse.json({ respuesta: msg, error: result.error }, { status: 500 });
     }
 
     return NextResponse.json({

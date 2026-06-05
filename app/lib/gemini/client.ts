@@ -13,8 +13,8 @@ interface GeminiResponse {
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-// Modelo rápido para chatbot y query understanding
-const MODEL_FLASH = 'gemini-2.0-flash';
+// Orden de fallback: intenta el más nuevo, si no existe usa 1.5-flash
+const MODELS_FALLBACK = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
 
 function getKey(): string {
   return process.env.GEMINI_API_KEY || '';
@@ -41,30 +41,46 @@ export async function callGemini(
     },
   };
 
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  for (const model of MODELS_FALLBACK) {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), timeoutMs);
 
-  try {
-    const res = await fetch(`${GEMINI_API_BASE}/${MODEL_FLASH}:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    clearTimeout(tid);
+    try {
+      const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      clearTimeout(tid);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return { content: '', error: `Gemini ${res.status}: ${errText.slice(0, 200)}` };
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`[gemini] ${model} HTTP ${res.status}:`, errText.slice(0, 400));
+        if (res.status === 404) continue; // modelo no existe, prueba el siguiente
+        if (res.status === 429) return { content: '', error: 'RATE_LIMIT' };
+        return { content: '', error: `Gemini ${res.status}: ${errText.slice(0, 300)}` };
+      }
+
+      const data = await res.json();
+      const content: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (!content) {
+        const raw = JSON.stringify(data).slice(0, 300);
+        console.error(`[gemini] ${model} empty content:`, raw);
+        return { content: '', error: `Gemini sin contenido: ${raw}` };
+      }
+      console.log(`[gemini] OK con modelo ${model}`);
+      return { content };
+    } catch (err: any) {
+      clearTimeout(tid);
+      if (err.name === 'AbortError') return { content: '', error: 'Timeout Gemini' };
+      console.error(`[gemini] ${model} excepción:`, err.message);
+      // Si es error de red intenta el siguiente modelo
+      continue;
     }
-
-    const data = await res.json();
-    const content: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return { content };
-  } catch (err: any) {
-    clearTimeout(tid);
-    return { content: '', error: err.message || 'Error de conexión con Gemini' };
   }
+
+  return { content: '', error: 'Todos los modelos Gemini fallaron' };
 }
 
 // Helper para conversación simple (sin historial)
