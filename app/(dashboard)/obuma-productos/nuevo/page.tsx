@@ -198,7 +198,7 @@ export default function NuevoProductoForm() {
           
           <div className="p-6 bg-[#2563EB] rounded-3xl text-white shadow-lg flex justify-between items-center">
             <div className="space-y-1 flex-1">
-              <label className="text-[9px] font-black uppercase opacity-60">Nombre final Obuma</label>
+              <label className="text-[9px] font-black uppercase text-white/60">Nombre final Obuma</label>
               <div className="text-xl font-black uppercase italic">{form.nombre_completo || "Esperando datos..."}</div>
             </div>
             <div className="flex items-center gap-3">

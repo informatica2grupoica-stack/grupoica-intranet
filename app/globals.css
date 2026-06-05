@@ -87,6 +87,26 @@ body {
   opacity: 0.7;
 }
 
+/* Eliminar flechas nativas de type="number" en todos los navegadores */
+input[type="number"] {
+  appearance: none;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Eliminar el icono de autocompletar que Chrome inyecta en ciertos inputs */
+input::-webkit-contacts-auto-fill-button,
+input::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
 /* Inputs tipo fecha */
 input[type="date"] {
   min-height: 2.75rem;
@@ -132,10 +152,8 @@ select:-webkit-autofill:focus {
   font-size: 0.875rem;
 }
 
-/* Labels de formularios — solo dentro de contenedores de formulario para no afectar labels inline */
-.form-container label,
-.card label,
-form label {
+/* Labels de formularios — :where() tiene especificidad 0 para que text-white u otras clases Tailwind ganen */
+:where(.form-container label, .card label, form label) {
   display: block;
   font-size: 0.7rem;
   font-weight: 700;

@@ -158,10 +158,11 @@ export default function ChatPage() {
           </h2>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-white/60" />
-            <input 
-              type="text" 
-              placeholder="Buscar colega..." 
-              className="w-full pl-12 pr-4 py-3 bg-white/20 border border-white/10 rounded-2xl text-[11px] text-white placeholder:text-white/60 font-bold outline-none focus:bg-white/30 transition-all focus:ring-2 ring-white/20" 
+            <input
+              type="text"
+              placeholder="Buscar colega..."
+              autoComplete="off"
+              className="w-full pl-12 pr-4 py-3 bg-white/20 border border-white/10 rounded-2xl text-[11px] text-white placeholder:text-white/60 font-bold outline-none focus:bg-white/30 transition-all focus:ring-2 ring-white/20"
             />
           </div>
         </div>
@@ -246,11 +247,12 @@ export default function ChatPage() {
             {/* FORMULARIO DE MENSAJE MEJORADO (UX/Contraste) */}
             <form onSubmit={enviarMensaje} className="p-8 bg-white border-t border-slate-100/60 shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
               <div className="relative flex items-center bg-slate-100/80 rounded-[2rem] p-2 pr-3 border-2 border-slate-200/50 focus-within:border-[#2563EB]/20 focus-within:bg-white focus-within:ring-8 ring-[#EFF6FF]/50 transition-all duration-300">
-                <input 
-                  value={nuevoMensaje} 
-                  onChange={(e) => setNuevoMensaje(e.target.value)} 
-                  placeholder="Escribe un mensaje..." 
-                  className="flex-1 bg-transparent px-6 py-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-semibold outline-none" 
+                <input
+                  value={nuevoMensaje}
+                  onChange={(e) => setNuevoMensaje(e.target.value)}
+                  placeholder="Escribe un mensaje..."
+                  autoComplete="off"
+                  className="flex-1 bg-transparent border-0 px-6 py-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-semibold outline-none"
                 />
                 <button 
                   type="submit" 
