@@ -40,9 +40,24 @@ function tokens(s: string): string[] {
 }
 
 const SINONIMOS: Record<string, string> = {
+  // EPP
   antiparra: 'lente', antiparras: 'lente', anteojo: 'lente', anteojos: 'lente', gafa: 'lente', gafas: 'lente',
-  fierro: 'acero', golilla: 'arandela', golillas: 'arandela', pernos: 'perno', tornillos: 'tornillo',
   guantes: 'guante', botas: 'bota',
+  // Metales / ferretería chilena
+  fierro: 'acero', golilla: 'arandela', golillas: 'arandela', pernos: 'perno', tornillos: 'tornillo',
+  pletina: 'platina', angulo: 'angular', perfil: 'perfil',
+  // Pinturas — chileno → comercial
+  tineta: 'balde', galón: 'galon', galon: 'galon',
+  anticorrosivo: 'anticorrosivo', barniz: 'barniz', esmalte: 'esmalte', oleo: 'oleo',
+  // Maderas
+  dimensionado: 'pino', impregnado: 'impregnado', cepillado: 'cepillado',
+  // Plomería
+  sifon: 'sifon', copla: 'union', codo: 'codo', tee: 'tee',
+  // Electricidad
+  conduit: 'conduit', tablero: 'tablero',
+  // Mallas
+  chiporro: 'rodillo',
+  pomeles: 'bisagra', pomel: 'bisagra',
 };
 
 function raiz(w: string): string {
@@ -55,8 +70,25 @@ function tokensMatch(s: string): string[] {
   return tokens(s).map(raiz);
 }
 
+// Normaliza dimensiones para comparación: unifica formatos antes del score
+function normalizarParaScore(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // quitar acentos
+    .replace(/\[mm\]/g, 'mm').replace(/\[m\]\b/g, 'm').replace(/\[cm\]/g, 'cm')
+    .replace(/(\d),(\d)/g, '$1.$2')            // coma decimal → punto
+    .replace(/(\d)\s*[xX×]\s*(\d)/g, '$1x$2') // 100 X 50 → 100x50
+    .replace(/(\d)\s*"\s*/g, '$1pulg ')        // 3/4" → 3/4pulg
+    .replace(/(\d)\s*(mm|cm|m|kg|lt|lts|litro|litros)\b/g, '$1$2') // unir número+unidad
+    .replace(/\bpulgadas?\b/g, 'pulg')
+    .replace(/[^\w\s.\/]/g, ' ')
+    .replace(/\s{2,}/g, ' ').trim();
+}
+
 function calcularScore(buscado: string, encontrado: string): number {
-  const b = tokensMatch(buscado);
+  // Usar versiones normalizadas para el matching
+  const bN = preprocesarProducto(buscado);
+  const b = tokensMatch(bN);
   const e = tokensMatch(encontrado);
   if (!b.length || !e.length) return 50;
   const setB = new Set(b), setE = new Set(e);
@@ -65,11 +97,81 @@ function calcularScore(buscado: string, encontrado: string): number {
   const cobertura = comunes / setB.size;
   const precision = comunes / setE.size;
   const f1 = (2 * cobertura * precision) / (cobertura + precision);
-  const numsB = normalizar(buscado).match(/\d+(?:[.,]\d+)?/g) || [];
-  const numsE = new Set(normalizar(encontrado).match(/\d+(?:[.,]\d+)?/g) || []);
+
+  // Comparar números con dimensiones normalizadas
+  const bScore = normalizarParaScore(bN);
+  const eScore = normalizarParaScore(encontrado);
+  const numsB = bScore.match(/\d+(?:\.\d+)?/g) || [];
+  const numsE = new Set(eScore.match(/\d+(?:\.\d+)?/g) || []);
   let bonusNum = 0;
-  if (numsB.length) bonusNum = (numsB.filter((n) => numsE.has(n)).length / numsB.length) * 12;
+  if (numsB.length) {
+    const hits = numsB.filter((n) => numsE.has(n)).length;
+    bonusNum = (hits / numsB.length) * 15; // subir de 12 → 15 pts para dimensiones
+  }
   return Math.max(0, Math.min(100, Math.round(f1 * 85 + bonusNum)));
+}
+
+// ─── Preprocesamiento de nombre del producto ──────────────────────────────────
+// Limpia nombres de licitaciones chilenas antes de buscar:
+//  - Elimina códigos internos de proveedor ("B ", "C2 ", "B SC ", "B MSD ")
+//  - Normaliza formatos de dimensiones ([MM]→mm, coma→punto, X→x)
+//  - Expande abreviaturas chilenas de construcción
+//  - Quita truncamientos (nombres cortados en Excel)
+
+// Términos chilenos de construcción → término comercial para búsqueda
+const PREFIJOS_INTERNOS = /^(?:B\s+SC\s+|B\s+MSD\s+|B\s+MK\s+|B\s+VG\s+|[A-Z]\d{0,2}\s+)(?=\S)/i;
+// Pares [regex, reemplazo] — notar que los regex NO usan flag /g
+// para evitar que .test() avance lastIndex y rompa la lógica
+const PALABRAS_GLOSARIO: [RegExp, string][] = [
+  [/\bMalla\s+Acma\b/i, 'Malla electrosoldada galvanizada'],
+  [/\bMalla\s+Raschel\b/i, 'Malla sombra'],
+  [/\bMalla\s+Concertina\b/i, 'Alambre concertina'],
+  [/\bPino\s+Verde\b/i, 'Pino bruto'],
+  [/\bPino\s+Impregnado\b/i, 'Pino impregnado CCA'],
+  [/\bRodillo\s+Chiporro\b/i, 'Rodillo pintura'],  // "Rodillo Chiporro" → no duplicar
+  [/\bChiporro\b/i, 'Rodillo pintura'],
+  [/\bPomel(?:es?)?\b/i, 'Bisagra'],              // Pomel / Pomele / Pomeles
+  [/\bHilo\s+Esp[aá]rrago\b/i, 'Espárrago roscado'],
+  [/\bPicaporte\s+Carcelero\b/i, 'Pasador puerta pesado'],
+  [/\bCerestain\b/i, 'Ceresita impregnante madera'],
+  [/\bTinetas?\b/i, 'Balde pintura'],             // Tineta / Tinetas
+  [/\bPrensa\s+[Ee]stopa\b/i, 'Prensaestopa'],
+  [/\bConduit\s+EMT\b/i, 'Tubería conduit EMT'],
+  [/\bTeja\s+Continua\b/i, 'Teja plástica continua'],
+  [/\bCaballete\s+Colonial\b/i, 'Caballete teja'],
+  [/\bLaucha\s+Pasacables\b/i, 'Pasacables guía eléctrica'],
+  [/\bEstruct-Viga\b/i, 'Viga pino estructural'],
+  [/\bSalas?\s+de\s+Ba[ñn]o\b/i, 'Inodoro distancia entre ejes'],
+];
+
+function preprocesarProducto(nombre: string): string {
+  if (!nombre) return nombre;
+  let n = nombre.trim();
+
+  // 1. Quitar prefijos internos de licitación al inicio: "B ", "C2 ", "B SC ", "B MSD "
+  n = n.replace(PREFIJOS_INTERNOS, '').trim();
+
+  // 2. Normalizar corchetes de unidades: [MM]→mm, [M]→m, [CM]→cm, [PULG]→pulg
+  n = n.replace(/\[\s*MM\s*\]/gi, 'mm')
+       .replace(/\[\s*M\s*\](?=\s|$)/gi, 'm')
+       .replace(/\[\s*CM\s*\]/gi, 'cm')
+       .replace(/\[\s*PULG\s*\]/gi, 'pulg')
+       .replace(/\[|\]/g, ' ');
+
+  // 3. Coma decimal en dimensiones (solo entre dígitos): 0,35 → 0.35
+  n = n.replace(/(\d),(\d)/g, '$1.$2');
+
+  // 4. Quitar truncamientos al final: "Tornillo Autoperforante (" → limpia
+  n = n.replace(/\s*[\(]+\s*$/, '').trim();
+
+  // 5. Aplicar glosario de términos chilenos (reemplaza todas las ocurrencias)
+  for (const [re, reemplazo] of PALABRAS_GLOSARIO) {
+    if (re.test(n)) {
+      n = n.replace(new RegExp(re.source, 'gi'), reemplazo);
+    }
+  }
+
+  return n.replace(/\s{2,}/g, ' ').trim();
 }
 
 // ─── Bonus por entidades IA ───────────────────────────────────────────────────
@@ -203,29 +305,47 @@ const MARCAS = ['sherwin', 'sipa', 'ceresita', 'soquina', 'passol', 'tajamar', '
 
 function clasificarCategoria(nombre: string): string {
   const n = normalizar(nombre);
-  if (/madera|pino|mdf|osb|terciado|tabla/.test(n)) return 'madera';
-  if (/fierro|acero|tubo|perfil|barra|viga|plancha/.test(n)) return 'metal_acero';
-  if (/cemento|hormigon|arena|grava|mortero/.test(n)) return 'cemento_hormigon';
-  if (/pintura|esmalte|latex|barniz|anticorrosivo|oleo/.test(n)) return 'pintura_recubrimiento';
-  if (/letrero|senal|transito|valla|cono/.test(n)) return 'senaletica';
+  // Maderas
+  if (/madera|pino|mdf|osb|terciado|tabla|cielo|aglomerado|melamina|fibrocemento/.test(n)) return 'madera';
+  // Metales estructurales
+  if (/fierro|acero|tubo|perfil|barra|viga|plancha|pletina|angulo|angular|malla acma|malla electrosoldada|alambre/.test(n)) return 'metal_acero';
+  // Cubierta y zinc
+  if (/zinc|teja|cubierta|caballete|polipanel|policarbonato/.test(n)) return 'cubierta_techo';
+  // Cemento y áridos
+  if (/cemento|hormigon|arena|grava|mortero|yeso|pintacal|estuco/.test(n)) return 'cemento_hormigon';
+  // Pinturas
+  if (/pintura|esmalte|latex|barniz|anticorrosivo|oleo|tineta|galon|diluyente|sellador|impermeabilizante|tapagoteras|cerestain|adhesivo.*contact/.test(n)) return 'pintura_recubrimiento';
+  // Fontanería/plomería
+  if (/pvc|sifon|codo.*bronce|tee|copla|valvula|llave.*paso|tubo.*hidraulico|flexible.*llave|manguera.*riego|aspersor|gotero/.test(n)) return 'plomeria_sanitaria';
+  // Electricidad
+  if (/cable|conduit|tablero|interruptor|diferencial|contactor|foco|reflector|led|timer|prensa.*estopa|alambre.*electrico|enchufe/.test(n)) return 'electrico';
+  // Señalética
+  if (/letrero|senal|transito|valla|cono|baliza|bandera/.test(n)) return 'senaletica';
+  // Tornillería y fijaciones
+  if (/tornillo|perno|tuerca|golilla|clavo|tarugo|grampa|remache|bisagra|pomel|corredera|cerradura|candado/.test(n)) return 'tornilleria_fijacion';
+  // Herramientas y consumibles
+  if (/disco.*corte|disco.*desbaste|disco.*diamantado|soldadura|electrod|lija|brocha|rodillo|chiporro|espatula|pistola.*calafat/.test(n)) return 'herramientas_consumibles';
   return 'ferreteria_general';
 }
 
 function analizarProducto(producto: string) {
-  const categoria = clasificarCategoria(producto);
-  const medidas = extraerMedidas(producto);
-  const n = normalizar(producto);
+  // Usar nombre preprocesado para mejor análisis (sin códigos internos)
+  const productoLimpio = preprocesarProducto(producto);
+  const categoria = clasificarCategoria(productoLimpio);
+  const medidas = extraerMedidas(productoLimpio);
+  const n = normalizar(productoLimpio);
   return {
     nombre_original: producto,
+    nombre_limpio: productoLimpio,
     nombre_normalizado: n,
     categoria,
-    palabras_clave: tokens(producto),
+    palabras_clave: tokens(productoLimpio),
     medidas: { tiene_medidas: Object.keys(medidas).length > 0, detalle: medidas, texto_legible: medidasATexto(medidas) },
-    especificaciones_tecnicas: extraerEspecificaciones(producto),
+    especificaciones_tecnicas: extraerEspecificaciones(productoLimpio),
     unidades_relevantes: [],
-    es_accesorio: /repuesto|accesorio|disco|carbon|estuche|funda/.test(n),
+    es_accesorio: /repuesto|accesorio|carbon|estuche|funda/.test(n),
     marca_detectada: MARCAS.find((m) => n.includes(m)) || null,
-    tipo_producto: inferirTipoProducto(producto),
+    tipo_producto: inferirTipoProducto(productoLimpio),
   };
 }
 
@@ -259,37 +379,60 @@ async function entenderConsultaIA(producto: string, contexto: string, region?: s
     const ctxLine = contexto?.trim()
       ? `Contexto del usuario: ${contexto}.${regionCtx}`
       : `Rubro: ferretería y construcción en Chile.${regionCtx}`;
-    const prompt = `Eres experto en productos industriales, ferretería y construcción en Chile. ${ctxLine}
-Analiza el producto y extrae entidades clave. Genera variantes de búsqueda optimizadas (de más específica a más general).
+    const prompt = `Eres experto en materiales de construcción, ferretería y licitaciones públicas de Chile. ${ctxLine}
+El producto proviene de un Excel de cotización de licitación chilena (MercadoPúblico). Puede contener:
+- Códigos internos al inicio: "B ", "C2 ", "B SC ", "B MSD " — IGNÓRALOS al generar variantes
+- Dimensiones en formatos no-comerciales: [MM], comas decimales, X mayúscula — normalízalos
+- Terminología chilena específica (ver glosario abajo)
 
+GLOSARIO CONSTRUCCIÓN CHILE (traduce al término comercial):
+tineta=balde bidón pintura 4L | galón=galón pintura 4 litros | chiporro=rodillo pintura | pomeles/pomel=bisagra puerta
+malla acma=malla electrosoldada galvanizada | malla raschel=malla sombra | malla concertina=alambre concertina
+pino verde=pino bruto sin secar | pino seco cepillado=pino cepillado seco | pino impregnado=pino CCA tratado
+cerestain=impregnante madera ceresita | hilo espárrago=espárrago roscado | picaporte carcelero=pasador puerta
+teja continua=teja plástica | plancha zinc acanalada=cubierta zinc ondulada techo | terciado=madera terciada contrachapada
+b sc hormigon=hormigon premix saco | prensa estopa=prensaestopa | conduit emt=conduit tubería eléctrica
+salas de baño=módulo inodoro distancia entre ejes
+
+Analiza el producto y genera variantes comerciales para Google Shopping Chile.
 Responde SOLO JSON:
 {
-  "marca": "nombre de marca o null",
+  "marca": "marca detectada o null (ignora prefijos B/C2/MSD como marca)",
   "modelo": "número de modelo/referencia o null",
-  "sku": "código SKU/parte o null",
-  "specs": ["lista de especificaciones técnicas detectadas"],
-  "variantes": ["3 consultas optimizadas para buscar en Google Shopping Chile"],
-  "categoria_ia": "categoría del producto",
-  "es_especifico": true/false
+  "sku": "código SKU o null",
+  "specs": ["especificaciones técnicas clave"],
+  "variantes": ["3 consultas comerciales para Google Shopping Chile, de más específica a más general"],
+  "categoria_ia": "categoría comercial del producto",
+  "es_especifico": true/false,
+  "nombre_comercial": "nombre comercial limpio sin códigos internos"
 }
 
-Ejemplos de variantes:
-- "Motor Siemens 5HP 380V" → ["Motor eléctrico Siemens 5HP 380V trifásico Chile", "Motor 5HP 380V precio Chile", "motor eléctrico 5HP Chile"]
-- "Cemento 25kg" → ["cemento corriente 25kg saco precio Chile", "cemento Portland 25kg Chile", "cemento bolsa 25kg"]
-- "Perno M12 inox" → ["Perno M12 acero inoxidable Chile precio", "perno hexagonal M12 inoxidable Chile", "perno M12 Chile ferretería"]
-- Si hay región específica: añade el nombre de la región a al menos una variante
-${region ? `\nRegión de búsqueda: ${region} (inclúyela en al menos una variante).` : ''}`;
+REGLAS para variantes:
+1. Eliminar prefijos internos (B, C2, B SC, B MSD) del inicio del nombre
+2. Usar términos que aparecen en tiendas chilenas (Sodimac, Easy, Construmart, Imperial)
+3. Primera variante: nombre comercial + dimensiones clave + Chile
+4. Segunda variante: producto genérico + dimensiones + precio Chile
+5. Tercera variante: solo producto genérico + Chile (más amplia)
+6. Para dimensiones: usar formato "NxN mm" o "N pulg" en vez de formatos técnicos
+
+Ejemplos:
+- "B Pino Impregnado 2 x 3 x 3.20 mts" → ["Pino impregnado CCA 2x3 3.20m Chile precio", "Madera pino 2x3 impregnado precio Chile", "pino impregnado 2x3 Chile ferretería"]
+- "TINETA ESMALTE SINTÉTICO NEGRO" → ["Esmalte sintético negro tineta 4L Chile precio", "Pintura esmalte negro bidón Chile", "esmalte sintético negro Chile"]
+- "PLANCHA ZINC ACANALADA 0.35 X 0.85 X 3.6m" → ["Plancha zinc ondulada 0.35mm 3.6m Chile precio", "Cubierta zinc 3.6m acanalada precio Chile", "zinc acanalado 3.6 metros Chile"]
+- "MALLA ACMA 1.85x5m 3G9" → ["Malla electrosoldada galvanizada 1.85x5m Chile precio", "Malla ACMA 1.85x5 precio Chile", "malla soldada galvanizada Chile"]
+- "DISCO CORTE METAL INOX 7" → ["Disco corte metal inoxidable 7 pulgadas Chile precio", "Disco amoladora 7 pulgadas inox Chile", "disco corte 180mm metal Chile"]
+${region ? `\nRegión: ${region} — incluir en al menos una variante.` : ''}`;
 
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 10000);
+    const tid = setTimeout(() => ctrl.abort(), 12000);
     const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
       body: JSON.stringify({
         model: 'deepseek-chat',
-        messages: [{ role: 'system', content: prompt }, { role: 'user', content: `Producto: "${producto}"` }],
-        temperature: 0.1, max_tokens: 400, response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: prompt }, { role: 'user', content: `Producto de licitación: "${producto}"` }],
+        temperature: 0.1, max_tokens: 600, response_format: { type: 'json_object' },
       }),
     });
     clearTimeout(tid);
@@ -297,13 +440,22 @@ ${region ? `\nRegión de búsqueda: ${region} (inclúyela en al menos una varian
     const d = await r.json();
     const parsed = JSON.parse(d.choices?.[0]?.message?.content || '{}');
     const variantes: string[] = Array.isArray(parsed.variantes) ? parsed.variantes.filter((v: unknown) => typeof v === 'string' && v.trim()) : [];
-    if (!variantes.includes(producto)) variantes.unshift(producto);
+    // Agregar el nombre comercial limpio como variante adicional si es diferente al producto original
+    const nombreComercial = typeof parsed.nombre_comercial === 'string' ? parsed.nombre_comercial.trim() : '';
+    if (nombreComercial && nombreComercial !== producto && !variantes.includes(nombreComercial)) {
+      variantes.push(nombreComercial);
+    }
+    // NO agregar el producto original con prefijos internos como variante
+    const productoSinCodigo = preprocesarProducto(producto);
+    if (productoSinCodigo && !variantes.some(v => v.toLowerCase().includes(productoSinCodigo.toLowerCase().slice(0, 15)))) {
+      variantes.push(productoSinCodigo);
+    }
     return {
       marca: parsed.marca || null,
       modelo: parsed.modelo || null,
       sku: parsed.sku || null,
       specs: Array.isArray(parsed.specs) ? parsed.specs.filter(Boolean) : [],
-      variantes: variantes.slice(0, 3),
+      variantes: variantes.slice(0, 4), // Subir a 4 variantes para mayor cobertura
       categoria_ia: parsed.categoria_ia || null,
       es_especifico: Boolean(parsed.es_especifico),
     };
@@ -562,9 +714,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'SERPER_API_KEY no configurada' }, { status: 500 });
   }
 
+  // ── PREPROCESAMIENTO: Limpiar nombre del producto antes de buscar ────────────
+  // Elimina códigos internos de licitación (B, C2, B SC, etc.), normaliza dimensiones
+  const productoLimpio = preprocesarProducto(producto);
+
   // ── ETAPA 0: Query Understanding con IA ─────────────────────────────────────
-  const entidades = await entenderConsultaIA(producto, contexto, region);
-  const variantes = entidades.variantes.length ? entidades.variantes : [producto];
+  // Enviamos el nombre limpio a DeepSeek para mejores variantes de búsqueda
+  const entidades = await entenderConsultaIA(productoLimpio, contexto, region);
+  const variantes = entidades.variantes.length ? entidades.variantes : [productoLimpio];
 
   let crudos: ItemRaw[] = [];
   try {
@@ -597,16 +754,19 @@ export async function GET(req: NextRequest) {
       vistos.add(k);
       return true;
     })
-    .map((r) => mapearResultado(r, producto, analisis, conversion, entidades))
+    // Usar productoLimpio para el scoring (sin prefijos internos ni formatos técnicos)
+    .map((r) => mapearResultado(r, productoLimpio, analisis, conversion, entidades))
     .sort((a, b) => b.score - a.score)
     .slice(0, minimo * 3);
 
   // ── ETAPA 2: Validación IA (para productos específicos o score bajo) ────────
   const scoreTop = resultadosMapeados[0]?.score ?? 0;
-  const necesitaValidacion = scoreTop < 75 || Boolean(entidades.marca || entidades.modelo || entidades.sku);
+  // Bajar el umbral: si tenemos nombre limpio diferente al original, la validación IA es más necesaria
+  const necesitaValidacion = scoreTop < 80 || Boolean(entidades.marca || entidades.modelo || entidades.sku) || productoLimpio !== producto;
   let resultadosFinales = resultadosMapeados;
   if (necesitaValidacion && resultadosMapeados.length >= 3) {
-    resultadosFinales = await validarLoteIA(producto, entidades, resultadosMapeados);
+    // Pasar el nombre limpio a la validación IA también
+    resultadosFinales = await validarLoteIA(productoLimpio, entidades, resultadosMapeados);
     // Re-ordenar post-validación
     resultadosFinales.sort((a, b) => {
       const aCorr = a.producto_correcto_ia !== false ? 1 : 0;
@@ -621,6 +781,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     numero_item: numeroItem,
     producto,
+    producto_limpio: productoLimpio !== producto ? productoLimpio : undefined,
     categoria,
     resultados: resultadosSlice,
     total_encontrados: resultadosSlice.length,
