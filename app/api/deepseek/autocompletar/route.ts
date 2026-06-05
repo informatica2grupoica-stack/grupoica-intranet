@@ -28,7 +28,7 @@ Responde SOLO con JSON: {"c1":"", "c2":"", "c3":"", "c4":""}`;
     const result = await callDeepSeek([
       { role: "system", content: "Eres un analizador de nombres de productos. Solo respondes con JSON." },
       { role: "user", content: prompt }
-    ], 0.2, 200);
+    ], { temperature: 0.2, maxTokens: 200 });
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });

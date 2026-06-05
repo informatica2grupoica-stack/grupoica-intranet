@@ -46,7 +46,7 @@ Responde SOLO con un JSON: {"sku": "60XXXXXXX", "explicacion": "breve razón del
     const result = await callDeepSeek([
       { role: "system", content: "Eres un generador de SKUs. Solo respondes con JSON válido." },
       { role: "user", content: prompt }
-    ], 0.2, 200);
+    ], { temperature: 0.2, maxTokens: 200 });
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });

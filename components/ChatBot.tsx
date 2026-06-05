@@ -58,7 +58,7 @@ export default function ChatBot() {
   const [isMinimized, setIsMinimized] = useState(false);
   const [mensajes, setMensajes]   = useState<Mensaje[]>([{
     id: '1',
-    texto: '✨ Hola, soy tu asistente Gemini. Puedo buscar productos, clientes, consultar stock, cambiar precios y responder preguntas sobre tu base de datos.\n\n¿En qué te ayudo?',
+    texto: '👋 Hola, soy tu asistente IA. Puedo buscar productos, clientes, consultar stock, cambiar precios y responder preguntas sobre tu base de datos.\n\n¿En qué te ayudo?',
     esUsuario: false,
     timestamp: new Date(),
   }]);
@@ -318,8 +318,8 @@ export default function ChatBot() {
                   <Bot size={15} />
                 </div>
                 <div>
-                  <p className="font-bold text-sm leading-none">Asistente Gemini</p>
-                  <p className="text-[9px] text-slate-400 mt-0.5">Grupo ICA · IA</p>
+                  <p className="font-bold text-sm leading-none">Asistente IA</p>
+                  <p className="text-[9px] text-slate-400 mt-0.5">Grupo ICA · DeepSeek V3</p>
                 </div>
                 {!cargandoDatos && (
                   <div className="flex gap-1 ml-1">
@@ -449,7 +449,7 @@ export default function ChatBot() {
                   </div>
                   <p className="text-[9px] text-slate-400 text-center mt-2 flex items-center justify-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Gemini 2.0 Flash · {productos.length} prods · {clientes.length} clientes
+                    DeepSeek V3 · {productos.length} prods · {clientes.length} clientes
                   </p>
                 </div>
               </>

@@ -27,7 +27,7 @@ Las recomendaciones deben ser acciones prácticas.`;
     const result = await callDeepSeek([
       { role: "system", content: "Eres un analista de inventario experto. Responde SOLO con JSON válido." },
       { role: "user", content: prompt }
-    ], 0.3, 500);
+    ], { temperature: 0.3, maxTokens: 500 });
 
     if (result.error) {
       return NextResponse.json({ 

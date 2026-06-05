@@ -37,7 +37,7 @@ Responde SOLO con JSON: {"esDuplicado": true/false, "recomendacion": "mensaje co
     const result = await callDeepSeek([
       { role: "system", content: "Eres un validador de productos. Solo respondes con JSON." },
       { role: "user", content: prompt }
-    ], 0.1, 200);
+    ], { temperature: 0.1, maxTokens: 200 });
 
     if (result.error) {
       return NextResponse.json({ existe: productosSimilares.length > 0, productosSimilares });

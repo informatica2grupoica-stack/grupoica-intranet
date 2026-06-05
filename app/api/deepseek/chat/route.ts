@@ -1,7 +1,7 @@
 // app/api/deepseek/chat/route.ts
-// Motor del chatbot "Asistente Obuma" v3 — Gemini 2.0 Flash
+// Motor del chatbot "Asistente Obuma" v4 — DeepSeek-V3
 import { NextResponse } from 'next/server';
-import { callGemini, toGeminiMessages } from '@/app/lib/gemini/client';
+import { callDeepSeek, buildMessages } from '@/app/lib/deepseek/client';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -252,16 +252,17 @@ REGLAS ESTRICTAS:
 6. Sé conciso: respuestas claras y al grano, sin relleno.
 7. Si un producto tiene precio en 0, indícalo como "precio no registrado".`;
 
-    const geminiMessages = toGeminiMessages(historialReciente);
-    geminiMessages.push({ role: 'user', parts: [{ text: pregunta }] });
-
-    const result = await callGemini(systemPrompt, geminiMessages, { temperature: 0.3, maxTokens: 800 });
+    const messages = buildMessages(systemPrompt, historialReciente, pregunta);
+    const result = await callDeepSeek(messages, { temperature: 0.3, maxTokens: 1200, retries: 3 });
 
     if (result.error) {
-      console.error('[chatbot] Gemini error:', result.error);
-      const msg = result.error === 'RATE_LIMIT'
-        ? '⏳ El asistente está ocupado (límite de solicitudes). Espera unos segundos e intenta de nuevo.'
-        : `🔌 Error del asistente: ${result.error}`;
+      console.error('[chatbot] DeepSeek error:', result.error);
+      const msg =
+        result.error === 'RATE_LIMIT'   ? '⏳ Demasiadas solicitudes. Espera un momento e intenta de nuevo.' :
+        result.error === 'TIMEOUT'      ? '⏳ El asistente tardó demasiado. Intenta de nuevo.' :
+        result.error === 'SERVER_ERROR' ? '🔌 Error temporal del servidor. Intenta en unos segundos.' :
+        result.error.includes('no configurada') ? '⚙️ La API key de IA no está configurada.' :
+        `🔌 Error: ${result.error}`;
       return NextResponse.json({ respuesta: msg, error: result.error }, { status: 500 });
     }
 
