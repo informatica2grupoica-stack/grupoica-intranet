@@ -160,24 +160,32 @@ const PALABRAS_GLOSARIO: [RegExp, string][] = [
 
 // ─── Simplificador para retry cuando Serper devuelve 0 resultados ─────────────
 // Elimina cantidades y especificaciones que confunden la búsqueda
-function simplificarParaBusqueda(nombre: string): string {
-  let n = nombre
-    // Quitar cantidades al final: "100 un", "100 U/N", "100 Unidades", "Pack de 25"
+// ─── Limpia el nombre del producto para usarlo como query de búsqueda ────────
+// Convierte símbolos problemáticos en texto, elimina cantidades y ruido
+function limpiarParaQuery(nombre: string): string {
+  return nombre
+    // Convertir pulgadas (" o '') a texto ANTES de todo
+    .replace(/(\d)\s*[""]\s*/g, '$1 pulg ')   // 3/4" → 3/4 pulg
+    .replace(/(\d)\s*'\s*/g, '$1 pulg ')       // 3/4' → 3/4 pulg
+    // Quitar cantidades al final: "100 un", "100 U/N", "100 Unidades", "Pack de 25", "2 Unidades"
     .replace(/\s+\d+\s*U\/N\s*$/i, '')
     .replace(/\s+\(?\d+\s*un(?:idades?)?\)?$/i, '')
     .replace(/\s+Pack\s+de\s+\d+$/i, '')
     .replace(/\s+\d+\s*(?:unidades?|piezas?|pzs?)$/i, '')
-    // Quitar bloques entre paréntesis con cantidades: "(100 un)", "(pack 25)"
+    // Quitar bloques entre paréntesis con cantidades: "(100 un)", "(pack 25)", "(2 Unidades)"
     .replace(/\s*\(\d+[^)]*\)/gi, '')
-    .replace(/\s*\([^)]{0,8}\)/gi, '')  // paréntesis cortos
-    // Quitar "equivalente" y variantes que añaden ruido
+    .replace(/\s*\([^)]{0,8}\)/gi, '')
+    // Quitar "equivalente" y similares
     .replace(/\s+equivalente\b/i, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
+}
 
+function simplificarParaBusqueda(nombre: string): string {
+  let n = limpiarParaQuery(nombre);
   // Si queda muy largo, usar solo las primeras 5 palabras (el nombre comercial)
   const palabras = n.split(/\s+/);
   if (palabras.length > 5) n = palabras.slice(0, 5).join(' ');
-
   return n.trim() || nombre;
 }
 
@@ -751,14 +759,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'SERPER_API_KEY no configurada' }, { status: 500 });
   }
 
-  // ── PREPROCESAMIENTO: Limpiar nombre del producto antes de buscar ────────────
-  // Elimina códigos internos de licitación (B, C2, B SC, etc.), normaliza dimensiones
+  // ── PREPROCESAMIENTO ─────────────────────────────────────────────────────────
   const productoLimpio = preprocesarProducto(producto);
+  // Query directo: nombre limpio con pulgadas convertidas a texto (safe para Serper)
+  const queryDirecto = limpiarParaQuery(productoLimpio);
 
   // ── ETAPA 0: Query Understanding con IA ─────────────────────────────────────
-  // Enviamos el nombre limpio a DeepSeek para mejores variantes de búsqueda
   const entidades = await entenderConsultaIA(productoLimpio, contexto, region);
-  const variantes = entidades.variantes.length ? entidades.variantes : [productoLimpio];
+  // SIEMPRE incluir el query directo (nombre exacto del Excel limpio) como primera opción
+  // Esto garantiza que productos como "Pomel 3/4 pulg", "Perno Coche 5/16", etc. se busquen directo
+  const variantesIA = entidades.variantes.filter(v => v.trim().length > 3);
+  const variantes = [queryDirecto, ...variantesIA.filter(v =>
+    v.toLowerCase().slice(0, 10) !== queryDirecto.toLowerCase().slice(0, 10)
+  )].filter(Boolean);
 
   let crudos: ItemRaw[] = [];
   try {
@@ -775,10 +788,10 @@ export async function GET(req: NextRequest) {
       crudos.push(...reintento);
     }
 
-    // Reintento 2: si CERO resultados, buscar con nombre simplificado (sin cantidades)
+    // Reintento 2: si CERO resultados, buscar con nombre simplificado
     if (crudos.length === 0) {
       const simplificado = simplificarParaBusqueda(productoLimpio);
-      if (simplificado !== productoLimpio && simplificado.length > 3) {
+      if (simplificado.length > 3) {
         const [shop2, org2] = await Promise.all([
           buscarSerperShopping([simplificado], Math.max(minimo, 10), region),
           buscarSerperOrganico(simplificado, 5, region),
