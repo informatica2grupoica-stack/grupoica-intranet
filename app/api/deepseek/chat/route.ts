@@ -1,5 +1,5 @@
 // app/api/deepseek/chat/route.ts
-// Motor del chatbot "Asistente Obuma" v4 — DeepSeek-V3
+// Motor del chatbot "Asistente IA" v5 — DeepSeek-V3 — responde todo
 import { NextResponse } from 'next/server';
 import { callDeepSeek, buildMessages } from '@/app/lib/deepseek/client';
 import { createClient } from '@supabase/supabase-js';
@@ -192,25 +192,50 @@ async function estadisticas() {
   return tablas.reduce((acc, t, i) => ({ ...acc, [t]: counts[i].count || 0 }), {} as Record<string, number>);
 }
 
+// Detecta si la pregunta es de conocimiento general (no necesita BD)
+function esConsultaGeneral(p: string): boolean {
+  const pat = /\b(clima|tiempo|lluvia|temperatura|pronostico|pronóstico|hora|fecha|hoy|dia|día|dolar|dólar|uf|utm|euro|precio dolar|cotizacion|cotización|noticias|chiste|broma|historia|curiosidad|receta|definicion|definición|traducir|traduccion|qué es|que es|cómo funciona|como funciona|quién es|quien es|cuál es la capital|mundial|deporte|fútbol|futbol)\b/i;
+  return pat.test(p);
+}
+
+// Obtiene indicadores económicos actuales
+async function obtenerIndicadores(): Promise<string> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://grupoica-intranet.vercel.app'}/api/indicadores`);
+    if (!res.ok) return '';
+    const data = await res.json();
+    return `UF: $${data.uf?.valor?.toLocaleString('es-CL')} | UTM: $${data.utm?.valor?.toLocaleString('es-CL')} | USD: $${data.dolar?.valor?.toLocaleString('es-CL')} | EUR: $${data.euro?.valor?.toLocaleString('es-CL')}`;
+  } catch { return ''; }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const pregunta: string = (body.pregunta || '').trim();
     const usuarioRol: string = body.usuario_rol || 'usuario';
     const historialReciente: Array<{ role: string; content: string }> = Array.isArray(body.historial_reciente)
-      ? body.historial_reciente.slice(-6)
+      ? body.historial_reciente.slice(-8)
       : [];
+    const usuarioNombre: string = body.usuario_nombre || 'Usuario';
 
     if (!pregunta) {
       return NextResponse.json({ error: 'La pregunta no puede estar vacía' }, { status: 400 });
     }
 
-    let tablas = detectarTablas(pregunta);
+    // Fecha y hora actual en Chile
+    const ahora = new Date();
+    const fechaChile = ahora.toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Santiago' });
+    const horaChile = ahora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' });
+
+    // Determinar si necesita consultar la BD o si es consulta general
+    const esGeneral = esConsultaGeneral(pregunta);
+    let tablas = esGeneral ? [] : detectarTablas(pregunta);
     const esConteo = /\bcu[aá]nt|\bcantidad\b|\btotal(es)?\b|\bresumen\b|\bestad[ií]stica/.test(normalizar(pregunta));
-    if (tablas.length === 0 && !esConteo) tablas = ['productos_obuma'];
+    if (!esGeneral && tablas.length === 0 && !esConteo) tablas = ['productos_obuma'];
 
     let bloquesDatos = '';
     let totalEncontrado = 0;
+
     if (tablas.length > 0) {
       const resultados = await Promise.all(tablas.map((t) => fetchTabla(t, pregunta)));
       tablas.forEach((t, i) => {
@@ -220,37 +245,47 @@ export async function POST(req: Request) {
         bloquesDatos += datos.length ? JSON.stringify(datos, null, 1) : '(sin coincidencias)';
       });
     }
-    if (esConteo || tablas.length === 0) {
+    if (!esGeneral && (esConteo || tablas.length === 0)) {
       const stats = await estadisticas();
       bloquesDatos += `\n\n### RESUMEN GENERAL\n${JSON.stringify(stats, null, 1)}`;
     }
 
-    const aprendido = await ejemplosAprendidos(pregunta);
+    const [aprendido, indicadores] = await Promise.all([
+      ejemplosAprendidos(pregunta),
+      obtenerIndicadores(),
+    ]);
 
     const vistaPrecios =
       ['admin', 'superuser', 'jefe'].includes(usuarioRol)
         ? 'Puedes mostrar precio de COSTO y de VENTA, márgenes y datos sensibles.'
         : usuarioRol === 'vendedor'
-        ? 'Solo precio de VENTA (precio_total con IVA) y stock. NO menciones precio de costo ni márgenes.'
+        ? 'Solo precio de VENTA (precio_total con IVA) y stock. NO precio de costo ni márgenes.'
         : 'Muestra precio de venta y stock. Evita datos financieros sensibles.';
 
-    const systemPrompt = `Eres "Asistente Obuma", el asistente interno de Grupo ICA Chile. Profesional, directo y útil. Respondes siempre en español.
+    const systemPrompt = `Eres el asistente IA interno de Comercial MP (Grupo ICA Chile). Eres inteligente, amable, directo y sabes de todo. Respondes SIEMPRE en español chileno natural.
+
+📅 FECHA Y HORA ACTUAL: ${fechaChile}, ${horaChile} (hora de Santiago, Chile)
+💱 INDICADORES ECONÓMICOS HOY: ${indicadores || 'no disponibles'}
+👤 USUARIO: ${usuarioNombre} | ROL: ${usuarioRol}
 
 ${CONOCIMIENTO_SISTEMA}
 
-ROL DEL USUARIO: ${usuarioRol}. ${vistaPrecios}
+PERMISOS DE PRECIOS: ${vistaPrecios}
 
-DATOS REALES DE LA BASE DE DATOS (úsalos como ÚNICA fuente de verdad):${bloquesDatos}
-${aprendido ? `\n\nEJEMPLOS DE RESPUESTAS BIEN VALORADAS:\n${aprendido}` : ''}
+${bloquesDatos ? `📊 DATOS REALES DE LA BASE DE DATOS:${bloquesDatos}` : ''}
 
-REGLAS ESTRICTAS:
-1. Responde SOLO con los datos reales de arriba. NUNCA inventes productos, precios, SKU, clientes ni cifras.
-2. Si no hay coincidencias, dilo claro y ofrece alternativas.
-3. Formatea precios en pesos chilenos: $1.234.567. El IVA es 19%.
-4. Usa **negritas** para lo importante y viñetas (•) para listas. Emojis con moderación.
-5. Si la pregunta cruza temas, conecta los datos de las distintas secciones.
-6. Sé conciso: respuestas claras y al grano, sin relleno.
-7. Si un producto tiene precio en 0, indícalo como "precio no registrado".`;
+${aprendido ? `💡 EJEMPLOS DE RESPUESTAS BIEN VALORADAS ANTES:\n${aprendido}` : ''}
+
+INSTRUCCIONES:
+1. Responde CUALQUIER pregunta — negocio, clima, cultura general, chistes, cálculos, conversación, lo que sea.
+2. Para preguntas del negocio: usa SOLO los datos reales de arriba. NUNCA inventes productos, SKU, precios o clientes.
+3. Si no tienes datos de algo específico, dilo honestamente y sugiere alternativas.
+4. Para preguntas generales (hora, fecha, indicadores, clima general): responde con el contexto que tienes.
+5. Para clima específico de una ciudad: di que no tienes datos meteorológicos en tiempo real pero puedes dar info general.
+6. Formatea precios en pesos chilenos: $1.234.567. IVA Chile = 19%.
+7. Usa **negritas** y • viñetas cuando ayude a la claridad. Emojis con moderación.
+8. Respuestas concisas y útiles — sin relleno innecesario.
+9. Si te hacen una broma o pregunta informal, responde de forma natural y amigable.`.trim();
 
     const messages = buildMessages(systemPrompt, historialReciente, pregunta);
     const result = await callDeepSeek(messages, { temperature: 0.3, maxTokens: 1200, retries: 3 });

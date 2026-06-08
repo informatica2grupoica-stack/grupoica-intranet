@@ -3,14 +3,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Send, Minimize2, Maximize2, Bot, History, RefreshCw } from 'lucide-react';
+import { X, Send, Minimize2, Maximize2, Bot, History, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Mensaje {
   id: string;
+  historialId?: string;   // ID en chatbot_historial para feedback
   texto: string;
   esUsuario: boolean;
   timestamp: Date;
+  feedback?: boolean | null; // null=sin dar, true=👍, false=👎
   detalles?: {
     productosEncontrados?: number;
     criterio?: string;
@@ -177,11 +179,25 @@ export default function ChatBot() {
     return { esAccion: false, respuesta: '', exitosa: false };
   };
 
-  const guardarHistorial = async (pregunta: string, respuesta: string, productosEncontrados = 0) => {
-    if (!usuario) return;
-    await fetch('/api/chatbot/historial', {
+  const guardarHistorial = async (pregunta: string, respuesta: string, productosEncontrados = 0): Promise<string | null> => {
+    if (!usuario) return null;
+    try {
+      const res = await fetch('/api/chatbot/historial', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: usuario.id, usuario_nombre: usuario.nombre, pregunta, respuesta, productos_encontrados: productosEncontrados }),
+      });
+      const data = await res.json();
+      return data?.data?.id ?? null;
+    } catch { return null; }
+  };
+
+  const darFeedback = async (mensajeId: string, historialId: string, valor: boolean) => {
+    // Actualizar UI inmediatamente
+    setMensajes(prev => prev.map(m => m.id === mensajeId ? { ...m, feedback: valor } : m));
+    // Persistir en BD
+    await fetch('/api/chatbot/feedback', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_id: usuario.id, usuario_nombre: usuario.nombre, pregunta, respuesta, productos_encontrados: productosEncontrados }),
+      body: JSON.stringify({ historial_id: historialId, feedback: valor, usuario_id: usuario?.id }),
     }).catch(() => {});
   };
 
@@ -224,13 +240,22 @@ export default function ChatBot() {
 
       const response = await fetch('/api/deepseek/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pregunta, usuario_rol: usuario?.rol || 'usuario', historial_reciente: historialReciente, contexto: { productos, clientes } }),
+        body: JSON.stringify({ pregunta, usuario_rol: usuario?.rol || 'usuario', usuario_nombre: usuario?.nombre || 'Usuario', historial_reciente: historialReciente, contexto: { productos, clientes } }),
       });
       const data = await response.json();
       const respuestaTexto = data.respuesta || 'Lo siento, no pude procesar tu pregunta.';
 
-      await guardarHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
-      setMensajes(prev => [...prev, { id: (Date.now() + 1).toString(), texto: respuestaTexto, esUsuario: false, timestamp: new Date(), detalles: { productosEncontrados: data.productos_encontrados || 0, criterio: data.criterio_busqueda } }]);
+      const historialId = await guardarHistorial(pregunta, respuestaTexto, data.productos_encontrados || 0);
+      const msgId = (Date.now() + 1).toString();
+      setMensajes(prev => [...prev, {
+        id: msgId,
+        historialId: historialId ?? undefined,
+        texto: respuestaTexto,
+        esUsuario: false,
+        timestamp: new Date(),
+        feedback: null,
+        detalles: { productosEncontrados: data.productos_encontrados || 0, criterio: data.criterio_busqueda },
+      }]);
     } catch {
       setMensajes(prev => [...prev, { id: (Date.now() + 1).toString(), texto: '❌ Error de conexión. Intenta nuevamente.', esUsuario: false, timestamp: new Date() }]);
     } finally {
@@ -264,14 +289,35 @@ export default function ChatBot() {
         <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
         <div className={`text-[9px] mt-1.5 flex justify-between items-center gap-2 ${msg.esUsuario ? 'text-blue-200' : 'text-slate-400'}`}>
           <span>{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          {msg.detalles?.productosEncontrados !== undefined && msg.detalles.productosEncontrados > 0 && (
-            <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
-              🎯 {msg.detalles.productosEncontrados} resultados
-            </span>
-          )}
-          {msg.detalles?.esAccion && msg.detalles.accionExitosa && (
-            <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">✅ Completado</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {msg.detalles?.productosEncontrados !== undefined && msg.detalles.productosEncontrados > 0 && (
+              <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
+                🎯 {msg.detalles.productosEncontrados} resultados
+              </span>
+            )}
+            {msg.detalles?.esAccion && msg.detalles.accionExitosa && (
+              <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">✅ Completado</span>
+            )}
+            {/* Feedback 👍👎 solo para mensajes del asistente con historialId */}
+            {!msg.esUsuario && msg.historialId && (
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={() => darFeedback(msg.id, msg.historialId!, true)}
+                  className={`p-0.5 rounded transition-all ${msg.feedback === true ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-400'}`}
+                  title="Buena respuesta"
+                >
+                  <ThumbsUp size={10} />
+                </button>
+                <button
+                  onClick={() => darFeedback(msg.id, msg.historialId!, false)}
+                  className={`p-0.5 rounded transition-all ${msg.feedback === false ? 'text-rose-400' : 'text-slate-300 hover:text-rose-400'}`}
+                  title="Mala respuesta"
+                >
+                  <ThumbsDown size={10} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

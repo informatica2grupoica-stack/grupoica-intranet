@@ -8,7 +8,7 @@ import {
   ArrowRight, CheckCircle2, GraduationCap, Building2, Gift,
   Smile, Heart, Users, Package, AlertCircle, Sparkles,
   AlertTriangle, X, ChevronRight, TrendingDown, TrendingUp,
-  Minus, Search, Star, Calendar
+  Minus, Search, Star, Calendar, DollarSign, RefreshCw
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
@@ -126,6 +126,10 @@ export default function HomePage() {
   const [productosSinStock, setProductosSinStock] = useState(0);
   const [cumpleHoy, setCumpleHoy] = useState<Cumpleaños[]>([]);
 
+  // ── Indicadores económicos
+  const [indicadores, setIndicadores] = useState<any>(null);
+  const [indicadoresLoading, setIndicadoresLoading] = useState(true);
+
   // ── Global KPIs
   const [totalEmpleados, setTotalEmpleados] = useState(0);
   const [totalProveedores, setTotalProveedores] = useState(0);
@@ -149,8 +153,18 @@ export default function HomePage() {
 
   // Load historial separately (processed endpoint, independent)
   useEffect(() => {
-    if (!loading) cargarHistorial();
+    if (!loading) {
+      cargarHistorial();
+      cargarIndicadores();
+    }
   }, [loading]);
+
+  const cargarIndicadores = async () => {
+    try {
+      const res = await fetch('/api/indicadores');
+      if (res.ok) setIndicadores(await res.json());
+    } catch { /* silent */ } finally { setIndicadoresLoading(false); }
+  };
 
   const cargarHistorial = async () => {
     setHistorialLoading(true);
@@ -474,6 +488,55 @@ export default function HomePage() {
               </div>
             </div>
           )}
+        </div>
+      </motion.div>
+
+      {/* ── Indicadores Económicos Chile ─────────────────────────────── */}
+      <motion.div variants={fadeUp}>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-50">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-[#2563EB]" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Indicadores Económicos Chile</span>
+            </div>
+            <button onClick={cargarIndicadores} className="text-slate-300 hover:text-[#2563EB] transition-colors" title="Actualizar">
+              <RefreshCw className={`w-3.5 h-3.5 ${indicadoresLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-50">
+            {(['dolar','uf','utm','euro'] as const).map((key) => {
+              const labels: Record<string,{label:string;sym:string}> = {
+                dolar:{label:'Dólar USD',sym:'$'},
+                uf:{label:'UF',sym:'$'},
+                utm:{label:'UTM',sym:'$'},
+                euro:{label:'Euro EUR',sym:'$'}
+              };
+              const ind = indicadores?.[key];
+              const { label, sym } = labels[key];
+              const tendencia = ind?.tendencia;
+              return (
+                <div key={key} className="px-5 py-4 flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                  {indicadoresLoading || !ind ? (
+                    <div className="h-7 w-24 bg-slate-100 animate-pulse rounded" />
+                  ) : (
+                    <>
+                      <span className="text-xl font-black text-slate-800 tabular-nums">
+                        {sym}{ind.valor.toLocaleString('es-CL', { maximumFractionDigits: 2 })}
+                      </span>
+                      <div className={`flex items-center gap-1 text-[10px] font-bold ${
+                        tendencia === 'alza' ? 'text-rose-500' : tendencia === 'baja' ? 'text-emerald-500' : 'text-slate-400'
+                      }`}>
+                        {tendencia === 'alza' ? <TrendingUp className="w-3 h-3" /> : tendencia === 'baja' ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                        <span>{ind.variacion > 0 ? '+' : ''}{ind.variacion}%</span>
+                        <span className="text-slate-300 font-normal">vs ayer</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </motion.div>
 
