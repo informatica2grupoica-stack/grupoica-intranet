@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
       excel_base64 = null,
       cols_excel = null,
       sheet_name = 'COSTEO',
+      // Contexto de búsqueda
+      region = null,
+      contexto = null,
     } = body;
 
     if (!nombre?.trim()) {
@@ -73,6 +76,9 @@ export async function POST(req: NextRequest) {
         excel_base64,
         cols_excel,
         sheet_name,
+        // Contexto de búsqueda
+        region,
+        contexto,
         // Datos del usuario autenticado
         user_id: user.id,
         user_email: user.email,

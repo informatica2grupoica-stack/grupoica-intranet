@@ -869,23 +869,24 @@ export async function GET(req: NextRequest) {
     : resultadosFinales.slice(0, minimo);
 
   // ── Marcar resultados locales de la región ───────────────────────────────────
+  // Claves normalizadas (sin acentos, minúsculas) para coincidir con regionKey
   const REGION_KEYWORDS: Record<string, string[]> = {
-    'valparaíso': ['valpo', 'valparaiso', 'viña', 'quillota', 'sanantonio', 'losandes'],
+    'valparaiso': ['valpo', 'valparaiso', 'vina', 'quillota', 'sanantonio', 'losandes'],
     'metropolitana': ['santiago', 'stgo', 'providencia', 'lascondes', 'nunoa', 'maipu'],
-    'biobío': ['concepcion', 'talcahuano', 'biobio', 'lota', 'coronel'],
+    'biobio': ['concepcion', 'talcahuano', 'biobio', 'lota', 'coronel'],
     'maule': ['talca', 'curico', 'linares', 'constitucion'],
     "o'higgins": ['rancagua', 'ohiggins', 'sanfernando'],
-    'araucanía': ['temuco', 'araucania', 'villarrica'],
-    'los lagos': ['puertomomontt', 'osorno', 'loslagos', 'chiloe'],
-    'aysén': ['aysen', 'coyhaique'],
+    'la araucania': ['temuco', 'araucania', 'villarrica'],
+    'los lagos': ['puertomontt', 'osorno', 'loslagos', 'chiloe'],
+    'aysen': ['aysen', 'coyhaique'],
     'antofagasta': ['antofagasta', 'calama'],
     'coquimbo': ['laserena', 'coquimbo', 'ovalle'],
     'atacama': ['copiapo', 'vallenar'],
-    'tarapacá': ['iquique', 'altohospicio'],
+    'tarapaca': ['iquique', 'altohospicio'],
     'arica y parinacota': ['arica'],
     'magallanes': ['puntaarenas', 'magallanes'],
-    'ñuble': ['chilllan', 'chilian'],
-    'los ríos': ['valdivia', 'losrios'],
+    'nuble': ['chillan', 'nuble'],
+    'los rios': ['valdivia', 'losrios'],
   };
   const regionKey = (region || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const kwsRegion = REGION_KEYWORDS[regionKey] || (region ? [regionKey.replace(/\s+/g, '')] : []);

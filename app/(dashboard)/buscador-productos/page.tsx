@@ -302,17 +302,6 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
 };
 
 // ─── Modal Preview Excel ──────────────────────────────────────────────────────
-const REGIONES_MODAL = [
-  { value: 'Arica y Parinacota', abbr: 'XV' }, { value: 'Tarapacá', abbr: 'I' },
-  { value: 'Antofagasta', abbr: 'II' }, { value: 'Atacama', abbr: 'III' },
-  { value: 'Coquimbo', abbr: 'IV' }, { value: 'Valparaíso', abbr: 'V' },
-  { value: 'Metropolitana', abbr: 'RM' }, { value: "O'Higgins", abbr: 'VI' },
-  { value: 'Maule', abbr: 'VII' }, { value: 'Ñuble', abbr: 'XVI' },
-  { value: 'Biobío', abbr: 'VIII' }, { value: 'La Araucanía', abbr: 'IX' },
-  { value: 'Los Ríos', abbr: 'XIV' }, { value: 'Los Lagos', abbr: 'X' },
-  { value: 'Aysén', abbr: 'XI' }, { value: 'Magallanes', abbr: 'XII' },
-];
-
 const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, region, setRegion, contexto, setContexto }: {
   productos: ProductoExcel[];
   onClose: () => void;
@@ -354,8 +343,8 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
             className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#2563EB]/20 text-slate-700"
           >
             <option value="">🌎 Todo Chile (sin filtro)</option>
-            {REGIONES_MODAL.map(r => (
-              <option key={r.value} value={r.value}>{r.abbr} — {r.value}</option>
+            {REGIONES_CHILE.map(r => (
+              <option key={r.value} value={r.value}>{r.abbr} — {r.label}</option>
             ))}
           </select>
           {/* Chips rápidos */}
@@ -1285,6 +1274,8 @@ export default function MonitorMasivoICA() {
         excel_base64,
         cols_excel: colsExcel,
         sheet_name: sheetNameActual,
+        region: region || null,
+        contexto: contexto || null,
       };
 
       const res = await fetch('/api/busquedas-guardadas', {
@@ -1350,6 +1341,10 @@ export default function MonitorMasivoICA() {
     // Restaurar posición de columnas y nombre de pestaña
     if (b.cols_excel) setColsExcel(b.cols_excel);
     if (b.sheet_name) setSheetNameActual(b.sheet_name);
+
+    // Restaurar región y contexto
+    if (b.region) cambiarRegion(b.region); else cambiarRegion('');
+    if (b.contexto != null) setContexto(b.contexto);
   };
 
   // ─── Restaurar por ID directo (desde sessionStorage — página de búsquedas) ───
