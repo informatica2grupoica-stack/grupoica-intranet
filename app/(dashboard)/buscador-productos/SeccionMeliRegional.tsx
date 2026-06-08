@@ -8,26 +8,6 @@ const REGIONES = [
   'La Araucanía','Los Ríos','Los Lagos','Aysén','Magallanes',
 ];
 
-// Aliases para mapear nombres de región al formato que devuelve ML
-const ALIASES_REGION: Record<string, string[]> = {
-  'Metropolitana':      ['Región Metropolitana', 'Metropolitana', 'Metropolitan'],
-  'Valparaíso':         ['Valparaíso', 'Valparaiso'],
-  'Biobío':             ['Biobío', 'Bio-Bio', 'Bío-Bío', 'Biobio'],
-  'La Araucanía':       ['Araucanía', 'La Araucanía', 'Araucania'],
-  'Los Lagos':          ['Los Lagos'],
-  'Maule':              ['Maule'],
-  "O'Higgins":          ["O'Higgins", 'Libertador General'],
-  'Coquimbo':           ['Coquimbo'],
-  'Antofagasta':        ['Antofagasta'],
-  'Tarapacá':           ['Tarapacá', 'Tarapaca'],
-  'Atacama':            ['Atacama'],
-  'Ñuble':              ['Ñuble', 'Nuble'],
-  'Los Ríos':           ['Los Ríos', 'Los Rios'],
-  'Aysén':              ['Aysén', 'Aysen'],
-  'Magallanes':         ['Magallanes'],
-  'Arica y Parinacota': ['Arica y Parinacota', 'Arica'],
-};
-
 interface MeliItem {
   id: string;
   titulo: string;
@@ -60,33 +40,12 @@ export default function SeccionMeliRegional() {
     setItems([]);
     setBuscado(false);
     try {
-      // Llamada directa al API público de ML desde el browser (permite CORS)
-      const url = `https://api.mercadolibre.com/sites/MLC/search?q=${encodeURIComponent(q)}&limit=50&condition=new&sort=price_asc`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`MercadoLibre devolvió ${r.status}`);
+      const params = new URLSearchParams({ q });
+      if (region) params.set('region', region);
+      const r = await fetch(`/api/meli-regional?${params}`);
       const data = await r.json();
-      let results: any[] = data.results || [];
-
-      // Filtrar por región del vendedor si se especificó
-      if (region) {
-        const aliases = ALIASES_REGION[region] || [region];
-        results = results.filter((item: any) => {
-          const estado = item.seller_address?.state?.name || '';
-          return aliases.some(a => estado.toLowerCase().includes(a.toLowerCase()));
-        });
-      }
-
-      const parsed: MeliItem[] = results.slice(0, 24).map((item: any) => ({
-        id: item.id || '',
-        titulo: item.title || '',
-        precio: item.price || 0,
-        imagen: item.thumbnail?.replace('I.jpg', 'O.jpg') || null,
-        link: item.permalink || '',
-        condicion: item.condition === 'new' ? 'Nuevo' : 'Usado',
-        vendedor_estado: item.seller_address?.state?.name || '',
-        vendedor_ciudad: item.seller_address?.city?.name || '',
-      }));
-      setItems(parsed);
+      if (data.error) throw new Error(data.error);
+      setItems(data.items || []);
       setBuscado(true);
     } catch (e: any) {
       setError(e.message || 'Error de conexión');
