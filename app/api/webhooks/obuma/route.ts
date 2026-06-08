@@ -107,6 +107,7 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
   'cliente.updated':       handleClienteUpdated,
   'cliente.updatedVendedor': handleClienteUpdated,
   'venta.created':         handleVentaCreated,
+  'venta.updated':         handleVentaCreated,
   'venta_4.created':       handleVentaCreated,
   'cotizacion.created':    handleCotizacionCreated,
   'tarea.created':         handleTareaCreated,

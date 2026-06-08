@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 // Next.js 16: el antiguo "middleware" ahora se llama "proxy" (runtime nodejs).
 // Protege todas las rutas: sin sesión válida → login (páginas) o 401 (APIs).
 
-const RUTAS_PUBLICAS = ['/login', '/forgot-password', '/update-password', '/auth']
+const RUTAS_PUBLICAS = ['/login', '/forgot-password', '/update-password', '/auth', '/api/webhooks', '/api/indicadores']
 
 function esRutaPublica(path: string): boolean {
   return RUTAS_PUBLICAS.some((r) => path === r || path.startsWith(r + '/'))
