@@ -3,9 +3,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
-import SeccionMercadoPublico from './SeccionMercadoPublico';
-import SeccionMeliRegional from './SeccionMeliRegional';
-import SeccionTiendasGeo from './SeccionTiendasGeo';
 import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X,
@@ -2052,11 +2049,6 @@ export default function MonitorMasivoICA() {
           )}
         </div>
       </main>
-
-      {/* ─── Secciones adicionales ───────────────────────────────────────────── */}
-      <SeccionMercadoPublico />
-      <SeccionMeliRegional />
-      <SeccionTiendasGeo />
 
     </div>
   );

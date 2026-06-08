@@ -8,6 +8,26 @@ const REGIONES = [
   'La Araucanía','Los Ríos','Los Lagos','Aysén','Magallanes',
 ];
 
+// Aliases para mapear nombres de región al formato que devuelve ML
+const ALIASES_REGION: Record<string, string[]> = {
+  'Metropolitana':      ['Región Metropolitana', 'Metropolitana', 'Metropolitan'],
+  'Valparaíso':         ['Valparaíso', 'Valparaiso'],
+  'Biobío':             ['Biobío', 'Bio-Bio', 'Bío-Bío', 'Biobio'],
+  'La Araucanía':       ['Araucanía', 'La Araucanía', 'Araucania'],
+  'Los Lagos':          ['Los Lagos'],
+  'Maule':              ['Maule'],
+  "O'Higgins":          ["O'Higgins", 'Libertador General'],
+  'Coquimbo':           ['Coquimbo'],
+  'Antofagasta':        ['Antofagasta'],
+  'Tarapacá':           ['Tarapacá', 'Tarapaca'],
+  'Atacama':            ['Atacama'],
+  'Ñuble':              ['Ñuble', 'Nuble'],
+  'Los Ríos':           ['Los Ríos', 'Los Rios'],
+  'Aysén':              ['Aysén', 'Aysen'],
+  'Magallanes':         ['Magallanes'],
+  'Arica y Parinacota': ['Arica y Parinacota', 'Arica'],
+};
+
 interface MeliItem {
   id: string;
   titulo: string;
@@ -17,7 +37,6 @@ interface MeliItem {
   condicion: string;
   vendedor_estado: string;
   vendedor_ciudad: string;
-  cantidad: number;
 }
 
 function fmt(n: number) {
@@ -32,7 +51,6 @@ export default function SeccionMeliRegional() {
   const [items, setItems] = useState<MeliItem[]>([]);
   const [error, setError] = useState('');
   const [buscado, setBuscado] = useState(false);
-  const [filtradoPor, setFiltradoPor] = useState<string | null>(null);
 
   async function buscar() {
     const q = query.trim();
@@ -42,16 +60,36 @@ export default function SeccionMeliRegional() {
     setItems([]);
     setBuscado(false);
     try {
-      const params = new URLSearchParams({ q });
-      if (region) params.set('region', region);
-      const r = await fetch(`/api/meli-regional?${params}`);
+      // Llamada directa al API público de ML desde el browser (permite CORS)
+      const url = `https://api.mercadolibre.com/sites/MLC/search?q=${encodeURIComponent(q)}&limit=50&condition=new&sort=price_asc`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`MercadoLibre devolvió ${r.status}`);
       const data = await r.json();
-      if (data.error) { setError(data.error); return; }
-      setItems(data.items || []);
-      setFiltradoPor(data.filtrado_por);
+      let results: any[] = data.results || [];
+
+      // Filtrar por región del vendedor si se especificó
+      if (region) {
+        const aliases = ALIASES_REGION[region] || [region];
+        results = results.filter((item: any) => {
+          const estado = item.seller_address?.state?.name || '';
+          return aliases.some(a => estado.toLowerCase().includes(a.toLowerCase()));
+        });
+      }
+
+      const parsed: MeliItem[] = results.slice(0, 24).map((item: any) => ({
+        id: item.id || '',
+        titulo: item.title || '',
+        precio: item.price || 0,
+        imagen: item.thumbnail?.replace('I.jpg', 'O.jpg') || null,
+        link: item.permalink || '',
+        condicion: item.condition === 'new' ? 'Nuevo' : 'Usado',
+        vendedor_estado: item.seller_address?.state?.name || '',
+        vendedor_ciudad: item.seller_address?.city?.name || '',
+      }));
+      setItems(parsed);
       setBuscado(true);
-    } catch {
-      setError('Error de conexión');
+    } catch (e: any) {
+      setError(e.message || 'Error de conexión');
     } finally {
       setCargando(false);
     }
@@ -69,7 +107,7 @@ export default function SeccionMeliRegional() {
           </div>
           <div className="text-left">
             <h2 className="font-bold text-slate-800 text-sm">MercadoLibre — Búsqueda Regional</h2>
-            <p className="text-[11px] text-slate-400">Filtra productos por región del vendedor · precios reales · sin registro</p>
+            <p className="text-[11px] text-slate-400">Filtra productos por región del vendedor · precios reales</p>
           </div>
         </div>
         {abierto ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
@@ -77,9 +115,8 @@ export default function SeccionMeliRegional() {
 
       {abierto && (
         <div className="mt-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          {/* Barra de búsqueda */}
           <div className="px-5 py-4 border-b border-slate-100 flex gap-3 flex-wrap">
-            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 flex-1 min-w-48 focus-within:ring-2 focus-within:ring-[#FFE600]/40 bg-white">
+            <div className="flex items-center border border-slate-200 rounded-lg px-3 gap-2 flex-1 min-w-48 focus-within:ring-2 focus-within:ring-yellow-300/40 bg-white">
               <Search size={14} className="text-slate-400 flex-shrink-0" />
               <input
                 className="py-2.5 text-sm outline-none w-full bg-transparent placeholder:text-slate-400"
@@ -92,7 +129,7 @@ export default function SeccionMeliRegional() {
             <select
               value={region}
               onChange={e => setRegion(e.target.value)}
-              className="border border-slate-200 rounded-lg text-sm px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-yellow-200 text-slate-700 min-w-44"
+              className="border border-slate-200 rounded-lg text-sm px-3 py-2 bg-white outline-none text-slate-700 min-w-44"
             >
               <option value="">🌎 Todas las regiones</option>
               {REGIONES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -107,17 +144,15 @@ export default function SeccionMeliRegional() {
             </button>
           </div>
 
-          {/* Info banner si hay filtro de región */}
-          {buscado && filtradoPor && (
+          {region && buscado && (
             <div className="px-5 py-2 bg-yellow-50 border-b border-yellow-100 flex items-center gap-2">
               <MapPin size={13} className="text-yellow-600" />
               <span className="text-[11px] text-yellow-700 font-medium">
-                Mostrando vendedores en <strong>{filtradoPor}</strong> · Los vendedores online de ML pueden vender a todo Chile
+                Filtrando vendedores en <strong>{region}</strong> · Los vendedores de ML pueden despachar a todo Chile
               </span>
             </div>
           )}
 
-          {/* Resultados */}
           <div className="px-5 py-4">
             {cargando && (
               <div className="flex items-center gap-3 text-slate-500 py-8 justify-center">
@@ -134,26 +169,17 @@ export default function SeccionMeliRegional() {
             {buscado && !cargando && items.length === 0 && (
               <div className="text-center py-10 text-slate-400">
                 <ShoppingCart size={32} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">
-                  Sin resultados{filtradoPor ? ` de vendedores en ${filtradoPor}` : ''}
-                </p>
-                {filtradoPor && (
-                  <p className="text-xs mt-1">Los vendedores de ML se concentran en la RM. Prueba sin filtro de región.</p>
-                )}
+                <p className="text-sm font-medium">Sin resultados{region ? ` de vendedores en ${region}` : ''}</p>
+                {region && <p className="text-xs mt-1">Los vendedores de ML se concentran en la RM. Prueba sin filtro de región.</p>}
               </div>
             )}
             {items.length > 0 && !cargando && (
               <div>
                 <p className="text-[11px] text-slate-400 mb-3 font-medium">{items.length} producto{items.length !== 1 ? 's' : ''}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {items.map((item) => (
-                    <a
-                      key={item.id}
-                      href={item.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group border border-slate-100 rounded-xl overflow-hidden hover:border-yellow-300 hover:shadow-md transition-all flex flex-col"
-                    >
+                  {items.map(item => (
+                    <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer"
+                      className="group border border-slate-100 rounded-xl overflow-hidden hover:border-yellow-300 hover:shadow-md transition-all flex flex-col">
                       {item.imagen ? (
                         <div className="aspect-square bg-slate-50 overflow-hidden">
                           <img src={item.imagen} alt={item.titulo} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform" />
@@ -169,9 +195,7 @@ export default function SeccionMeliRegional() {
                         {(item.vendedor_estado || item.vendedor_ciudad) && (
                           <div className="flex items-center gap-1 mt-1">
                             <MapPin size={9} className="text-slate-400 flex-shrink-0" />
-                            <p className="text-[9px] text-slate-400 truncate">
-                              {item.vendedor_ciudad || item.vendedor_estado}
-                            </p>
+                            <p className="text-[9px] text-slate-400 truncate">{item.vendedor_ciudad || item.vendedor_estado}</p>
                           </div>
                         )}
                         <div className="flex items-center justify-between mt-1.5">

@@ -35,6 +35,8 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
       { key: "buscador-productos",   path: "/buscador-productos",   label: "Buscador de Productos" },
       { key: "busquedas-guardadas",  path: "/busquedas-guardadas",  label: "Mis Búsquedas" },
       { key: "historial-precios",    path: "/historial-precios",    label: "Historial de Precios" },
+      { key: "meli-regional",        path: "/meli-regional",        label: "MercadoLibre Regional" },
+      { key: "tiendas-construccion", path: "/tiendas-construccion", label: "Tiendas de Construcción" },
     ],
   },
   {

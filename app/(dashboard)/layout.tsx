@@ -6,7 +6,8 @@ import {
   Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
-  BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList, FolderOpen
+  BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList, FolderOpen,
+  MapPin, Store
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,7 +24,9 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/dashboard":           { id: "MP-DSH", label: "Dashboard de Análisis" },
   "/buscador-productos":   { id: "MP-BUS", label: "Buscador de Productos" },
   "/busquedas-guardadas":  { id: "MP-BGD", label: "Mis Búsquedas" },
-  "/historial-precios":    { id: "MP-HIS", label: "Historial de Precios" },
+  "/historial-precios":      { id: "MP-HIS", label: "Historial de Precios" },
+  "/meli-regional":          { id: "MP-MEL", label: "MercadoLibre Regional" },
+  "/tiendas-construccion":   { id: "MP-TIE", label: "Tiendas de Construcción" },
   "/obuma-clientes":      { id: "MP-CLI", label: "Clientes Obuma" },
   "/proveedores":         { id: "MP-PRV", label: "Mis Proveedores" },
   "/obuma-proveedores":   { id: "MP-OPV", label: "Proveedores Obuma" },
@@ -44,7 +47,9 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "dashboard":          BarChart3,
   "buscador-productos":  Box,
   "busquedas-guardadas": Bookmark,
-  "historial-precios":   TrendingUp,
+  "historial-precios":      TrendingUp,
+  "meli-regional":          Store,
+  "tiendas-construccion":   MapPin,
   "obuma-clientes":     Users,
   "ventas":             TrendingUp,
   "obuma-productos":    Package,
