@@ -7,19 +7,20 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, ctx: RouteContext) {
   try {
+    const { id } = await ctx.params;
     const { data: proyecto, error } = await supabase
-      .from('proyectos').select('*').eq('id', params.id).single();
+      .from('proyectos').select('*').eq('id', id).single();
     if (error) throw error;
 
     const { data: hitos } = await supabase
-      .from('proyectos_hitos')
-      .select('*').eq('proyecto_id', params.id).order('fecha_limite');
+      .from('proyectos_hitos').select('*').eq('proyecto_id', id).order('fecha_limite');
 
     const { data: documentos } = await supabase
-      .from('proyectos_documentos')
-      .select('*').eq('proyecto_id', params.id).order('created_at');
+      .from('proyectos_documentos').select('*').eq('proyecto_id', id).order('created_at');
 
     return NextResponse.json({ data: { ...proyecto, hitos: hitos || [], documentos: documentos || [] } });
   } catch (e: any) {
@@ -27,13 +28,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
+    const { id } = await ctx.params;
     const body = await req.json();
     const { data, error } = await supabase
       .from('proyectos')
       .update({ ...body, updated_at: new Date().toISOString() })
-      .eq('id', params.id)
+      .eq('id', id)
       .select().single();
     if (error) throw error;
     return NextResponse.json({ data });
@@ -42,10 +44,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   try {
+    const { id } = await ctx.params;
     const { error } = await supabase
-      .from('proyectos').update({ activo: false, updated_at: new Date().toISOString() }).eq('id', params.id);
+      .from('proyectos').update({ activo: false, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (e: any) {
