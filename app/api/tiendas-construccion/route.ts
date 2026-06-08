@@ -18,6 +18,8 @@ export interface TiendaItem {
   horario: string | null;
   maps_url: string | null;
   tipo: 'ferreteria' | 'materiales' | 'electrica' | 'herramientas' | 'grande' | 'otro';
+  lat: number | null;
+  lng: number | null;
 }
 
 type Categoria = 'ferreteria' | 'materiales' | 'electrica' | 'herramientas' | 'grandes' | 'todo';
@@ -103,6 +105,8 @@ export async function GET(req: NextRequest) {
       horario: p.hours?.trim() || null,
       maps_url: mapsUrl(nombre, direccion),
       tipo: clasificar(nombre, p.category),
+      lat: typeof p.latitude === 'number' ? p.latitude : null,
+      lng: typeof p.longitude === 'number' ? p.longitude : null,
     });
     if (tiendas.length >= 30) break;
   }
