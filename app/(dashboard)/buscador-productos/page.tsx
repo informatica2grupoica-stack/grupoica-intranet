@@ -3,6 +3,9 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
+import SeccionMercadoPublico from './SeccionMercadoPublico';
+import SeccionMeliRegional from './SeccionMeliRegional';
+import SeccionTiendasGeo from './SeccionTiendasGeo';
 import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X,
@@ -302,15 +305,13 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
 };
 
 // ─── Modal Preview Excel ──────────────────────────────────────────────────────
-const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, region, setRegion, contexto, setContexto }: {
+const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, contexto, setContexto }: {
   productos: ProductoExcel[];
   onClose: () => void;
   onConfirm: () => void;
   onCargarPdf: (f: File) => void;
   cargandoBases: boolean;
   basesOk: boolean;
-  region: string;
-  setRegion: (r: string) => void;
   contexto: string;
   setContexto: (c: string) => void;
 }) => (
@@ -320,7 +321,7 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
       <div className="flex justify-between items-center px-5 py-4 border-b">
         <div>
           <h2 className="font-bold text-slate-800 text-base">Configurar búsqueda — Excel COSTEO</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{productos.length} productos · PDF bases · Región · Contexto</p>
+          <p className="text-xs text-slate-400 mt-0.5">{productos.length} productos · PDF bases · Contexto</p>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X size={18} /></button>
       </div>
@@ -330,34 +331,8 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
         <BannerPdf onCargarPdf={onCargarPdf} cargandoBases={cargandoBases} basesOk={basesOk} />
       </div>
 
-      {/* Paso 2: Región + Contexto — en una fila */}
-      <div className="px-5 py-3 grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-slate-100">
-        {/* Región */}
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1.5">
-            📍 Región de la licitación
-          </label>
-          <select
-            value={region}
-            onChange={e => setRegion(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg text-xs p-2 bg-white outline-none focus:ring-2 focus:ring-[#2563EB]/20 text-slate-700"
-          >
-            <option value="">🌎 Todo Chile (sin filtro)</option>
-            {REGIONES_CHILE.map(r => (
-              <option key={r.value} value={r.value}>{r.abbr} — {r.label}</option>
-            ))}
-          </select>
-          {/* Chips rápidos */}
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {['Valparaíso','Metropolitana','Biobío','Aysén','Maule'].map(r => (
-              <button key={r} onClick={() => setRegion(region === r ? '' : r)}
-                className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${region === r ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'border-slate-200 text-slate-500 hover:border-[#2563EB] hover:text-[#2563EB]'}`}>
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* Contexto */}
+      {/* Paso 2: Contexto */}
+      <div className="px-5 py-3 border-b border-slate-100">
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1.5">
             🏷️ Contexto del rubro
@@ -413,7 +388,6 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
       {/* Footer */}
       <div className="flex justify-between items-center gap-3 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
-          {region && <span className="bg-[#EFF6FF] text-[#2563EB] px-2 py-0.5 rounded-full font-bold">📍 {region}</span>}
           {contexto && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">🏷️ {contexto.slice(0, 20)}</span>}
           {basesOk && <span className="text-[#2563EB] font-bold">✅ Bases PDF cargadas</span>}
         </div>
@@ -1430,8 +1404,6 @@ export default function MonitorMasivoICA() {
           onCargarPdf={cargarBases}
           cargandoBases={cargandoBases}
           basesOk={!!basesInfo}
-          region={region}
-          setRegion={cambiarRegion}
           contexto={contexto}
           setContexto={setContexto}
         />
@@ -2080,6 +2052,12 @@ export default function MonitorMasivoICA() {
           )}
         </div>
       </main>
+
+      {/* ─── Secciones adicionales ───────────────────────────────────────────── */}
+      <SeccionMercadoPublico />
+      <SeccionMeliRegional />
+      <SeccionTiendasGeo />
+
     </div>
   );
 }
