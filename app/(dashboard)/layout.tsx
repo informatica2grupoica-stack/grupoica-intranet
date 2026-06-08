@@ -6,7 +6,7 @@ import {
   Home, MessageSquare, CheckSquare, BarChart3, Box, TrendingUp,
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
-  BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList
+  BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList, FolderOpen
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -31,6 +31,7 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/compras":             { id: "MP-OC",  label: "Compras & Órdenes" },
   "/ventas":              { id: "MP-VTA", label: "Ventas & Facturas" },
   "/cotizaciones":        { id: "MP-COT", label: "Cotizaciones" },
+  "/proyectos":           { id: "MP-PRY", label: "Proyectos" },
   "/contabilidad":        { id: "MP-CTB", label: "Contabilidad" },
   "/capacitaciones":      { id: "MP-CAP", label: "Capacitaciones" },
   "/usuarios":            { id: "MP-USR", label: "Usuarios" },
@@ -49,6 +50,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "obuma-clientes":     Users,
   "ventas":             TrendingUp,
   "cotizaciones":       ClipboardList,
+  "proyectos":          FolderOpen,
   "obuma-productos":    Package,
   "compras":            ShoppingCart,
   "proveedores":        Building2,
