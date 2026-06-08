@@ -1,29 +1,30 @@
 // app/api/georeferencia/route.ts
-// Georreferencia de locales comerciales usando Overpass API (OpenStreetMap) + Nominatim
+// Georreferencia de locales comerciales usando Overpass API (OpenStreetMap)
 // 100% gratuito, sin API key, sin límite de créditos
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 45;
+export const maxDuration = 25;
 
-// Mapeo de regiones chilenas a nombres Nominatim
-const REGION_NOMINATIM: Record<string, string> = {
-  'Arica y Parinacota': 'Región de Arica y Parinacota, Chile',
-  'Tarapacá':           'Región de Tarapacá, Chile',
-  'Antofagasta':        'Región de Antofagasta, Chile',
-  'Atacama':            'Región de Atacama, Chile',
-  'Coquimbo':           'Región de Coquimbo, Chile',
-  'Valparaíso':         'Región de Valparaíso, Chile',
-  'Metropolitana':      'Región Metropolitana de Santiago, Chile',
-  "O'Higgins":          "Región del Libertador General Bernardo O'Higgins, Chile",
-  'Maule':              'Región del Maule, Chile',
-  'Ñuble':              'Región de Ñuble, Chile',
-  'Biobío':             'Región del Biobío, Chile',
-  'La Araucanía':       'Región de La Araucanía, Chile',
-  'Los Ríos':           'Región de Los Ríos, Chile',
-  'Los Lagos':          'Región de Los Lagos, Chile',
-  'Aysén':              'Región de Aysén del General Carlos Ibáñez del Campo, Chile',
-  'Magallanes':         'Región de Magallanes y de la Antártica Chilena, Chile',
+// Coordenadas de la capital de cada región chilena
+// Radio de búsqueda: 60km (cubre la ciudad capital y zonas cercanas)
+const REGION_COORDS: Record<string, { lat: number; lng: number; radio: number }> = {
+  'Arica y Parinacota': { lat: -18.4746, lng: -70.2979, radio: 40000 },
+  'Tarapacá':           { lat: -20.2133, lng: -70.1503, radio: 40000 },
+  'Antofagasta':        { lat: -23.6509, lng: -70.3975, radio: 50000 },
+  'Atacama':            { lat: -27.3668, lng: -70.3323, radio: 50000 },
+  'Coquimbo':           { lat: -29.9533, lng: -71.3395, radio: 60000 },
+  'Valparaíso':         { lat: -33.0458, lng: -71.6197, radio: 80000 },
+  'Metropolitana':      { lat: -33.4569, lng: -70.6483, radio: 80000 },
+  "O'Higgins":          { lat: -34.1703, lng: -70.7442, radio: 60000 },
+  'Maule':              { lat: -35.4264, lng: -71.6554, radio: 70000 },
+  'Ñuble':              { lat: -36.6067, lng: -72.1034, radio: 60000 },
+  'Biobío':             { lat: -36.8201, lng: -73.0444, radio: 70000 },
+  'La Araucanía':       { lat: -38.7359, lng: -72.5904, radio: 70000 },
+  'Los Ríos':           { lat: -39.8142, lng: -73.2459, radio: 60000 },
+  'Los Lagos':          { lat: -41.4693, lng: -72.9424, radio: 70000 },
+  'Aysén':              { lat: -45.5712, lng: -72.0664, radio: 50000 },
+  'Magallanes':         { lat: -53.1638, lng: -70.9171, radio: 60000 },
 };
 
 // Tags OSM por categoría
@@ -92,36 +93,18 @@ export interface GeoLocal {
   maps_url: string;
 }
 
-async function getBbox(region: string): Promise<[number,number,number,number] | null> {
-  const q = REGION_NOMINATIM[region] || `${region}, Chile`;
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&featuretype=boundary`;
-  try {
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'GrupoICA-Intranet/1.0 (contacto@grupoica.cl)' },
-    });
-    if (!r.ok) return null;
-    const data = await r.json();
-    if (!data[0]?.boundingbox) return null;
-    const [s, n, w, e] = data[0].boundingbox.map(Number);
-    return [s, w, n, e]; // south, west, north, east
-  } catch {
-    return null;
-  }
-}
-
-async function queryOverpass(bbox: [number,number,number,number], tags: string[][]): Promise<any[]> {
-  const [s, w, n, e] = bbox;
-  const bboxStr = `${s},${w},${n},${e}`;
+async function queryOverpass(lat: number, lng: number, radio: number, tags: string[][]): Promise<any[]> {
+  const around = `around:${radio},${lat},${lng}`;
 
   const tagLines = tags.map(([k, v]) =>
-    `  node["${k}"="${v}"](${bboxStr});\n  way["${k}"="${v}"](${bboxStr});`
+    `  node["${k}"="${v}"](${around});\n  way["${k}"="${v}"](${around});`
   ).join('\n');
 
-  const query = `[out:json][timeout:30][bbox:${bboxStr}];
+  const query = `[out:json][timeout:20];
 (
 ${tagLines}
 );
-out center body qt 200;`;
+out center body qt 300;`;
 
   try {
     const r = await fetch('https://overpass-api.de/api/interpreter', {
@@ -154,22 +137,22 @@ function mapsUrl(lat: number, lng: number, nombre: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const sp       = req.nextUrl.searchParams;
-  const region   = sp.get('region')?.trim() || '';
+  const sp        = req.nextUrl.searchParams;
+  const region    = sp.get('region')?.trim() || '';
   const categoria = (sp.get('categoria') || 'todo').toLowerCase();
-  const busqueda = sp.get('q')?.trim() || '';
+  const busqueda  = sp.get('q')?.trim() || '';
 
   if (!region) return NextResponse.json({ error: 'Falta región' }, { status: 400 });
 
-  // 1. Obtener bbox de la región
-  const bbox = await getBbox(region);
-  if (!bbox) return NextResponse.json({ error: `No se encontró la región "${region}"` }, { status: 404 });
+  // 1. Obtener coordenadas de la capital regional
+  const coords = REGION_COORDS[region];
+  if (!coords) return NextResponse.json({ error: `No se encontró la región "${region}"` }, { status: 404 });
 
   // 2. Obtener tags para la categoría
   const tags = CATEGORY_TAGS[categoria] || CATEGORY_TAGS.todo;
 
-  // 3. Consultar Overpass
-  const elements = await queryOverpass(bbox, tags);
+  // 3. Consultar Overpass con radio alrededor de la capital
+  const elements = await queryOverpass(coords.lat, coords.lng, coords.radio, tags);
 
   // 4. Normalizar resultados
   const vistos = new Set<string>();
