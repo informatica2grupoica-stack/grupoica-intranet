@@ -47,8 +47,6 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
     group: "VENTAS",
     items: [
       { key: "ventas",        path: "/ventas",        label: "Ventas & Facturas" },
-      { key: "cotizaciones",  path: "/cotizaciones",  label: "Cotizaciones" },
-      { key: "proyectos",     path: "/proyectos",     label: "Proyectos" },
     ],
   },
   {
