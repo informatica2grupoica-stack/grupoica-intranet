@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, User, Download, Printer, RotateCcw, Check, BadgeCheck, FileImage } from "lucide-react";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -352,19 +352,19 @@ export default function CredencialesPage() {
     r.readAsDataURL(f);
   };
 
-  const capture = (ref: React.RefObject<HTMLDivElement | null>) => {
+  const capture = (ref: React.RefObject<HTMLDivElement | null>): Promise<string> => {
     if (!ref.current) return Promise.reject(new Error("Referencia no disponible"));
-    return html2canvas(ref.current, { scale: 4, useCORS: true, allowTaint: true, backgroundColor: "#FFFFFF", logging: false });
+    return toPng(ref.current, { pixelRatio: 4, backgroundColor: "#FFFFFF", cacheBust: true });
   };
 
   const exportPDF = async () => {
     setBusy(true);
     try {
-      const [c1, c2] = await Promise.all([capture(frenteRef), capture(reversoRef)]);
+      const [d1, d2] = await Promise.all([capture(frenteRef), capture(reversoRef)]);
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [63.5, 101] });
-      pdf.addImage(c1.toDataURL("image/png"), "PNG", 0, 0, 63.5, 101);
+      pdf.addImage(d1, "PNG", 0, 0, 63.5, 101);
       pdf.addPage();
-      pdf.addImage(c2.toDataURL("image/png"), "PNG", 0, 0, 63.5, 101);
+      pdf.addImage(d2, "PNG", 0, 0, 63.5, 101);
       pdf.save(`credencial-D${diseño}-${data.nombre.replace(/\s+/g, "_")}.pdf`);
     } catch (e) {
       console.error("PDF error:", e);
@@ -375,9 +375,9 @@ export default function CredencialesPage() {
   const exportPNG = async () => {
     setBusy(true);
     try {
-      const canvas = await capture(lado === "frente" ? frenteRef : reversoRef);
+      const dataUrl = await capture(lado === "frente" ? frenteRef : reversoRef);
       const a = document.createElement("a");
-      a.href = canvas.toDataURL("image/png");
+      a.href = dataUrl;
       a.download = `credencial-D${diseño}-${lado}-${data.nombre.replace(/\s+/g, "_")}.png`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     } catch (e) {
@@ -396,11 +396,10 @@ export default function CredencialesPage() {
       return;
     }
     try {
-      const canvas = await capture(lado === "frente" ? frenteRef : reversoRef);
-      const img = canvas.toDataURL("image/png");
+      const dataUrl = await capture(lado === "frente" ? frenteRef : reversoRef);
       win.document.write(`<html><head><title>Credencial</title><style>
         @page{size:63.5mm 101mm;margin:0}body{margin:0;padding:0}img{width:63.5mm;height:101mm;display:block}
-      </style></head><body><img src="${img}"/></body></html>`);
+      </style></head><body><img src="${dataUrl}"/></body></html>`);
       win.document.close();
       win.focus();
       setTimeout(() => { win.print(); }, 600);
