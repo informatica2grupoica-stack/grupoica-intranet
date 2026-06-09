@@ -352,8 +352,10 @@ export default function CredencialesPage() {
     r.readAsDataURL(f);
   };
 
-  const capture = (ref: React.RefObject<HTMLDivElement | null>) =>
-    html2canvas(ref.current!, { scale: 4, useCORS: true, allowTaint: true, backgroundColor: null, logging: false });
+  const capture = (ref: React.RefObject<HTMLDivElement | null>) => {
+    if (!ref.current) return Promise.reject(new Error("Referencia no disponible"));
+    return html2canvas(ref.current, { scale: 4, useCORS: true, allowTaint: true, backgroundColor: "#FFFFFF", logging: false });
+  };
 
   const exportPDF = async () => {
     setBusy(true);
@@ -364,6 +366,9 @@ export default function CredencialesPage() {
       pdf.addPage();
       pdf.addImage(c2.toDataURL("image/png"), "PNG", 0, 0, 63.5, 101);
       pdf.save(`credencial-D${diseño}-${data.nombre.replace(/\s+/g, "_")}.pdf`);
+    } catch (e) {
+      console.error("PDF error:", e);
+      alert("Error al generar el PDF. Revisa la consola.");
     } finally { setBusy(false); }
   };
 
@@ -375,19 +380,34 @@ export default function CredencialesPage() {
       a.href = canvas.toDataURL("image/png");
       a.download = `credencial-D${diseño}-${lado}-${data.nombre.replace(/\s+/g, "_")}.png`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    } catch (e) {
+      console.error("PNG error:", e);
+      alert("Error al exportar PNG.");
     } finally { setBusy(false); }
   };
 
   const imprimir = async () => {
     setBusy(true);
+    // Abrir ventana ANTES del await para evitar bloqueo de popup
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Permite ventanas emergentes en este sitio para imprimir.");
+      setBusy(false);
+      return;
+    }
     try {
       const canvas = await capture(lado === "frente" ? frenteRef : reversoRef);
-      const win = window.open("", "_blank")!;
-      win.document.write(`<html><head><title>Imprimir</title><style>
-        @page{size:63.5mm 101mm;margin:0}body{margin:0}img{width:63.5mm;height:101mm;display:block}
-      </style></head><body><img src="${canvas.toDataURL("image/png")}"/></body></html>`);
-      win.document.close(); win.focus();
-      setTimeout(() => win.print(), 500);
+      const img = canvas.toDataURL("image/png");
+      win.document.write(`<html><head><title>Credencial</title><style>
+        @page{size:63.5mm 101mm;margin:0}body{margin:0;padding:0}img{width:63.5mm;height:101mm;display:block}
+      </style></head><body><img src="${img}"/></body></html>`);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 600);
+    } catch (e) {
+      console.error("Print error:", e);
+      win.close();
+      alert("Error al generar la impresión.");
     } finally { setBusy(false); }
   };
 
@@ -519,12 +539,13 @@ export default function CredencialesPage() {
       </div>
 
       {/* ── RENDERS OCULTOS para html2canvas ─────────────────────────── */}
-      <div style={{ position: "fixed", left: -9999, top: -9999, pointerEvents: "none", zIndex: -1 }}>
+      {/* Sin zIndex negativo: html2canvas no captura elementos con z-index < 0 */}
+      <div style={{ position: "fixed", left: -9999, top: 0, pointerEvents: "none", opacity: 0 }}>
         <div ref={frenteRef} style={{ width: W, height: H }}>
           <CardRender diseño={diseño} lado="frente" d={data} foto={foto} qrText={qrText} />
         </div>
       </div>
-      <div style={{ position: "fixed", left: -9999, top: -9999, pointerEvents: "none", zIndex: -1 }}>
+      <div style={{ position: "fixed", left: -9999, top: 0, pointerEvents: "none", opacity: 0 }}>
         <div ref={reversoRef} style={{ width: W, height: H }}>
           <CardRender diseño={diseño} lado="reverso" d={data} foto={foto} qrText={qrText} />
         </div>
