@@ -74,6 +74,20 @@ interface LocalProveedor {
   maps_url: string | null;
 }
 
+interface ResultadoLocalProducto {
+  tienda: string;
+  nombre: string;
+  precio_valor: number | null;
+  precio_formateado: string;
+  link: string;
+  tipo: 'ferreteria' | 'materiales' | 'cadena' | 'otro';
+  es_mapa: boolean;
+  direccion?: string;
+  telefono?: string | null;
+  maps_url?: string | null;
+  rating?: number | null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => v > 0 ? `$${v.toLocaleString('es-CL')}` : '—';
 
@@ -720,6 +734,11 @@ export default function MonitorMasivoICA() {
   const [buscandoLocales, setBuscandoLocales]         = useState(false);
   const [mostrarLocales, setMostrarLocales]           = useState(false);
 
+  // ─── Búsqueda de productos en tiendas locales por región ─────────────────────
+  const [resultadosLocales, setResultadosLocales]     = useState<Map<string, ResultadoLocalProducto[]>>(new Map());
+  const [mapsLinksLocales, setMapsLinksLocales]       = useState<Map<string, string>>(new Map());
+  const [buscandoLocalesProductos, setBuscandoLocalesProductos] = useState(false);
+
   // Restaurar automáticamente si venimos desde la página de búsquedas guardadas
   useEffect(() => {
     const id = sessionStorage.getItem('restaurar_busqueda');
@@ -793,8 +812,51 @@ export default function MonitorMasivoICA() {
     } else {
       setLocalesRegion([]);
       setMostrarLocales(false);
+      setResultadosLocales(new Map());
+      setMapsLinksLocales(new Map());
     }
   }, [buscarLocales]);
+
+  // ─── Buscar productos del Excel en tiendas físicas de la región ───────────────
+  const buscarProductosEnLocales = useCallback(async () => {
+    if (!region || !itemsLista.length) return;
+    setBuscandoLocalesProductos(true);
+    notify(`Buscando en tiendas locales de ${region}...`, 'info');
+
+    const sem = crearSemaforo(2);
+    const nuevosLocales = new Map<string, ResultadoLocalProducto[]>();
+    const nuevosMaps = new Map<string, string>();
+
+    const itemsConResultados = itemsLista.filter(i => !i.procesando && i.resultados.length > 0);
+
+    await Promise.all(
+      itemsConResultados.map(item =>
+        sem(async () => {
+          try {
+            const res = await fetch(
+              `/api/buscar-producto-local?producto=${encodeURIComponent(item.nombre)}&region=${encodeURIComponent(region)}`
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data.resultados?.length > 0) nuevosLocales.set(item.numero, data.resultados);
+              if (data.maps_link) nuevosMaps.set(item.numero, data.maps_link);
+            }
+          } catch { /* continúa con los demás */ }
+        })
+      )
+    );
+
+    setResultadosLocales(nuevosLocales);
+    setMapsLinksLocales(nuevosMaps);
+    setBuscandoLocalesProductos(false);
+    const totalCon = nuevosLocales.size;
+    notify(
+      totalCon > 0
+        ? `Locales: ${totalCon} de ${itemsConResultados.length} productos con resultados en ${region}`
+        : `Sin resultados locales específicos en ${region} — las ferreterías del panel lateral siguen disponibles`,
+      totalCon > 0 ? 'success' : 'warning'
+    );
+  }, [region, itemsLista, notify]);
 
   // ─── Parsear lista texto ──────────────────────────────────────────────────────
   const parsearLista = (texto: string) =>
@@ -1723,6 +1785,19 @@ export default function MonitorMasivoICA() {
                   </p>
                 </div>
               )}
+
+              {/* Botón búsqueda en tiendas físicas locales */}
+              {region && itemsLista.filter(i => i.resultados.length > 0).length > 0 && (
+                <button
+                  onClick={buscarProductosEnLocales}
+                  disabled={buscandoLocalesProductos}
+                  className="mt-2 w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  {buscandoLocalesProductos
+                    ? <><Loader2 size={13} className="animate-spin" /> Buscando en locales…</>
+                    : <><Building2 size={13} /> Buscar en tiendas de {region}</>}
+                </button>
+              )}
             </div>
 
             {/* Panel de proveedores locales */}
@@ -2024,6 +2099,67 @@ export default function MonitorMasivoICA() {
                           + {item.resultados.length - 15} resultados más
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Resultados en tiendas locales de la región */}
+                  {!item.procesando && (resultadosLocales.get(item.numero)?.length || mapsLinksLocales.get(item.numero)) && (
+                    <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <MapPin size={11} className="text-emerald-600" />
+                          Tiendas locales · {region}
+                          {resultadosLocales.get(item.numero)?.length
+                            ? <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">{resultadosLocales.get(item.numero)!.length}</span>
+                            : null}
+                        </span>
+                        {mapsLinksLocales.get(item.numero) && (
+                          <a
+                            href={mapsLinksLocales.get(item.numero)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-semibold"
+                          >
+                            <ExternalLink size={10} /> Ver en Google Maps
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(resultadosLocales.get(item.numero) || []).map((local, li) => (
+                          <div
+                            key={li}
+                            className={`flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg border ${
+                              local.es_mapa
+                                ? 'bg-amber-50 border-amber-100 text-amber-800'
+                                : local.precio_valor
+                                ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                                : 'bg-blue-50 border-blue-100 text-blue-800'
+                            }`}
+                          >
+                            <span>{local.es_mapa ? '📍' : '🌐'}</span>
+                            <span className="font-semibold">{local.tienda}</span>
+                            {local.precio_valor && (
+                              <span className="font-bold">{local.precio_formateado}</span>
+                            )}
+                            {local.es_mapa && local.direccion && (
+                              <span className="text-[9px] opacity-60 max-w-[120px] truncate">{local.direccion}</span>
+                            )}
+                            {local.es_mapa && local.rating != null && (
+                              <span className="text-[9px] text-amber-600">⭐ {local.rating}</span>
+                            )}
+                            {(local.es_mapa ? local.maps_url : local.link) && (
+                              <a
+                                href={(local.es_mapa ? local.maps_url : local.link) || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="opacity-50 hover:opacity-100 ml-0.5"
+                              >
+                                <ExternalLink size={9} />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
