@@ -72,6 +72,12 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
     ],
   },
   {
+    group: "RRHH",
+    items: [
+      { key: "credenciales",       path: "/credenciales",       label: "Credenciales PVC" },
+    ],
+  },
+  {
     group: "ADMINISTRACIÓN",
     items: [
       { key: "usuarios",           path: "/usuarios",           label: "Usuarios" },

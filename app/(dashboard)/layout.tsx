@@ -7,7 +7,7 @@ import {
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
   BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList, FolderOpen,
-  MapPin
+  MapPin, BadgeCheck
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,6 +36,7 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/capacitaciones":      { id: "MP-CAP", label: "Capacitaciones" },
   "/usuarios":            { id: "MP-USR", label: "Usuarios" },
   "/dispositivos":        { id: "MP-DEV", label: "Dispositivos" },
+  "/credenciales":        { id: "MP-CRD", label: "Credenciales PVC" },
 };
 
 // ─── Icono por sección (key → componente) ────────────────────────────────────
@@ -58,6 +59,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "capacitaciones":     GraduationCap,
   "usuarios":           Users,
   "dispositivos":       Laptop,
+  "credenciales":       BadgeCheck,
 };
 
 const PERM_LABELS: Record<string, string> = {
