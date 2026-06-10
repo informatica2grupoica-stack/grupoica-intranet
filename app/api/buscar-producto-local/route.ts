@@ -1,8 +1,16 @@
 // app/api/buscar-producto-local/route.ts
-// Busca un producto específico en tiendas físicas locales de una región de Chile.
-// Combina:
-//   1. Serper /search (orgánico) con location → precios web de tiendas .cl en la región
-//   2. Serper /maps → tiendas locales (ferreterías, materiales) con dirección y teléfono
+// Busca tiendas físicas en una región de Chile que podrían vender un producto.
+//
+// IMPORTANTE: Serper /search con `location` NO filtra resultados a sitios de esa
+// región — solo ajusta el ranking de Google. Tiendas nacionales (Falabella, Sodimac,
+// Treck, etc.) aparecen igual sin importar la región, y su precio/stock es el mismo
+// en toda la web. Por eso esta API NO devuelve resultados "orgánicos web" — solo
+// negocios físicos reales obtenidos vía Serper /maps (Google Maps Places), que sí
+// están geolocalizados en la región solicitada.
+//
+// Limitación: Maps no expone catálogo/stock por producto, así que no se puede
+// confirmar si el local tiene el producto específico — se devuelve como referencia
+// de "dónde preguntar" según el rubro del producto.
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -30,14 +38,11 @@ export interface ResultadoLocalProducto {
 
 const CADENAS = ['sodimac', 'easy', 'construmart', 'imperial', 'homecenter', 'falabella', 'paris', 'boltec'];
 
-// ─── Utilidades ───────────────────────────────────────────────────────────────
+const NOTA_DISCLAIMER =
+  'Tiendas físicas ubicadas en la región que, por su rubro, podrían vender este tipo de producto. ' +
+  'Google Maps no expone catálogo ni stock — confirma disponibilidad y precio por teléfono antes de visitar.';
 
-function limpiarPrecio(raw: unknown): number | null {
-  const s = String(raw ?? '').replace(/[^\d]/g, '');
-  if (!s) return null;
-  const p = parseInt(s, 10);
-  return p >= 500 && p <= 500_000_000 ? p : null;
-}
+// ─── Utilidades ───────────────────────────────────────────────────────────────
 
 function clasificarTienda(texto: string): ResultadoLocalProducto['tipo'] {
   const t = texto.toLowerCase();
@@ -55,16 +60,20 @@ function clasificarTienda(texto: string): ResultadoLocalProducto['tipo'] {
 }
 
 /**
- * Determina la categoría de tienda más probable para el producto,
- * usada como query en la búsqueda de mapas.
+ * Determina el rubro de tienda más relevante para el producto,
+ * usado como query en la búsqueda de mapas.
  */
 function categoriaParaMaps(producto: string): string {
   const n = producto.toLowerCase();
-  if (/pintura|esmalte|anticorrosivo|latex|barniz|sellador/.test(n)) return 'pinturas materiales construcción';
+  if (/lente|antiparra|guante|casco|bota|arnes|chaleco|tap[oó]n|respirador|mascarilla|epp|seguridad industrial/.test(n))
+    return 'implementos de seguridad industrial EPP';
+  if (/pintura|esmalte|anticorrosivo|latex|barniz|sellador|impermeabilizante/.test(n)) return 'pinturas materiales construcción';
   if (/madera|pino|mdf|osb|tabla|terciado/.test(n)) return 'maderería materiales construcción';
-  if (/cable|conduit|tablero|interruptor|foco|led|enchufe/.test(n)) return 'eléctrica materiales construcción';
-  if (/tubo|pvc|codo|copla|sifon|válvula|llave paso/.test(n)) return 'materiales plomería ferretería';
-  if (/fierro|acero|angular|perfil|malla/.test(n)) return 'acero metales ferretería construcción';
+  if (/cable|conduit|tablero|interruptor|foco|led|enchufe|el[eé]ctric/.test(n)) return 'materiales eléctricos ferretería';
+  if (/tubo|pvc|codo|copla|sif[oó]n|v[aá]lvula|llave.*paso|sanitari/.test(n)) return 'materiales plomería ferretería';
+  if (/fierro|acero|angular|perfil|malla|pletina|barra/.test(n)) return 'aceros y metales ferretería';
+  if (/taladro|amoladora|sierra|esmeril|compresor|soldadora|atornillador|lijadora/.test(n)) return 'herramientas eléctricas ferretería';
+  if (/tornillo|perno|tuerca|golilla|clavo|tarugo|remache|bisagra/.test(n)) return 'tornillería y fijaciones ferretería';
   return 'ferretería materiales construcción';
 }
 
@@ -72,70 +81,6 @@ function buildMapsUrl(nombre: string, direccion: string): string | null {
   const q = [nombre, direccion].filter(Boolean).join(' ').trim();
   if (!q) return null;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-}
-
-// ─── Búsqueda orgánica con location ──────────────────────────────────────────
-
-async function buscarOrganico(producto: string, region: string): Promise<ResultadoLocalProducto[]> {
-  if (!SERPER_KEY) return [];
-  try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 12000);
-    const res = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        q: `${producto} precio comprar ${region} Chile`,
-        gl: 'cl',
-        hl: 'es',
-        location: `${region}, Chile`,
-        num: 10,
-      }),
-    });
-    clearTimeout(tid);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const organic: any[] = data.organic || [];
-    const results: ResultadoLocalProducto[] = [];
-
-    for (const item of organic) {
-      const link: string = item.link || '';
-      if (!link) continue;
-      const linkL = link.toLowerCase();
-      const isCL =
-        linkL.includes('.cl') ||
-        linkL.includes('mercadolibre') ||
-        CADENAS.some((c) => linkL.includes(c));
-      if (!isCL) continue;
-
-      const titulo = (item.title || '').replace(/\s*[\|–—]\s*.*$/, '').trim();
-      if (titulo.length < 4) continue;
-
-      const snippet: string = item.snippet || '';
-      const pm = (snippet + ' ' + titulo).match(/\$\s*([\d\.,]{3,})/);
-      const precioVal = pm ? limpiarPrecio(pm[1].replace(/\./g, '').replace(',', '.')) : null;
-
-      const domMatch = link.match(/https?:\/\/(?:www\.)?([^/]+)/);
-      const tienda =
-        domMatch?.[1]?.replace(/\.cl$|\.com$/, '')?.slice(0, 40) || 'Web';
-
-      results.push({
-        tienda,
-        nombre: titulo.slice(0, 150),
-        precio_valor: precioVal,
-        precio_formateado: precioVal ? `$${precioVal.toLocaleString('es-CL')}` : 'Consultar',
-        link,
-        tipo: clasificarTienda(tienda + ' ' + linkL),
-        es_mapa: false,
-      });
-
-      if (results.length >= 5) break;
-    }
-    return results;
-  } catch {
-    return [];
-  }
 }
 
 // ─── Búsqueda en mapas (tiendas locales) ─────────────────────────────────────
@@ -151,7 +96,7 @@ async function buscarMaps(producto: string, region: string): Promise<ResultadoLo
       headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
       body: JSON.stringify({
-        q: `${categoria} ${region}`,
+        q: `${categoria} ${region}, Chile`,
         gl: 'cl',
         hl: 'es',
         num: 10,
@@ -162,12 +107,12 @@ async function buscarMaps(producto: string, region: string): Promise<ResultadoLo
     const data = await res.json();
     const places: any[] = data.places || [];
 
-    return places.slice(0, 5).map((p: any) => {
+    return places.slice(0, 6).map((p: any) => {
       const nombre = (p.title || '').trim();
       const direccion = (p.address || '').trim();
       return {
         tienda: nombre,
-        nombre: `${nombre}`,
+        nombre,
         precio_valor: null,
         precio_formateado: 'Consultar presencialmente',
         link: p.website || '',
@@ -204,21 +149,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const [organico, mapas] = await Promise.all([
-    buscarOrganico(producto, region),
-    buscarMaps(producto, region),
-  ]);
-
-  const resultados = [...organico, ...mapas];
-  const maps_link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${producto} ${region}`)}`;
+  const resultados = await buscarMaps(producto, region);
+  const maps_link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${categoriaParaMaps(producto)} ${region}, Chile`)}`;
 
   return NextResponse.json({
     producto,
     region,
     resultados,
     maps_link,
+    nota: NOTA_DISCLAIMER,
     total: resultados.length,
-    total_organico: organico.length,
-    total_mapas: mapas.length,
   });
 }

@@ -88,6 +88,8 @@ interface ResultadoLocalProducto {
   rating?: number | null;
 }
 
+const NOTA_LOCALES_DEFAULT = 'Tiendas físicas en la región según su rubro — confirma stock y precio por teléfono antes de visitar.';
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => v > 0 ? `$${v.toLocaleString('es-CL')}` : '—';
 
@@ -737,6 +739,7 @@ export default function MonitorMasivoICA() {
   // ─── Búsqueda de productos en tiendas locales por región ─────────────────────
   const [resultadosLocales, setResultadosLocales]     = useState<Map<string, ResultadoLocalProducto[]>>(new Map());
   const [mapsLinksLocales, setMapsLinksLocales]       = useState<Map<string, string>>(new Map());
+  const [notaLocales, setNotaLocales]                 = useState('');
   const [buscandoLocalesProductos, setBuscandoLocalesProductos] = useState(false);
 
   // Restaurar automáticamente si venimos desde la página de búsquedas guardadas
@@ -826,6 +829,7 @@ export default function MonitorMasivoICA() {
     const sem = crearSemaforo(2);
     const nuevosLocales = new Map<string, ResultadoLocalProducto[]>();
     const nuevosMaps = new Map<string, string>();
+    let nota = '';
 
     const itemsConResultados = itemsLista.filter(i => !i.procesando && i.resultados.length > 0);
 
@@ -840,6 +844,7 @@ export default function MonitorMasivoICA() {
               const data = await res.json();
               if (data.resultados?.length > 0) nuevosLocales.set(item.numero, data.resultados);
               if (data.maps_link) nuevosMaps.set(item.numero, data.maps_link);
+              if (data.nota && !nota) nota = data.nota;
             }
           } catch { /* continúa con los demás */ }
         })
@@ -848,6 +853,7 @@ export default function MonitorMasivoICA() {
 
     setResultadosLocales(nuevosLocales);
     setMapsLinksLocales(nuevosMaps);
+    setNotaLocales(nota || NOTA_LOCALES_DEFAULT);
     setBuscandoLocalesProductos(false);
     const totalCon = nuevosLocales.size;
     notify(
@@ -2102,15 +2108,15 @@ export default function MonitorMasivoICA() {
                     </div>
                   )}
 
-                  {/* Resultados en tiendas locales de la región */}
+                  {/* Tiendas físicas locales de la región (referencia, no garantiza stock) */}
                   {!item.procesando && (resultadosLocales.get(item.numero)?.length || mapsLinksLocales.get(item.numero)) && (
                     <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <MapPin size={11} className="text-emerald-600" />
-                          Tiendas locales · {region}
+                          <MapPin size={11} className="text-amber-600" />
+                          Tiendas físicas a consultar · {region}
                           {resultadosLocales.get(item.numero)?.length
-                            ? <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">{resultadosLocales.get(item.numero)!.length}</span>
+                            ? <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">{resultadosLocales.get(item.numero)!.length}</span>
                             : null}
                         </span>
                         {mapsLinksLocales.get(item.numero) && (
@@ -2118,38 +2124,37 @@ export default function MonitorMasivoICA() {
                             href={mapsLinksLocales.get(item.numero)}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[10px] text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-semibold"
+                            className="text-[10px] text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-semibold flex-shrink-0"
                           >
-                            <ExternalLink size={10} /> Ver en Google Maps
+                            <ExternalLink size={10} /> Ver más en Maps
                           </a>
                         )}
                       </div>
+                      {notaLocales && (
+                        <p className="text-[9px] text-slate-400 mb-2 leading-snug">{notaLocales}</p>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         {(resultadosLocales.get(item.numero) || []).map((local, li) => (
                           <div
                             key={li}
-                            className={`flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg border ${
-                              local.es_mapa
-                                ? 'bg-amber-50 border-amber-100 text-amber-800'
-                                : local.precio_valor
-                                ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                                : 'bg-blue-50 border-blue-100 text-blue-800'
-                            }`}
+                            className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg border bg-amber-50 border-amber-100 text-amber-800"
                           >
-                            <span>{local.es_mapa ? '📍' : '🌐'}</span>
+                            <span>📍</span>
                             <span className="font-semibold">{local.tienda}</span>
-                            {local.precio_valor && (
-                              <span className="font-bold">{local.precio_formateado}</span>
+                            {local.direccion && (
+                              <span className="text-[9px] opacity-60 max-w-[140px] truncate">{local.direccion}</span>
                             )}
-                            {local.es_mapa && local.direccion && (
-                              <span className="text-[9px] opacity-60 max-w-[120px] truncate">{local.direccion}</span>
-                            )}
-                            {local.es_mapa && local.rating != null && (
+                            {local.rating != null && (
                               <span className="text-[9px] text-amber-600">⭐ {local.rating}</span>
                             )}
-                            {(local.es_mapa ? local.maps_url : local.link) && (
+                            {local.telefono && (
+                              <a href={`tel:${local.telefono}`} className="text-[9px] text-blue-600 hover:underline">
+                                📞 {local.telefono}
+                              </a>
+                            )}
+                            {local.maps_url && (
                               <a
-                                href={(local.es_mapa ? local.maps_url : local.link) || '#'}
+                                href={local.maps_url}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="opacity-50 hover:opacity-100 ml-0.5"
