@@ -61,19 +61,62 @@ function clasificarTienda(texto: string): ResultadoLocalProducto['tipo'] {
 
 /**
  * Determina el rubro de tienda más relevante para el producto,
- * usado como query en la búsqueda de mapas.
+ * usado como query en la búsqueda de mapas. Cada categoría apunta
+ * al tipo de comercio físico real donde se vende ese producto en Chile
+ * (no todo es ferretería).
  */
 function categoriaParaMaps(producto: string): string {
   const n = producto.toLowerCase();
-  if (/lente|antiparra|guante|casco|bota|arnes|chaleco|tap[oó]n|respirador|mascarilla|epp|seguridad industrial/.test(n))
+
+  // EPP / seguridad industrial
+  if (/lente.*seguridad|antiparra|guante|casco|zapato.*seguridad|bota.*seguridad|arnes|chaleco.*reflectante|tap[oó]n.*o[ií]do|respirador|mascarilla|epp|seguridad industrial/.test(n))
     return 'implementos de seguridad industrial EPP';
+
+  // Aseo y limpieza
+  if (/aseo|limpieza|detergente|desinfectante|escoba|trapero|basurero|papel higi[eé]nico|jab[oó]n|cloro|bolsa.*basura|desengrasante|cera.*piso/.test(n))
+    return 'distribuidora de artículos de aseo y limpieza';
+
+  // Baño / sanitarios (artefactos terminados, no tubería)
+  if (/inodoro|lavamanos|tina|ducha|grifer[ií]a|toallero|espejo.*baño|accesorios.*baño|wc\b|bid[eé]/.test(n))
+    return 'tienda de artículos sanitarios y baño';
+
+  // Jardinería
+  if (/jard[ií]n|pasto|fertilizante|maceta|regadera|tijera.*podar|manguera.*riego|semilla|abono|tierra de hoja|cortac[eé]sped/.test(n))
+    return 'vivero y artículos de jardinería';
+
+  // Maquinaria pesada / industrial / arriendo
+  if (/retroexcavadora|minicargador|gr[uú]a|compactador|pavimentadora|generador.*el[eé]ctrico|motobomba|montacargas|rodillo.*compactador|placa.*compactadora/.test(n))
+    return 'maquinaria industrial y arriendo de equipos';
+
+  // Oficina / papelería
+  if (/papel\b|l[aá]piz|lapicera|carpeta|archivador|cuaderno|oficina|impresora|t[oó]ner|cinta.*adhesiva.*oficina/.test(n))
+    return 'librería y artículos de oficina';
+
+  // Ropa y calzado de trabajo (no EPP específico)
+  if (/zapatilla|zapato\b|pantal[oó]n|polera|chaqueta|ropa.*trabajo|uniforme|overol/.test(n))
+    return 'tienda de ropa y calzado de trabajo';
+
+  // Pinturas
   if (/pintura|esmalte|anticorrosivo|latex|barniz|sellador|impermeabilizante/.test(n)) return 'pinturas materiales construcción';
+
+  // Maderas
   if (/madera|pino|mdf|osb|tabla|terciado/.test(n)) return 'maderería materiales construcción';
+
+  // Eléctrico
   if (/cable|conduit|tablero|interruptor|foco|led|enchufe|el[eé]ctric/.test(n)) return 'materiales eléctricos ferretería';
+
+  // Plomería / tubería
   if (/tubo|pvc|codo|copla|sif[oó]n|v[aá]lvula|llave.*paso|sanitari/.test(n)) return 'materiales plomería ferretería';
+
+  // Aceros y metales
   if (/fierro|acero|angular|perfil|malla|pletina|barra/.test(n)) return 'aceros y metales ferretería';
+
+  // Herramientas eléctricas
   if (/taladro|amoladora|sierra|esmeril|compresor|soldadora|atornillador|lijadora/.test(n)) return 'herramientas eléctricas ferretería';
+
+  // Tornillería y fijaciones
   if (/tornillo|perno|tuerca|golilla|clavo|tarugo|remache|bisagra/.test(n)) return 'tornillería y fijaciones ferretería';
+
   return 'ferretería materiales construcción';
 }
 
