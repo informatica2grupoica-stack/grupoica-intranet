@@ -86,6 +86,7 @@ interface ResultadoLocalProducto {
   telefono?: string | null;
   maps_url?: string | null;
   rating?: number | null;
+  rubro?: string;
 }
 
 const NOTA_LOCALES_DEFAULT = 'Tiendas físicas en la región según su rubro — confirma stock y precio por teléfono antes de visitar.';
@@ -2141,6 +2142,11 @@ export default function MonitorMasivoICA() {
                           >
                             <span>📍</span>
                             <span className="font-semibold">{local.tienda}</span>
+                            {local.rubro && (
+                              <span className="text-[8px] uppercase tracking-wide bg-amber-100 text-amber-600 px-1 py-0.5 rounded">
+                                {local.rubro}
+                              </span>
+                            )}
                             {local.direccion && (
                               <span className="text-[9px] opacity-60 max-w-[140px] truncate">{local.direccion}</span>
                             )}

@@ -8,10 +8,16 @@
 // negocios físicos reales obtenidos vía Serper /maps (Google Maps Places), que sí
 // están geolocalizados en la región solicitada.
 //
+// Clasificación de rubro: DeepSeek determina en qué tipo(s) de comercio físico
+// se vende el producto en Chile (un mismo producto puede caer en más de un rubro,
+// ej. "unión PVC para riego" → ferretería Y vivero/artículos de riego). Si DeepSeek
+// no está disponible, se usa una clasificación por palabras clave como respaldo.
+//
 // Limitación: Maps no expone catálogo/stock por producto, así que no se puede
 // confirmar si el local tiene el producto específico — se devuelve como referencia
-// de "dónde preguntar" según el rubro del producto.
+// de "dónde preguntar" según el/los rubro(s) detectados.
 import { NextRequest, NextResponse } from 'next/server';
+import { callDeepSeek } from '@/app/lib/deepseek/client';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -32,6 +38,7 @@ export interface ResultadoLocalProducto {
   telefono?: string | null;
   maps_url?: string | null;
   rating?: number | null;
+  rubro?: string;
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -39,8 +46,22 @@ export interface ResultadoLocalProducto {
 const CADENAS = ['sodimac', 'easy', 'construmart', 'imperial', 'homecenter', 'falabella', 'paris', 'boltec'];
 
 const NOTA_DISCLAIMER =
-  'Tiendas físicas ubicadas en la región que, por su rubro, podrían vender este tipo de producto. ' +
+  'Tiendas físicas según el rubro detectado para este producto. ' +
   'Google Maps no expone catálogo ni stock — confirma disponibilidad y precio por teléfono antes de visitar.';
+
+const SYSTEM_PROMPT_RUBROS = `Eres experto en retail y distribución de productos de ferretería, construcción, agro, EPP, aseo y oficina en Chile.
+
+Para el producto dado, identifica en qué tipo(s) de comercio físico se vende habitualmente en Chile. Un mismo producto puede venderse en más de un tipo de tienda — por ejemplo:
+- "Unión PVC" o "manguera": ferretería Y vivero/tienda de riego agrícola
+- "Pala": ferretería Y vivero/jardinería
+- "Guantes": ferretería (industrial) Y tienda de aseo (domésticos), según el contexto
+
+Responde SOLO JSON válido con esta estructura exacta:
+{"rubros": ["rubro 1 (más probable)", "rubro 2 (opcional, solo si realmente aplica)"]}
+
+Cada rubro debe ser una frase corta de 2-5 palabras, natural para buscar como categoría de negocio en Google Maps. Ejemplos válidos: "ferretería materiales construcción", "vivero artículos de riego y jardín", "distribuidora de artículos de aseo", "tienda de implementos de seguridad EPP", "librería artículos de oficina", "tienda de maquinaria y herramientas", "tienda de artículos sanitarios y baño".
+
+Máximo 2 rubros. Si solo hay un rubro claro, devuelve solo ese.`;
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -60,12 +81,10 @@ function clasificarTienda(texto: string): ResultadoLocalProducto['tipo'] {
 }
 
 /**
- * Determina el rubro de tienda más relevante para el producto,
- * usado como query en la búsqueda de mapas. Cada categoría apunta
- * al tipo de comercio físico real donde se vende ese producto en Chile
- * (no todo es ferretería).
+ * Clasificación por palabras clave — respaldo cuando DeepSeek no está
+ * disponible o falla. Devuelve un único rubro estimado.
  */
-function categoriaParaMaps(producto: string): string {
+function categoriaParaMapsRegex(producto: string): string {
   const n = producto.toLowerCase();
 
   // EPP / seguridad industrial
@@ -120,6 +139,35 @@ function categoriaParaMaps(producto: string): string {
   return 'ferretería materiales construcción';
 }
 
+/**
+ * Determina con IA (DeepSeek) en qué rubro(s) de comercio físico se vende
+ * el producto. Devuelve 1-2 rubros. Si DeepSeek falla o no está configurado,
+ * cae al clasificador por palabras clave.
+ */
+async function categorizarConIA(producto: string): Promise<string[]> {
+  const fallback = [categoriaParaMapsRegex(producto)];
+  if (!process.env.DEEPSEEK_API_KEY) return fallback;
+
+  try {
+    const result = await callDeepSeek(
+      [
+        { role: 'system', content: SYSTEM_PROMPT_RUBROS },
+        { role: 'user', content: `Producto: "${producto}"` },
+      ],
+      { temperature: 0.1, maxTokens: 150, timeoutMs: 8000, retries: 1 }
+    );
+    if (result.error || !result.content) return fallback;
+
+    const parsed = JSON.parse(result.content);
+    const rubros: string[] = Array.isArray(parsed.rubros)
+      ? parsed.rubros.filter((r: unknown): r is string => typeof r === 'string' && r.trim().length > 2).slice(0, 2)
+      : [];
+    return rubros.length ? rubros : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function buildMapsUrl(nombre: string, direccion: string): string | null {
   const q = [nombre, direccion].filter(Boolean).join(' ').trim();
   if (!q) return null;
@@ -128,10 +176,9 @@ function buildMapsUrl(nombre: string, direccion: string): string | null {
 
 // ─── Búsqueda en mapas (tiendas locales) ─────────────────────────────────────
 
-async function buscarMaps(producto: string, region: string): Promise<ResultadoLocalProducto[]> {
+async function buscarMapsPorRubro(rubro: string, region: string): Promise<ResultadoLocalProducto[]> {
   if (!SERPER_KEY) return [];
   try {
-    const categoria = categoriaParaMaps(producto);
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
     const res = await fetch('https://google.serper.dev/maps', {
@@ -139,7 +186,7 @@ async function buscarMaps(producto: string, region: string): Promise<ResultadoLo
       headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
       body: JSON.stringify({
-        q: `${categoria} ${region}, Chile`,
+        q: `${rubro} ${region}, Chile`,
         gl: 'cl',
         hl: 'es',
         num: 10,
@@ -150,7 +197,7 @@ async function buscarMaps(producto: string, region: string): Promise<ResultadoLo
     const data = await res.json();
     const places: any[] = data.places || [];
 
-    return places.slice(0, 6).map((p: any) => {
+    return places.map((p: any) => {
       const nombre = (p.title || '').trim();
       const direccion = (p.address || '').trim();
       return {
@@ -165,11 +212,34 @@ async function buscarMaps(producto: string, region: string): Promise<ResultadoLo
         telefono: p.phoneNumber?.trim() || null,
         maps_url: buildMapsUrl(nombre, direccion),
         rating: typeof p.rating === 'number' ? p.rating : null,
+        rubro,
       } satisfies ResultadoLocalProducto;
     });
   } catch {
     return [];
   }
+}
+
+/**
+ * Busca en Maps para cada rubro detectado y combina resultados,
+ * deduplicando por nombre+dirección. Si hay 2 rubros, intercala
+ * resultados de ambos para dar visibilidad a los dos tipos de comercio.
+ */
+async function buscarMaps(rubros: string[], region: string): Promise<ResultadoLocalProducto[]> {
+  const porRubro = await Promise.all(rubros.map((r) => buscarMapsPorRubro(r, region)));
+  const maxPorRubro = rubros.length > 1 ? 4 : 6;
+  const vistos = new Set<string>();
+  const merged: ResultadoLocalProducto[] = [];
+
+  for (const lista of porRubro) {
+    for (const r of lista.slice(0, maxPorRubro)) {
+      const key = `${r.tienda}|${r.direccion}`.toLowerCase();
+      if (vistos.has(key)) continue;
+      vistos.add(key);
+      merged.push(r);
+    }
+  }
+  return merged.slice(0, 8);
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -192,8 +262,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const resultados = await buscarMaps(producto, region);
-  const maps_link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${categoriaParaMaps(producto)} ${region}, Chile`)}`;
+  const rubros = await categorizarConIA(producto);
+  const resultados = await buscarMaps(rubros, region);
+  const maps_link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${rubros[0]} ${region}, Chile`)}`;
 
   return NextResponse.json({
     producto,
@@ -201,6 +272,7 @@ export async function GET(req: NextRequest) {
     resultados,
     maps_link,
     nota: NOTA_DISCLAIMER,
+    rubros,
     total: resultados.length,
   });
 }
