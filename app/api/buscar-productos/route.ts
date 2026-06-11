@@ -423,15 +423,17 @@ async function entenderConsultaIA(producto: string, contexto: string, region?: s
     const regionCtx = region?.trim() ? ` Búsqueda específica para la región de ${region}, Chile.` : '';
     const ctxLine = contexto?.trim()
       ? `Contexto del usuario: ${contexto}.${regionCtx}`
-      : `Rubro: ferretería y construcción en Chile.${regionCtx}`;
+      : `No se especificó un rubro — infiere el rubro/categoría del producto a partir de su propia descripción (puede ser ferretería, construcción, vestuario, calzado, EPP, electrónica, mobiliario, oficina, aseo, etc.) y genera las variantes acorde a ese rubro.${regionCtx}`;
 
-    const systemPrompt = `Eres experto en materiales de construcción, ferretería y licitaciones públicas de Chile. ${ctxLine}
+    const systemPrompt = `Eres experto en compras públicas de Chile (Mercado Público) y en retail chileno de cualquier rubro (ferretería, construcción, vestuario, calzado, EPP, electrónica, mobiliario, oficina, aseo, etc.). ${ctxLine}
 El producto proviene de un Excel de cotización de licitación chilena (MercadoPúblico). Puede contener:
 - Códigos internos al inicio: "B ", "C2 ", "B SC ", "B MSD " — IGNÓRALOS al generar variantes
-- Dimensiones en formatos no-comerciales: [MM], comas decimales, X mayúscula — normalízalos
-- Terminología chilena específica (ver glosario abajo)
+- Dimensiones, tallas o especificaciones técnicas extensas en formatos no-comerciales — normalízalos
+- Terminología chilena específica (ver glosario abajo, aplica solo si el rubro es ferretería/construcción)
 
-GLOSARIO CONSTRUCCIÓN CHILE (traduce al término comercial):
+IMPORTANTE: NO inventes marcas ni modelos comerciales que no estén explícitamente mencionados en el producto. Si el producto es una descripción genérica con especificaciones técnicas (ej. "calzado térmico impermeable, suela antideslizante, talla X"), las variantes deben describir el PRODUCTO GENÉRICO con sus características más distintivas (no un modelo de marca inventado).
+
+GLOSARIO CONSTRUCCIÓN CHILE (traduce al término comercial si el rubro es ferretería/construcción):
 tineta=balde bidón pintura 4L | galón=galón pintura 4 litros | chiporro=rodillo pintura | pomeles/pomel=bisagra puerta
 malla acma=malla electrosoldada galvanizada | malla raschel=malla sombra | malla concertina=alambre concertina
 pino verde=pino bruto sin secar | pino seco cepillado=pino cepillado seco | pino impregnado=pino CCA tratado
@@ -455,11 +457,11 @@ Responde SOLO JSON válido con esta estructura exacta:
 
 REGLAS para variantes:
 1. Eliminar prefijos internos (B, C2, B SC, B MSD) del inicio del nombre
-2. Usar términos que aparecen en tiendas chilenas (Sodimac, Easy, Construmart, Imperial)
-3. Primera variante: nombre comercial + dimensiones clave + Chile
-4. Segunda variante: producto genérico + dimensiones + precio Chile
+2. Usar términos que aparecen en tiendas chilenas según el rubro (ferretería: Sodimac, Easy, Construmart, Imperial; vestuario/calzado/EPP: Decathlon, Falabella, Dimarsa; electrónica/oficina: Pc Factory, Lider, Falabella; etc.)
+3. Primera variante: nombre comercial genérico + características distintivas clave + Chile
+4. Segunda variante: producto genérico + características clave + precio Chile
 5. Tercera variante: solo producto genérico + Chile (más amplia)
-6. Para dimensiones: usar formato "NxN mm" o "N pulg" en vez de formatos técnicos
+6. Para dimensiones/medidas: usar formato "NxN mm", "N pulg" o "talla N" en vez de formatos técnicos
 ${region ? `\nRegión: ${region} — incluir en al menos una variante.` : ''}`;
 
     const ctrl = new AbortController();
