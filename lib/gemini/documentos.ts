@@ -254,22 +254,40 @@ export function parsearJSONSeguro(txt: string, sinonimos?: Record<string, string
     }
   }
 
-  // ── Intento 3: JSON truncado — completar llaves faltantes ─────────────────
+  // ── Intento 3: JSON truncado — completar comillas/llaves faltantes ────────
   if (primeraLlave >= 0) {
-    let candidato = limpio.slice(primeraLlave);
-    let abiertas = 0;
-    let corchetes = 0;
-    for (const ch of candidato) {
-      if (ch === '{') abiertas++;
-      if (ch === '}') abiertas--;
-      if (ch === '[') corchetes++;
-      if (ch === ']') corchetes--;
+    const candidatoOriginal = limpio.slice(primeraLlave);
+    let abiertas = 0, corchetes = 0, enString = false;
+    for (let i = 0; i < candidatoOriginal.length; i++) {
+      const ch = candidatoOriginal[i];
+      if (ch === '"' && candidatoOriginal[i - 1] !== '\\') enString = !enString;
+      if (!enString) {
+        if (ch === '{') abiertas++;
+        else if (ch === '}') abiertas--;
+        else if (ch === '[') corchetes++;
+        else if (ch === ']') corchetes--;
+      }
     }
-    if (abiertas > 0 || corchetes > 0) {
-      const ultimoObj = candidato.lastIndexOf('},');
+
+    if (abiertas > 0 || corchetes > 0 || enString) {
+      // Intento 3a: cerrar el string que quedó abierto (si lo hay) y las llaves/corchetes pendientes
+      const reparado = candidatoOriginal.replace(/,\s*$/, '')
+        + (enString ? '"' : '')
+        + ']'.repeat(Math.max(corchetes, 0))
+        + '}'.repeat(Math.max(abiertas, 0));
+      try {
+        const parsed = JSON.parse(reparado);
+        if (typeof parsed === 'object') {
+          console.log('[gemini] Intento 3a OK (JSON truncado reparado, string cerrado)');
+          return normalizarClaves(parsed, sinonimos);
+        }
+      } catch { /* continuar */ }
+
+      // Intento 3b: descartar el último par clave-valor incompleto y cerrar
+      const ultimoObj = candidatoOriginal.lastIndexOf('},');
       const corte = Math.max(ultimoObj, 0);
       if (corte > 50) {
-        candidato = candidato.slice(0, corte + 1);
+        let candidato = candidatoOriginal.slice(0, corte + 1);
         let a = 0, c = 0;
         for (const ch of candidato) { if (ch === '{') a++; if (ch === '}') a--; if (ch === '[') c++; if (ch === ']') c--; }
         if (c > 0) candidato += ']'.repeat(c);
@@ -277,7 +295,7 @@ export function parsearJSONSeguro(txt: string, sinonimos?: Record<string, string
         try {
           const parsed = JSON.parse(candidato);
           if (typeof parsed === 'object') {
-            console.log('[gemini] Intento 3 OK (JSON truncado recuperado)');
+            console.log('[gemini] Intento 3b OK (JSON truncado recuperado)');
             return normalizarClaves(parsed, sinonimos);
           }
         } catch { /* continuar */ }

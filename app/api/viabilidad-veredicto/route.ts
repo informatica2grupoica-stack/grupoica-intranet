@@ -61,7 +61,7 @@ Responde SOLO con este JSON, sin texto antes ni después:
   "productos_criticos": "lista breve de los ítems de alto riesgo de búsqueda que deben verificarse manualmente con su ficha técnica antes de cotizar (combina los detectados antes con los nuevos del buscador), o '${analisis.productos_criticos || ''}' si no hay nuevos"
 }`;
 
-    const txt = await generarConGemini([{ text: prompt }], 2048);
+    const txt = await generarConGemini([{ text: prompt }], 4096);
     const parsed = parsearJSONSeguro(txt);
 
     return NextResponse.json({
