@@ -774,6 +774,31 @@ export default function MonitorMasivoICA() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Recibir el Excel original enviado desde Viabilidad (habilita "Descargar Excel" formato COSTEO)
+  useEffect(() => {
+    const raw = sessionStorage.getItem('viabilidad_excel_archivo');
+    if (!raw) return;
+    sessionStorage.removeItem('viabilidad_excel_archivo');
+    try {
+      const info = JSON.parse(raw) as { base64: string; nombre: string; cols: typeof colsExcel; sheetName: string };
+      if (!info.base64 || !info.nombre) return;
+      const file = base64ToFile(info.base64, info.nombre);
+      setArchivoExcel(file);
+      if (info.sheetName) setSheetNameActual(info.sheetName);
+      if (info.cols) setColsExcel(info.cols);
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        setWorkbook(wb);
+        setPestanas(wb.SheetNames);
+      };
+      reader.readAsArrayBuffer(file);
+    } catch { /* ignorar */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ordena los resultados de un item según el modo elegido (match o precio)
   const resultadosOrdenados = useCallback((item: ItemLista): ProductoResultado[] => {
     const modo = ordenItem.get(item.numero) || 'match';

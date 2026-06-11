@@ -130,6 +130,30 @@ function mimeDeArchivo(file: File): string {
   return MIME_POR_EXT[ext] || 'application/octet-stream';
 }
 
+// ─── Helpers base64 ↔ File (para conservar el Excel original entre navegaciones) ──
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function base64ToFile(base64: string, filename: string): File {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File(
+    [bytes],
+    filename || 'COSTEO.xlsx',
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+  );
+}
+
 // ─── Helpers de UI ─────────────────────────────────────────────────────────────
 const Campo = ({ label, value, icon: Icon }: { label: string; value: string; icon?: React.ElementType }) => (
   <div className="bg-slate-50 rounded-xl p-3">
@@ -179,6 +203,7 @@ export default function ViabilidadPage() {
 
   const inputExcelRef = useRef<HTMLInputElement>(null);
   const inputDocsRef = useRef<HTMLInputElement>(null);
+  const archivoBase64Ref = useRef<{ file: File; base64: string } | null>(null);
 
   // ─── Cargar análisis guardados ─────────────────────────────────────────────
   const cargarGuardados = useCallback(async () => {
@@ -209,6 +234,49 @@ export default function ViabilidadPage() {
     } catch { /* ignorar */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restaurar el análisis/Excel que estaban en pantalla antes de ir al buscador
+  useEffect(() => {
+    const raw = sessionStorage.getItem('viabilidad_estado');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      if (data.resultado) setResultado(data.resultado);
+      if (data.productosExcel) setProductosExcel(data.productosExcel);
+      if (data.nombreProyecto) setNombreProyecto(data.nombreProyecto);
+      if (data.colsExcel) setColsExcel(data.colsExcel);
+      if (data.sheetName) setSheetName(data.sheetName);
+      if (data.archivoBase64 && data.archivoNombre) {
+        const file = base64ToFile(data.archivoBase64, data.archivoNombre);
+        archivoBase64Ref.current = { file, base64: data.archivoBase64 };
+        setArchivoExcel(file);
+      }
+    } catch { /* ignorar */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Conserva el análisis/Excel en sessionStorage entre navegaciones ───────
+  const obtenerArchivoBase64 = useCallback(async (): Promise<string | null> => {
+    if (!archivoExcel) return null;
+    if (archivoBase64Ref.current?.file === archivoExcel) return archivoBase64Ref.current.base64;
+    const base64 = await fileToBase64(archivoExcel);
+    archivoBase64Ref.current = { file: archivoExcel, base64 };
+    return base64;
+  }, [archivoExcel]);
+
+  const persistirEstado = useCallback(async () => {
+    if (!resultado) { sessionStorage.removeItem('viabilidad_estado'); return; }
+    const archivoBase64 = await obtenerArchivoBase64();
+    sessionStorage.setItem('viabilidad_estado', JSON.stringify({
+      resultado, productosExcel, nombreProyecto, colsExcel, sheetName,
+      archivoBase64, archivoNombre: archivoExcel?.name || null,
+    }));
+  }, [resultado, productosExcel, nombreProyecto, colsExcel, sheetName, archivoExcel, obtenerArchivoBase64]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { persistirEstado(); }, 400);
+    return () => clearTimeout(t);
+  }, [persistirEstado]);
 
   // ─── Cargar Excel COSTEO ─────────────────────────────────────────────────────
   const cargarExcel = (file: File) => {
@@ -377,7 +445,7 @@ export default function ViabilidadPage() {
   };
 
   // ─── Enviar ítems al buscador de productos ──────────────────────────────────
-  const enviarABuscador = () => {
+  const enviarABuscador = async () => {
     if (!resultado?.items.length) { toast('No hay ítems para enviar', 'warning'); return; }
 
     const mapaExcel = new Map(productosExcel.map(p => [String(p.numero), p]));
@@ -398,6 +466,20 @@ export default function ViabilidadPage() {
     if (!items.length) { toast('No se pudieron preparar los ítems', 'error'); return; }
 
     sessionStorage.setItem('viabilidad_items_excel', JSON.stringify(items));
+
+    // Pasar también el Excel original (para habilitar las descargas en formato COSTEO allá)
+    if (archivoExcel) {
+      try {
+        const archivoBase64 = await obtenerArchivoBase64();
+        sessionStorage.setItem('viabilidad_excel_archivo', JSON.stringify({
+          base64: archivoBase64, nombre: archivoExcel.name, cols: colsExcel, sheetName,
+        }));
+      } catch { /* si falla, igual se envían los ítems */ }
+    }
+
+    // Conservar el análisis actual para mostrarlo al volver desde el buscador
+    await persistirEstado();
+
     toast(`Enviando ${items.length} ítems al buscador...`, 'success');
     router.push('/buscador-productos');
   };
@@ -437,6 +519,18 @@ export default function ViabilidadPage() {
       setCalculandoVeredicto(false);
     }
   };
+
+  // Al volver del buscador con resultados (y ya teniendo un análisis), calcular
+  // el veredicto final automáticamente una sola vez.
+  const veredictoAutoRef = useRef(false);
+  useEffect(() => {
+    if (veredictoAutoRef.current) return;
+    if (resultado && resultadosBuscador) {
+      veredictoAutoRef.current = true;
+      calcularVeredicto();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultado, resultadosBuscador]);
 
   // ─── Descargar Excel completo (COSTEO con precios + pestaña Análisis) ───────
   const descargarExcelCompleto = async () => {
@@ -656,6 +750,15 @@ export default function ViabilidadPage() {
                   <Building2 size={12} /> {a.cliente || '—'}
                   {a.id_proceso && <span className="font-mono bg-white/60 px-1.5 py-0.5 rounded text-[10px]">ID: {a.id_proceso}</span>}
                 </p>
+                {a.presupuesto_con_iva && (
+                  <p className="mt-2 inline-flex items-center gap-1.5 bg-white/70 rounded-lg px-2.5 py-1.5 text-xs">
+                    <Wallet size={13} className="text-slate-500" />
+                    <span className="text-slate-500">Presupuesto disponible:</span>
+                    <span className="font-black text-slate-800">
+                      {a.presupuesto_con_iva}{presupuesto > 0 ? ` (≈ $${presupuesto.toLocaleString('es-CL')})` : ''}
+                    </span>
+                  </p>
+                )}
               </div>
               <span className={`shrink-0 inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wide px-3 py-1.5 rounded-xl ${
                 viable === 'SI' ? 'bg-emerald-500 text-white' :
