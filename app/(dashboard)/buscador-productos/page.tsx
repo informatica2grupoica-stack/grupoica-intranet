@@ -405,10 +405,10 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 group">
+                    <div className="flex items-center gap-1.5">
                       <span className="truncate">{p.nombre}</span>
                       <button onClick={() => empezarEdicion(p)} title="Editar detalle"
-                        className="p-1 text-slate-300 hover:text-[#2563EB] hover:bg-blue-50 rounded shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        className="p-1 text-slate-400 hover:text-[#2563EB] hover:bg-blue-50 rounded shrink-0 transition-colors">
                         <Pencil size={12} />
                       </button>
                     </div>
