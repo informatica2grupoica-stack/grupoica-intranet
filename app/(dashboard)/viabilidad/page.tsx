@@ -425,7 +425,7 @@ export default function ViabilidadPage() {
       }
 
       setPasoActual('Analizando con IA (puede tardar 1-2 minutos)...');
-      const itemsExcelPayload = productosExcel.map(p => ({ numero: String(p.numero), detalle: p.nombre }));
+      const itemsExcelPayload = productosExcel.map(p => ({ numero: String(p.numero), detalle: p.nombre, cantidad: p.cantidad, unidad: p.conversion }));
       const res = await fetch('/api/viabilidad-analizar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -455,7 +455,9 @@ export default function ViabilidadPage() {
 
     const items: ProductoExcel[] = resultado.items.map((it, idx) => {
       const ref = mapaExcel.get(it.item);
-      const cantidad = parseFloat(it.cantidad) || ref?.cantidad || 1;
+      // La cantidad real del Excel manda — la IA solo completa si el Excel no la trae
+      // (de lo contrario la IA puede devolver "1" por defecto y subestimar el costo total)
+      const cantidad = ref?.cantidad || parseFloat(it.cantidad) || 1;
       return {
         numero: it.item || String(idx + 1),
         nombre: it.nombre || ref?.nombre || '',

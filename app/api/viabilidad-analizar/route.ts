@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   let archivos: ArchivoEntrada[] = [];
-  let itemsExcel: Array<{ numero: string; detalle: string }> = [];
+  let itemsExcel: Array<{ numero: string; detalle: string; cantidad?: number; unidad?: string }> = [];
 
   try {
     const body = await req.json();
@@ -89,10 +89,10 @@ export async function POST(req: Request) {
 
 Te entrego ${archivos.length} documento(s) de un proceso de licitación (bases administrativas, bases técnicas, anexos, formularios, etc). Analiza TODOS los documentos en conjunto.
 
-${itemsExcel.length ? `También tengo esta planilla de costeo (Excel) con los ítems a cotizar:
-${JSON.stringify(itemsExcel.slice(0, 100).map(i => ({ numero: i.numero, detalle: i.detalle })), null, 2)}
+${itemsExcel.length ? `También tengo esta planilla de costeo (Excel) con los ítems a cotizar, incluyendo la CANTIDAD y UNIDAD/CONVERSIÓN reales (unidad, pack, kg, mm, ml, galón, tineta, etc.):
+${JSON.stringify(itemsExcel.slice(0, 100).map(i => ({ numero: i.numero, detalle: i.detalle, cantidad: i.cantidad, unidad: i.unidad })), null, 2)}
 
-Cruza esta lista con lo que encuentres en los documentos: corrige nombres, agrega especificaciones técnicas, y completa cantidad/unidad cuando falten.` : 'Si encuentras un listado de ítems/productos a cotizar dentro de los documentos, extráelo igualmente.'}
+Cruza esta lista con lo que encuentres en los documentos: corrige nombres y agrega especificaciones técnicas. IMPORTANTE: la "cantidad" y "unidad" de esta planilla son DATOS REALES del Excel — repítelas tal cual en cada ítem (no las reemplaces por "1" ni inventes otro valor). Solo completa cantidad/unidad desde los documentos para ítems que NO vengan en esta planilla.` : 'Si encuentras un listado de ítems/productos a cotizar dentro de los documentos, extráelo igualmente.'}
 
 TAREA 1 — Extrae estos datos del proceso (campos de un análisis de viabilidad de licitación). Si un dato no aparece en los documentos, usa "" (string vacío) o null:
 
