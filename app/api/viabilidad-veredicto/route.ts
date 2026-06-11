@@ -36,29 +36,40 @@ export async function POST(req: Request) {
     const margenPct = presupuesto > 0 ? ((presupuesto - costoTotalConIva) / presupuesto) * 100 : null;
     const formaEval = analisis.forma_evaluacion || {};
 
-    const prompt = `Eres un experto en licitaciones de Mercado Público (Chile). Con la siguiente información, entrega un VEREDICTO FINAL ACTUALIZADO sobre si conviene participar en esta licitación.
+    const itemsSinPrecio = Math.max(totalItems - itemsConPrecio, 0);
+    const coberturaPct = totalItems > 0 ? (itemsConPrecio / totalItems) * 100 : 100;
+
+    const prompt = `Eres un analista experto en licitaciones de Mercado Público (Chile), especializado en evaluar la viabilidad financiera de participar en un proceso. Responde de forma EXACTA y CONSISTENTE, basándote SOLO en los datos entregados — no inventes cifras ni supuestos que no estén aquí.
 
 DATOS DEL PROCESO:
 - Presupuesto disponible (con IVA): ${analisis.presupuesto_con_iva || 'no especificado'}${presupuesto > 0 ? ` (≈ $${presupuesto.toLocaleString('es-CL')})` : ''}
-- Costo estimado real de los productos (con IVA, según buscador de precios): $${costoTotalConIva.toLocaleString('es-CL')}
+- Costo real de los productos con IVA, según precios de mercado encontrados por el buscador: $${costoTotalConIva.toLocaleString('es-CL')}
 - Costo neto estimado: $${costoTotalNeto.toLocaleString('es-CL')}
-- Ítems cotizados con precio encontrado: ${itemsConPrecio} de ${totalItems}
-${margenPct !== null ? `- Margen estimado (presupuesto vs costo real): ${margenPct.toFixed(1)}% ${margenPct >= 0 ? '(el costo cabe dentro del presupuesto)' : '(el costo SUPERA el presupuesto disponible)'}` : '- No se pudo calcular el margen (presupuesto no especificado en los documentos)'}
+- Cobertura de cotización: ${itemsConPrecio} de ${totalItems} ítems con precio encontrado (${coberturaPct.toFixed(0)}%)${itemsSinPrecio > 0 ? ` — ${itemsSinPrecio} ítem(s) SIN precio, su costo NO está incluido en el total anterior` : ''}
+${margenPct !== null ? `- Margen real (presupuesto vs costo encontrado): ${margenPct.toFixed(1)}% ${margenPct >= 0 ? '(el costo cabe dentro del presupuesto)' : '(el costo YA SUPERA el presupuesto disponible)'}` : '- Margen: no se pudo calcular (presupuesto no especificado en los documentos)'}
 - Plazo aceptación OC: ${analisis.plazo_aceptacion_oc || '—'}
 - Garantías exigidas: ${analisis.garantias || '—'}
 - Multas: ${analisis.multas || '—'}
 - Forma de evaluación: precio ${formaEval.criterio_economico || '—'}, técnico ${formaEval.criterio_tecnico || '—'}, programa ${formaEval.programa || '—'}, requisitos formales ${formaEval.requisitos_formales || '—'}
 - Veredicto previo (basado solo en documentos, sin precios reales): proyecto_viable=${analisis.proyecto_viable || '—'} — "${analisis.justificacion_viabilidad || '—'}"
-- Productos críticos detectados previamente: ${analisis.productos_criticos || '—'}
-${itemsAltoRiesgo.length ? `- ÍTEMS DE ALTO RIESGO DE BÚSQUEDA (coincidencia poco confiable, posible diferencia de unidad o sin resultados — sus precios pueden no ser representativos del costo real, conviene verificar la ficha técnica antes de cotizar):
+- Productos críticos detectados previamente en los documentos: ${analisis.productos_criticos || '—'}
+${itemsAltoRiesgo.length ? `- ÍTEMS DE ALTO RIESGO DE BÚSQUEDA (coincidencia poco confiable, posible diferencia de unidad o sin resultados — su precio real puede ser DISTINTO al usado en el cálculo, conviene verificar la ficha técnica antes de cotizar):
 ${itemsAltoRiesgo.map(it => `  · #${it.numero} ${it.nombre} — ${it.motivo}${it.match > 0 ? ` (match ${it.match}%)` : ''}`).join('\n')}` : '- No se detectaron ítems de alto riesgo de búsqueda.'}
 
-Responde SOLO con este JSON, sin texto antes ni después:
+REGLAS DE DECISIÓN — aplícalas en este orden:
+1. Si el presupuesto no está especificado (margen no calculable), decide SOLO según criterios de evaluación, multas, garantías y plazos, y dilo explícitamente en "observaciones".
+2. Si hay ítems sin precio (itemsSinPrecio > 0) o ítems de alto riesgo de búsqueda, el costo real puede estar SUBESTIMADO. Trátalos como un riesgo adicional sobre el margen, no los ignores.
+3. Margen ≥ 15% (considerando el riesgo del punto 2): VIABLE ("SI"), salvo que multas, garantías o plazos sean por sí solos prohibitivos.
+4. Margen entre 0% y 15%: caso límite. VIABLE ("SI") solo si el criterio económico tiene peso relevante en la evaluación Y no hay riesgos adicionales importantes (ítems sin precio relevantes, muchos ítems de alto riesgo, multas/plazos desfavorables). En cualquier otro caso: "NO".
+5. Margen negativo: NO VIABLE ("NO"), salvo que el déficit sea menor al 3% del presupuesto Y los ítems sin precio/alto riesgo sugieran que el costo real podría terminar siendo menor — en ese caso responde "SI" pero indica claramente la reserva en "observaciones".
+6. Sé conservador ante la duda: si los datos son insuficientes para confirmar viabilidad, responde "NO" y explica qué falta verificar.
+
+Responde SOLO con este JSON, sin texto antes ni después, sin markdown, todos los valores en una sola línea (sin saltos de línea):
 {
   "proyecto_viable": "SI o NO",
-  "justificacion_viabilidad": "explicación breve y concreta del veredicto final, considerando el margen real entre presupuesto y costo, los criterios de evaluación y los riesgos (multas, garantías, plazos)",
-  "observaciones": "alertas o recomendaciones adicionales para el equipo comercial (ej. ítems sin precio encontrado, riesgos de margen, plazos ajustados)",
-  "productos_criticos": "lista breve de los ítems de alto riesgo de búsqueda que deben verificarse manualmente con su ficha técnica antes de cotizar (combina los detectados antes con los nuevos del buscador), o '${analisis.productos_criticos || ''}' si no hay nuevos"
+  "justificacion_viabilidad": "explicación breve (2-4 frases) del veredicto, citando el margen real, la regla de decisión aplicada y los criterios/riesgos que la sustentan",
+  "observaciones": "alertas y recomendaciones concretas para el equipo comercial (ítems sin precio, ítems de alto riesgo, riesgos de margen, plazos o garantías ajustadas)",
+  "productos_criticos": "lista breve de ítems (número y nombre) que deben verificarse manualmente con su ficha técnica antes de cotizar, combinando los detectados antes con los nuevos del buscador, o '${analisis.productos_criticos || ''}' si no hay nuevos"
 }`;
 
     const txt = await generarConGemini([{ text: prompt }], 4096);
