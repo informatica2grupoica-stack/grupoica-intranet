@@ -210,6 +210,7 @@ export default function ViabilidadPage() {
   const [resultadosBuscador, setResultadosBuscador] = useState<ResultadosBuscador | null>(null);
   const [calculandoVeredicto, setCalculandoVeredicto] = useState(false);
   const [descargandoExcel, setDescargandoExcel] = useState(false);
+  const [descargandoPlantilla, setDescargandoPlantilla] = useState<'costeo' | 'lineas' | null>(null);
 
   // Análisis guardados
   const [guardados, setGuardados] = useState<AnalisisGuardado[]>([]);
@@ -584,6 +585,43 @@ export default function ViabilidadPage() {
       toast(`Error: ${e.message}`, 'error');
     } finally {
       setDescargandoExcel(false);
+    }
+  };
+
+  // ─── Descargar plantilla en blanco rellenada (sin necesitar Excel propio) ──────
+  const descargarPlantilla = async (formato: 'costeo' | 'lineas') => {
+    if (!resultado) { toast('Analiza la documentación primero', 'warning'); return; }
+    setDescargandoPlantilla(formato);
+    try {
+      const fd = new FormData();
+      fd.append('usarPlantilla', 'true');
+      fd.append('modo', 'viabilidad');
+      fd.append('formato', formato);
+      fd.append('analisis', JSON.stringify(resultado.analisis));
+      fd.append('itemsBases', JSON.stringify(resultado.items));
+      if (resultadosBuscador?.items.length) fd.append('seleccionados', JSON.stringify(resultadosBuscador.items));
+
+      const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || 'No se pudo generar el Excel');
+      }
+
+      const blob = await res.blob();
+      const nombreLimpio = (nombreProyecto || 'proyecto').replace(/[^\w-]+/g, '_');
+      const sufijo = formato === 'lineas' ? 'lineas' : 'costeo';
+      const filename = `Viabilidad_${nombreLimpio}_${sufijo}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: filename,
+      });
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast('Excel descargado', 'success');
+    } catch (e: any) {
+      toast(`Error: ${e.message}`, 'error');
+    } finally {
+      setDescargandoPlantilla(null);
     }
   };
 
@@ -982,6 +1020,28 @@ export default function ViabilidadPage() {
             >
               {descargandoExcel ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
               Descargar Excel completo (COSTEO + Análisis)
+            </button>
+          </div>
+
+          {/* Plantillas en blanco — generadas desde las bases, sin necesitar Excel propio */}
+          <div className="flex flex-wrap gap-3 mt-3">
+            <button
+              onClick={() => descargarPlantilla('costeo')}
+              disabled={descargandoPlantilla !== null}
+              title={resultadosBuscador?.items.length ? 'Incluye precios y links del buscador' : 'Sin precios — pásalo por el buscador para incluirlos'}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-sm py-3 rounded-xl transition-colors"
+            >
+              {descargandoPlantilla === 'costeo' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              Descargar plantilla COSTEO {resultadosBuscador?.items.length ? '(con precios)' : '(sin precios)'}
+            </button>
+            <button
+              onClick={() => descargarPlantilla('lineas')}
+              disabled={descargandoPlantilla !== null}
+              title={resultadosBuscador?.items.length ? 'Incluye precios y links del buscador' : 'Sin precios — pásalo por el buscador para incluirlos'}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-sm py-3 rounded-xl transition-colors"
+            >
+              {descargandoPlantilla === 'lineas' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              Descargar plantilla por LÍNEAS {resultadosBuscador?.items.length ? '(con precios)' : '(sin precios)'}
             </button>
           </div>
         </div>

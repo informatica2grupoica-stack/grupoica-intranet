@@ -2,6 +2,8 @@
 // Procesa el Excel COSTEO con ExcelJS en el servidor (evita problemas de Node.js en browser)
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
+import path from 'path';
+import fs from 'fs/promises';
 
 export const runtime = 'nodejs';
 
@@ -58,6 +60,8 @@ function valorParaCelda(cell: ExcelJS.Cell, valor: unknown): unknown {
 }
 
 interface ColsDetectadas { headerRow: number; colItem: number; colValor: number; colLink: number; }
+interface ColsPlantilla extends ColsDetectadas { colDetalle: number; colCantidad: number; colConversion: number; }
+interface ItemBase { item?: string; numero?: string; nombre: string; especificaciones?: string; cantidad?: string; unidad?: string; }
 
 export async function POST(req: NextRequest) {
   try {
@@ -70,10 +74,12 @@ export async function POST(req: NextRequest) {
     const colsPorHojaRaw = formData.get('colsPorHoja') as string | null;
     const formato = (formData.get('formato') as string) || 'costeo';
     const analisisRaw = formData.get('analisis') as string | null;
+    const usarPlantilla = (formData.get('usarPlantilla') as string) === 'true';
+    const itemsBasesRaw = formData.get('itemsBases') as string | null;
 
-    if (!file) return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
-    if (!seleccionadosRaw && !analisisRaw)
-      return NextResponse.json({ error: 'Sin datos de precios ni análisis' }, { status: 400 });
+    if (!file && !usarPlantilla) return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
+    if (!seleccionadosRaw && !analisisRaw && !itemsBasesRaw)
+      return NextResponse.json({ error: 'Sin datos de precios, ítems ni análisis' }, { status: 400 });
 
     const seleccionados: Array<{ numero: string; precio: number; link: string; hoja?: string; itemOriginal?: string }> = seleccionadosRaw ? JSON.parse(seleccionadosRaw) : [];
     if (seleccionadosRaw && !seleccionados.length) return NextResponse.json({ error: 'Sin resultados para exportar' }, { status: 400 });
@@ -81,8 +87,16 @@ export async function POST(req: NextRequest) {
     const colsPorHoja: Record<string, ColsDetectadas> | null = colsPorHojaRaw ? JSON.parse(colsPorHojaRaw) : null;
 
     const analisis: AnalisisViabilidad | null = analisisRaw ? JSON.parse(analisisRaw) : null;
+    const itemsBases: ItemBase[] = itemsBasesRaw ? JSON.parse(itemsBasesRaw) : [];
 
-    const arrayBuf = await file.arrayBuffer();
+    let arrayBuf: ArrayBuffer;
+    if (usarPlantilla) {
+      const templateName = formato === 'lineas' ? 'lineas-base.xlsx' : 'costeo-base.xlsx';
+      const buf = await fs.readFile(path.join(process.cwd(), 'lib', 'excel', 'templates', templateName));
+      arrayBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+    } else {
+      arrayBuf = await file!.arrayBuffer();
+    }
     const wb = new ExcelJS.Workbook();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await wb.xlsx.load(arrayBuf as any);
@@ -102,8 +116,8 @@ export async function POST(req: NextRequest) {
     };
 
     // ── Detección propia de columnas con ExcelJS (1-indexed), fallback ──────────
-    const detectarColumnasHoja = (ws: ExcelJS.Worksheet): ColsDetectadas | null => {
-      let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
+    const detectarColumnasHoja = (ws: ExcelJS.Worksheet): ColsPlantilla | null => {
+      let headerRow = -1, colItem = -1, colValor = -1, colLink = -1, colDetalle = -1, colCantidad = -1, colConversion = -1;
       for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
         const cells: string[] = [];
         ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
@@ -114,6 +128,9 @@ export async function POST(req: NextRequest) {
           cells.forEach((h, cn) => {
             if (!h) return;
             if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
+            else if (h.includes('DETALLE') && colDetalle < 0) colDetalle = cn;
+            else if (h.includes('CANTIDAD') && colCantidad < 0) colCantidad = cn;
+            else if (h.includes('CONVERSION') && colConversion < 0) colConversion = cn;
             else if ((h.includes('VALOR') || h.includes('PRECIO')) && h.includes('IVA')) colValor = cn;
             else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
           });
@@ -121,7 +138,7 @@ export async function POST(req: NextRequest) {
         }
       }
       if (headerRow < 0 || colItem < 0 || colValor < 0) return null;
-      return { headerRow, colItem, colValor, colLink };
+      return { headerRow, colItem, colValor, colLink, colDetalle, colCantidad, colConversion };
     };
 
     // SheetJS (cliente) usa 0-indexed; ExcelJS usa 1-indexed → sumar 1 a columnas y filas
@@ -133,8 +150,54 @@ export async function POST(req: NextRequest) {
     });
 
     let filled = 0;
+    let filledItems = 0;
 
-    if (formato === 'lineas' && seleccionados.length) {
+    if (usarPlantilla) {
+      // ── Plantilla en blanco: rellenar ITEM/Detalle/Cantidad/CONVERSION desde las
+      // bases (itemsBases) y, si vienen, VALOR C/IVA + LINK desde el buscador ──────
+      const targetSheetName = formato === 'lineas' ? 'LINEA1' : 'COSTEO';
+      const ws = wb.getWorksheet(targetSheetName) || wb.worksheets[0];
+      if (!ws) return NextResponse.json({ error: 'No se encontró la pestaña de la plantilla' }, { status: 400 });
+
+      const cols = detectarColumnasHoja(ws);
+      if (!cols) return NextResponse.json({ error: 'No se encontró columna ITEM o VALOR C/IVA en la plantilla' }, { status: 400 });
+      const { headerRow, colItem, colDetalle, colCantidad, colConversion, colValor, colLink } = cols;
+
+      const mapaItems = new Map(itemsBases.map(it => [String(it.item ?? it.numero ?? '').trim(), it]));
+      const mapaPrecios = new Map(seleccionados.map(s => [String(s.numero).trim(), s]));
+
+      for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
+        const row = ws.getRow(rn);
+        const rawKey = cellText(row.getCell(colItem)).trim();
+        if (!rawKey) continue;
+
+        let it = mapaItems.get(rawKey);
+        if (!it) it = mapaItems.get(String(parseFloat(rawKey)));
+        if (it) {
+          if (colDetalle > 0) {
+            row.getCell(colDetalle).value = it.especificaciones ? `${it.nombre} - ${it.especificaciones}` : it.nombre;
+          }
+          if (colCantidad > 0) {
+            const cant = parseFloat(String(it.cantidad ?? '').replace(',', '.'));
+            if (!isNaN(cant) && cant > 0) row.getCell(colCantidad).value = cant;
+          }
+          if (colConversion > 0 && it.unidad) row.getCell(colConversion).value = it.unidad;
+          filledItems++;
+        }
+
+        let precio = mapaPrecios.get(rawKey);
+        if (!precio) precio = mapaPrecios.get(String(parseFloat(rawKey)));
+        if (precio) {
+          row.getCell(colValor).value = precio.precio;
+          if (colLink > 0 && precio.link) row.getCell(colLink).value = precio.link;
+          filled++;
+        }
+      }
+
+      if (!filledItems)
+        return NextResponse.json({ error: 'No se encontraron filas en la plantilla para los ítems detectados' }, { status: 400 });
+
+    } else if (formato === 'lineas' && seleccionados.length) {
       // ── Formato LÍNEAS: rellenar cada hoja LINEAn por separado ──────────────────
       const porHoja = new Map<string, typeof seleccionados>();
       for (const s of seleccionados) {
@@ -250,7 +313,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!filled && !filledAnalisis)
+    if (!filled && !filledAnalisis && !filledItems)
       return NextResponse.json({ error: 'No se encontró información para rellenar en el Excel' }, { status: 400 });
 
     const out = await wb.xlsx.writeBuffer();
