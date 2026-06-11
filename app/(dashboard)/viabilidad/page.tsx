@@ -89,8 +89,16 @@ interface ItemResultadoBuscador {
   match: number;
 }
 
+interface ItemAltoRiesgo {
+  numero: string;
+  nombre: string;
+  motivo: string;
+  match: number;
+}
+
 interface ResultadosBuscador {
   items: ItemResultadoBuscador[];
+  itemsAltoRiesgo?: ItemAltoRiesgo[];
   totalConIva: number;
   totalNeto: number;
   totalItems: number;
@@ -498,6 +506,7 @@ export default function ViabilidadPage() {
           costoTotalNeto: resultadosBuscador.totalNeto,
           totalItems: resultadosBuscador.totalItems,
           itemsConPrecio: resultadosBuscador.itemsConPrecio,
+          itemsAltoRiesgo: resultadosBuscador.itemsAltoRiesgo || [],
         }),
       });
       const data = await res.json();
@@ -510,6 +519,7 @@ export default function ViabilidadPage() {
           proyecto_viable: data.proyecto_viable,
           justificacion_viabilidad: data.justificacion_viabilidad,
           observaciones: data.observaciones,
+          ...(data.productos_criticos ? { productos_criticos: data.productos_criticos } : {}),
         },
       } : prev);
       toast('Veredicto final actualizado', 'success');
@@ -818,6 +828,29 @@ export default function ViabilidadPage() {
                 {calculandoVeredicto ? <Loader2 size={15} className="animate-spin" /> : <Calculator size={15} />}
                 Calcular veredicto final con IA
               </button>
+            </div>
+          )}
+
+          {/* Ítems de alto riesgo de búsqueda (baja confianza de match / sin resultados) */}
+          {!!resultadosBuscador?.itemsAltoRiesgo?.length && (
+            <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-5">
+              <h4 className="font-bold text-amber-800 text-xs uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                <AlertTriangle size={13} /> Ítems de alto riesgo de búsqueda ({resultadosBuscador.itemsAltoRiesgo.length})
+              </h4>
+              <p className="text-[11px] text-amber-700 mb-3">
+                Coincidencias poco confiables — revisar manualmente la ficha técnica antes de cotizar.
+              </p>
+              <div className="space-y-1.5">
+                {resultadosBuscador.itemsAltoRiesgo.map(it => (
+                  <div key={it.numero} className="flex items-start gap-2 bg-white/70 rounded-xl px-3 py-2 text-xs">
+                    <span className="font-mono font-bold text-amber-700 shrink-0">#{it.numero}</span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-700 truncate">{it.nombre}</p>
+                      <p className="text-amber-700 mt-0.5">{it.motivo}{it.match > 0 ? ` (match ${it.match}%)` : ''}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

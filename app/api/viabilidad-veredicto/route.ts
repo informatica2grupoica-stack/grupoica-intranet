@@ -29,6 +29,8 @@ export async function POST(req: Request) {
     const costoTotalNeto = Number(body.costoTotalNeto) || 0;
     const totalItems = Number(body.totalItems) || 0;
     const itemsConPrecio = Number(body.itemsConPrecio) || 0;
+    const itemsAltoRiesgo: Array<{ numero: string; nombre: string; motivo: string; match: number }> =
+      Array.isArray(body.itemsAltoRiesgo) ? body.itemsAltoRiesgo : [];
 
     const presupuesto = parsearMontoCLP(analisis.presupuesto_con_iva || '');
     const margenPct = presupuesto > 0 ? ((presupuesto - costoTotalConIva) / presupuesto) * 100 : null;
@@ -47,12 +49,16 @@ ${margenPct !== null ? `- Margen estimado (presupuesto vs costo real): ${margenP
 - Multas: ${analisis.multas || '—'}
 - Forma de evaluación: precio ${formaEval.criterio_economico || '—'}, técnico ${formaEval.criterio_tecnico || '—'}, programa ${formaEval.programa || '—'}, requisitos formales ${formaEval.requisitos_formales || '—'}
 - Veredicto previo (basado solo en documentos, sin precios reales): proyecto_viable=${analisis.proyecto_viable || '—'} — "${analisis.justificacion_viabilidad || '—'}"
+- Productos críticos detectados previamente: ${analisis.productos_criticos || '—'}
+${itemsAltoRiesgo.length ? `- ÍTEMS DE ALTO RIESGO DE BÚSQUEDA (coincidencia poco confiable, posible diferencia de unidad o sin resultados — sus precios pueden no ser representativos del costo real, conviene verificar la ficha técnica antes de cotizar):
+${itemsAltoRiesgo.map(it => `  · #${it.numero} ${it.nombre} — ${it.motivo}${it.match > 0 ? ` (match ${it.match}%)` : ''}`).join('\n')}` : '- No se detectaron ítems de alto riesgo de búsqueda.'}
 
 Responde SOLO con este JSON, sin texto antes ni después:
 {
   "proyecto_viable": "SI o NO",
   "justificacion_viabilidad": "explicación breve y concreta del veredicto final, considerando el margen real entre presupuesto y costo, los criterios de evaluación y los riesgos (multas, garantías, plazos)",
-  "observaciones": "alertas o recomendaciones adicionales para el equipo comercial (ej. ítems sin precio encontrado, riesgos de margen, plazos ajustados)"
+  "observaciones": "alertas o recomendaciones adicionales para el equipo comercial (ej. ítems sin precio encontrado, riesgos de margen, plazos ajustados)",
+  "productos_criticos": "lista breve de los ítems de alto riesgo de búsqueda que deben verificarse manualmente con su ficha técnica antes de cotizar (combina los detectados antes con los nuevos del buscador), o '${analisis.productos_criticos || ''}' si no hay nuevos"
 }`;
 
     const txt = await generarConGemini([{ text: prompt }], 2048);
@@ -63,6 +69,7 @@ Responde SOLO con este JSON, sin texto antes ni después:
       proyecto_viable: String(parsed.proyecto_viable ?? '').trim(),
       justificacion_viabilidad: String(parsed.justificacion_viabilidad ?? '').trim(),
       observaciones: String(parsed.observaciones ?? '').trim(),
+      productos_criticos: String(parsed.productos_criticos ?? '').trim(),
       presupuesto,
       margen_pct: margenPct,
     });

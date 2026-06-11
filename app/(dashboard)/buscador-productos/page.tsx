@@ -1260,16 +1260,38 @@ export default function MonitorMasivoICA() {
   };
 
   // ─── Enviar resultados de vuelta al módulo de Viabilidad ─────────────────────
+  // Envía el precio del MEJOR MATCH (o la selección manual del usuario, si la hizo)
+  // y marca como "alto riesgo de búsqueda" los ítems con baja confianza de match,
+  // alerta de unidad o sin resultados — para que Viabilidad pida revisar su ficha técnica.
   const enviarResultadosAViabilidad = () => {
+    const itemsAltoRiesgo: { numero: string; nombre: string; motivo: string; match: number }[] = [];
+
     const seleccionados = itemsLista.flatMap(item => {
       const sel = elegirPorModo(item, 'manual');
-      if (!sel?.precio_valor) return [];
       const cantidad = productosExcel.find(p => String(p.numero) === item.numero)?.cantidad || 1;
+
+      if (!sel?.precio_valor) {
+        itemsAltoRiesgo.push({
+          numero: String(item.numero), nombre: item.nombre,
+          motivo: 'Sin resultados encontrados — cotizar manualmente', match: 0,
+        });
+        return [];
+      }
+
+      const pct = sel.matching?.porcentaje ?? 0;
+      let motivo = '';
+      if (sel.alerta_unidad) {
+        motivo = `Posible diferencia de unidad${sel.unidad_detectada ? ` (detectada: ${sel.unidad_detectada})` : ''} — verificar ficha técnica`;
+      } else if (pct < 60) {
+        motivo = sel.matching?.razon || 'Coincidencia baja — verificar ficha técnica del producto encontrado';
+      }
+      if (motivo) itemsAltoRiesgo.push({ numero: String(item.numero), nombre: item.nombre, motivo, match: pct });
+
       return [{
         numero: String(item.numero), nombre: item.nombre,
         precio: sel.precio_valor, cantidad,
         tienda: sel.tienda || '', link: sel.link || '',
-        match: sel.matching?.porcentaje ?? 0,
+        match: pct,
       }];
     });
 
@@ -1280,6 +1302,7 @@ export default function MonitorMasivoICA() {
 
     sessionStorage.setItem('viabilidad_resultados_buscador', JSON.stringify({
       items: seleccionados,
+      itemsAltoRiesgo,
       totalConIva, totalNeto, totalItems, itemsConPrecio,
       fecha: new Date().toISOString(),
     }));
