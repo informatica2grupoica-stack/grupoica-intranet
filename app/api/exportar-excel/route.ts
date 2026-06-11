@@ -61,7 +61,7 @@ function valorParaCelda(cell: ExcelJS.Cell, valor: unknown): unknown {
 
 interface ColsDetectadas { headerRow: number; colItem: number; colValor: number; colLink: number; }
 interface ColsPlantilla extends ColsDetectadas { colDetalle: number; colCantidad: number; colConversion: number; }
-interface ItemBase { item?: string; numero?: string; nombre: string; especificaciones?: string; cantidad?: string; unidad?: string; }
+interface ItemBase { item?: string; numero?: string; nombre: string; especificaciones?: string; cantidad?: string; unidad?: string; linea?: string; }
 
 export async function POST(req: NextRequest) {
   try {
@@ -155,42 +155,79 @@ export async function POST(req: NextRequest) {
     if (usarPlantilla) {
       // ── Plantilla en blanco: rellenar ITEM/Detalle/Cantidad/CONVERSION desde las
       // bases (itemsBases) y, si vienen, VALOR C/IVA + LINK desde el buscador ──────
-      const targetSheetName = formato === 'lineas' ? 'LINEA1' : 'COSTEO';
-      const ws = wb.getWorksheet(targetSheetName) || wb.worksheets[0];
-      if (!ws) return NextResponse.json({ error: 'No se encontró la pestaña de la plantilla' }, { status: 400 });
-
-      const cols = detectarColumnasHoja(ws);
-      if (!cols) return NextResponse.json({ error: 'No se encontró columna ITEM o VALOR C/IVA en la plantilla' }, { status: 400 });
-      const { headerRow, colItem, colDetalle, colCantidad, colConversion, colValor, colLink } = cols;
-
-      const mapaItems = new Map(itemsBases.map(it => [String(it.item ?? it.numero ?? '').trim(), it]));
       const mapaPrecios = new Map(seleccionados.map(s => [String(s.numero).trim(), s]));
 
-      for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
-        const row = ws.getRow(rn);
-        const rawKey = cellText(row.getCell(colItem)).trim();
-        if (!rawKey) continue;
-
-        let it = mapaItems.get(rawKey);
-        if (!it) it = mapaItems.get(String(parseFloat(rawKey)));
-        if (it) {
-          if (colDetalle > 0) {
-            row.getCell(colDetalle).value = it.especificaciones ? `${it.nombre} - ${it.especificaciones}` : it.nombre;
-          }
-          if (colCantidad > 0) {
-            const cant = parseFloat(String(it.cantidad ?? '').replace(',', '.'));
-            if (!isNaN(cant) && cant > 0) row.getCell(colCantidad).value = cant;
-          }
-          if (colConversion > 0 && it.unidad) row.getCell(colConversion).value = it.unidad;
-          filledItems++;
+      const llenarFila = (row: ExcelJS.Row, it: ItemBase, cols: ColsPlantilla) => {
+        const { colDetalle, colCantidad, colConversion, colValor, colLink } = cols;
+        if (colDetalle > 0) {
+          row.getCell(colDetalle).value = it.especificaciones ? `${it.nombre} - ${it.especificaciones}` : it.nombre;
         }
+        if (colCantidad > 0) {
+          const cant = parseFloat(String(it.cantidad ?? '').replace(',', '.'));
+          if (!isNaN(cant) && cant > 0) row.getCell(colCantidad).value = cant;
+        }
+        if (colConversion > 0 && it.unidad) row.getCell(colConversion).value = it.unidad;
+        filledItems++;
 
-        let precio = mapaPrecios.get(rawKey);
-        if (!precio) precio = mapaPrecios.get(String(parseFloat(rawKey)));
+        const claveGlobal = String(it.item ?? it.numero ?? '').trim();
+        let precio = mapaPrecios.get(claveGlobal);
+        if (!precio) precio = mapaPrecios.get(String(parseFloat(claveGlobal)));
         if (precio) {
           row.getCell(colValor).value = precio.precio;
           if (colLink > 0 && precio.link) row.getCell(colLink).value = precio.link;
           filled++;
+        }
+      };
+
+      if (formato === 'lineas') {
+        // Las bases pueden organizar la oferta en LÍNEAS/LOTES (cada ítem trae "linea": "LINEA N").
+        // Cada hoja LINEAn de la plantilla tiene su propia numeración 1..N — se ubica cada
+        // ítem según su posición relativa dentro de su línea (no por su número global de ítem).
+        const porLinea = new Map<number, ItemBase[]>();
+        for (const it of itemsBases) {
+          const m = String(it.linea || '').match(/(\d+)/);
+          const n = m ? parseInt(m[1], 10) : 1;
+          if (!porLinea.has(n)) porLinea.set(n, []);
+          porLinea.get(n)!.push(it);
+        }
+
+        for (const [n, items] of porLinea) {
+          const ws = wb.getWorksheet(`LINEA${n}`);
+          if (!ws) continue;
+          const cols = detectarColumnasHoja(ws);
+          if (!cols) continue;
+          const { headerRow, colItem } = cols;
+
+          for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
+            const row = ws.getRow(rn);
+            const rawKey = cellText(row.getCell(colItem)).trim();
+            if (!rawKey) continue;
+            const idx = parseInt(rawKey, 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= items.length) continue;
+            llenarFila(row, items[idx], cols);
+          }
+        }
+
+      } else {
+        // Formato COSTEO: una sola hoja, numeración global de ítem.
+        const ws = wb.getWorksheet('COSTEO') || wb.worksheets[0];
+        if (!ws) return NextResponse.json({ error: 'No se encontró la pestaña de la plantilla' }, { status: 400 });
+
+        const cols = detectarColumnasHoja(ws);
+        if (!cols) return NextResponse.json({ error: 'No se encontró columna ITEM o VALOR C/IVA en la plantilla' }, { status: 400 });
+        const { headerRow, colItem } = cols;
+
+        const mapaItems = new Map(itemsBases.map(it => [String(it.item ?? it.numero ?? '').trim(), it]));
+
+        for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
+          const row = ws.getRow(rn);
+          const rawKey = cellText(row.getCell(colItem)).trim();
+          if (!rawKey) continue;
+
+          let it = mapaItems.get(rawKey);
+          if (!it) it = mapaItems.get(String(parseFloat(rawKey)));
+          if (!it) continue;
+          llenarFila(row, it, cols);
         }
       }
 

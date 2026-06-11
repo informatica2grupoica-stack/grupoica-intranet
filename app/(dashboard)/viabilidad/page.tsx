@@ -25,6 +25,7 @@ interface ItemViabilidad {
   especificaciones: string;
   cantidad: string;
   unidad: string;
+  linea?: string;
 }
 
 interface FormaEvaluacion {
@@ -433,7 +434,16 @@ export default function ViabilidadPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archivos, itemsExcel: itemsExcelPayload }),
       });
-      const data = await res.json();
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 504 || !res.ok
+            ? 'El servidor tardó demasiado o falló procesando los documentos. Intenta con menos documentos o documentos más livianos.'
+            : 'Respuesta inesperada del servidor'
+        );
+      }
       if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo analizar la documentación');
 
       setResultado({ analisis: data.analisis, items: data.items || [], total: data.total || 0 });

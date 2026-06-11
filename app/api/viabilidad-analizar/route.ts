@@ -123,8 +123,8 @@ TAREA 1 — Extrae estos datos del proceso (campos de un análisis de viabilidad
   "observaciones": "cualquier otra observación relevante (riesgos, requisitos especiales, certificaciones exigidas, etc.)"
 }
 
-TAREA 2 — Extrae el listado de ítems/productos a cotizar:
-{"items": [{"item": "1", "nombre": "nombre del producto", "especificaciones": "specs completas", "cantidad": "10", "unidad": "Unidades"}]}
+TAREA 2 — Extrae el listado de ítems/productos a cotizar. Si las bases organizan la oferta económica en LÍNEAS o LOTES (ej. "LÍNEA 1: IMPLEMENTOS DE SEGURIDAD", "LÍNEA 2: INSUMOS DE FERRETERÍA", cada una con su propia tabla de ítems), incluye en cada ítem el campo "linea" indicando a qué línea pertenece (ej. "LINEA 1", "LINEA 2"). Si las bases NO organizan los ítems por líneas/lotes, omite el campo "linea" o déjalo vacío:
+{"items": [{"item": "1", "nombre": "nombre del producto", "especificaciones": "specs completas", "cantidad": "10", "unidad": "Unidades", "linea": "LINEA 1"}]}
 
 Responde SOLO con este JSON exacto, sin texto antes ni después:
 {
@@ -196,6 +196,7 @@ Responde SOLO con este JSON exacto, sin texto antes ni después:
         especificaciones: String(it.especificaciones ?? '').trim(),
         cantidad: String(it.cantidad ?? '').trim(),
         unidad: String(it.unidad ?? '').trim(),
+        linea: String(it.linea ?? '').trim(),
       })),
       total: items.length,
     });
