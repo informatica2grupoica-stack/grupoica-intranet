@@ -15,7 +15,7 @@ import {
   Upload, Eye, Settings, ChevronDown, ChevronUp,
   TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles,
   FileText, Zap, Bookmark, FolderOpen, Save,
-  MapPin, Building2, ArrowLeftCircle
+  MapPin, Building2, ArrowLeftCircle, Pencil, Check
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ const BannerPdf = ({ onCargarPdf, cargandoBases, basesOk }: {
 };
 
 // ─── Modal Preview Excel ──────────────────────────────────────────────────────
-const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, contexto, setContexto }: {
+const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBases, basesOk, contexto, setContexto, onEditarNombre }: {
   productos: ProductoExcel[];
   onClose: () => void;
   onConfirm: () => void;
@@ -325,7 +325,18 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
   basesOk: boolean;
   contexto: string;
   setContexto: (c: string) => void;
-}) => (
+  onEditarNombre: (numero: string | number, nuevoNombre: string) => void;
+}) => {
+  const [editando, setEditando] = useState<string | number | null>(null);
+  const [valorEdit, setValorEdit] = useState('');
+
+  const empezarEdicion = (p: ProductoExcel) => { setEditando(p.numero); setValorEdit(p.nombre); };
+  const guardarEdicion = () => {
+    if (editando !== null && valorEdit.trim()) onEditarNombre(editando, valorEdit.trim());
+    setEditando(null);
+  };
+
+  return (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
       {/* Header */}
@@ -379,7 +390,30 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
             {productos.slice(0, 60).map((p, i) => (
               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2 pr-4 text-slate-500 text-xs">{p.numero}</td>
-                <td className="py-2 pr-4 text-slate-800 font-medium max-w-xs truncate">{p.nombre}</td>
+                <td className="py-2 pr-4 text-slate-800 font-medium max-w-xs">
+                  {editando === p.numero ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={valorEdit}
+                        onChange={e => setValorEdit(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') guardarEdicion(); if (e.key === 'Escape') setEditando(null); }}
+                        className="w-full border border-[#2563EB] rounded px-1.5 py-0.5 text-sm outline-none"
+                      />
+                      <button onClick={guardarEdicion} title="Guardar" className="p-1 text-emerald-600 hover:bg-emerald-50 rounded shrink-0">
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 group">
+                      <span className="truncate">{p.nombre}</span>
+                      <button onClick={() => empezarEdicion(p)} title="Editar detalle"
+                        className="p-1 text-slate-300 hover:text-[#2563EB] hover:bg-blue-50 rounded shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                  )}
+                </td>
                 <td className="py-2 pr-4 text-center">
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
                     !p.conversion || p.conversion === 'unidad' ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -411,7 +445,8 @@ const ModalPreview = ({ productos, onClose, onConfirm, onCargarPdf, cargandoBase
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ─── Modal: revisar ítems extraídos de las BASES (Gemini) ─────────────────────
 const ModalBases = ({ items, onClose }: {
@@ -1570,6 +1605,7 @@ export default function MonitorMasivoICA() {
           basesOk={!!basesInfo}
           contexto={contexto}
           setContexto={setContexto}
+          onEditarNombre={(numero, nuevoNombre) => setProductosExcel(prev => prev.map(p => p.numero === numero ? { ...p, nombre: nuevoNombre } : p))}
         />
       )}
       {showBasesModal && basesItems.length > 0 && (
