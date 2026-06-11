@@ -56,18 +56,17 @@ CREATE INDEX IF NOT EXISTS idx_viab_created
   ON public.viabilidad_analisis (created_at DESC);
 
 -- ─── Trigger: updated_at automático ─────────────────────────────────────────
--- Reutiliza la función set_updated_at() creada en supabase_crear_busquedas_guardadas.sql.
--- Si no existe en tu proyecto, descomenta el bloque siguiente:
 
--- CREATE OR REPLACE FUNCTION public.set_updated_at()
--- RETURNS TRIGGER LANGUAGE plpgsql AS $$
--- BEGIN
---   NEW.updated_at = NOW();
---   RETURN NEW;
--- END;
--- $$;
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
 
-CREATE OR REPLACE TRIGGER trg_viabilidad_analisis_updated
+DROP TRIGGER IF EXISTS trg_viabilidad_analisis_updated ON public.viabilidad_analisis;
+CREATE TRIGGER trg_viabilidad_analisis_updated
   BEFORE UPDATE ON public.viabilidad_analisis
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 

@@ -79,18 +79,17 @@ interface AnalisisGuardado {
   user_nombre: string;
 }
 
-const ACCEPT_DOCS = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
+const ACCEPT_DOCS = '.pdf,.jpg,.jpeg,.png';
 
 const MIME_POR_EXT: Record<string, string> = {
   pdf: 'application/pdf',
-  doc: 'application/msword',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xls: 'application/vnd.ms-excel',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
 };
+
+// Extensiones que Gemini NO puede leer directamente (Office) — se rechazan con un aviso.
+const EXTENSIONES_NO_SOPORTADAS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
 
 function mimeDeArchivo(file: File): string {
   if (file.type) return file.type;
@@ -238,7 +237,21 @@ export default function ViabilidadPage() {
 
   // ─── Manejo de documentos ────────────────────────────────────────────────────
   const agregarDocumentos = (files: FileList | File[]) => {
-    const nuevos = Array.from(files);
+    const todos = Array.from(files);
+
+    // Filtrar archivos de lock/temporales de Office (~$archivo.doc)
+    const sinLocks = todos.filter(f => !f.name.startsWith('~$'));
+
+    // Rechazar formatos que Gemini no puede analizar (Word, Excel, PowerPoint)
+    const nuevos = sinLocks.filter(f => {
+      const ext = f.name.split('.').pop()?.toLowerCase() || '';
+      return !EXTENSIONES_NO_SOPORTADAS.includes(ext);
+    });
+    const rechazados = sinLocks.length - nuevos.length;
+    if (rechazados > 0) {
+      toast(`${rechazados} archivo(s) Word/Excel/PowerPoint no se pueden analizar con IA y fueron omitidos. Usa el cargador de Excel COSTEO para la planilla.`, 'warning');
+    }
+
     setDocumentos(prev => {
       const combinados = [...prev, ...nuevos];
       if (combinados.length > 10) {
@@ -447,7 +460,7 @@ export default function ViabilidadPage() {
               onClick={() => inputDocsRef.current?.click()}
               className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-[#2563EB]/40 hover:bg-blue-50/50 rounded-xl py-4 text-xs font-semibold text-slate-500 hover:text-[#2563EB] transition-colors"
             >
-              <Upload size={14} /> Bases, anexos, formularios... (PDF, Word, Excel, imágenes)
+              <Upload size={14} /> Bases, anexos, formularios... (solo PDF e imágenes — Excel COSTEO va arriba)
             </button>
           </div>
         </div>
