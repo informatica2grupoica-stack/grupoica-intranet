@@ -57,6 +57,8 @@ function valorParaCelda(cell: ExcelJS.Cell, valor: unknown): unknown {
   return valor;
 }
 
+interface ColsDetectadas { headerRow: number; colItem: number; colValor: number; colLink: number; }
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -65,14 +67,18 @@ export async function POST(req: NextRequest) {
     const seleccionadosRaw = formData.get('seleccionados') as string | null;
     const modo = formData.get('modo') as string || 'manual';
     const colsRaw = formData.get('cols') as string | null;
+    const colsPorHojaRaw = formData.get('colsPorHoja') as string | null;
+    const formato = (formData.get('formato') as string) || 'costeo';
     const analisisRaw = formData.get('analisis') as string | null;
 
     if (!file) return NextResponse.json({ error: 'Archivo no recibido' }, { status: 400 });
     if (!seleccionadosRaw && !analisisRaw)
       return NextResponse.json({ error: 'Sin datos de precios ni análisis' }, { status: 400 });
 
-    const seleccionados: Array<{ numero: string; precio: number; link: string }> = seleccionadosRaw ? JSON.parse(seleccionadosRaw) : [];
+    const seleccionados: Array<{ numero: string; precio: number; link: string; hoja?: string; itemOriginal?: string }> = seleccionadosRaw ? JSON.parse(seleccionadosRaw) : [];
     if (seleccionadosRaw && !seleccionados.length) return NextResponse.json({ error: 'Sin resultados para exportar' }, { status: 400 });
+
+    const colsPorHoja: Record<string, ColsDetectadas> | null = colsPorHojaRaw ? JSON.parse(colsPorHojaRaw) : null;
 
     const analisis: AnalisisViabilidad | null = analisisRaw ? JSON.parse(analisisRaw) : null;
 
@@ -95,48 +101,91 @@ export async function POST(req: NextRequest) {
       return String(v);
     };
 
+    // ── Detección propia de columnas con ExcelJS (1-indexed), fallback ──────────
+    const detectarColumnasHoja = (ws: ExcelJS.Worksheet): ColsDetectadas | null => {
+      let headerRow = -1, colItem = -1, colValor = -1, colLink = -1;
+      for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
+        const cells: string[] = [];
+        ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
+          cells[cn] = cellText(cell).toUpperCase().trim();
+        });
+        if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
+          headerRow = rn;
+          cells.forEach((h, cn) => {
+            if (!h) return;
+            if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
+            else if ((h.includes('VALOR') || h.includes('PRECIO')) && h.includes('IVA')) colValor = cn;
+            else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
+          });
+          break;
+        }
+      }
+      if (headerRow < 0 || colItem < 0 || colValor < 0) return null;
+      return { headerRow, colItem, colValor, colLink };
+    };
+
+    // SheetJS (cliente) usa 0-indexed; ExcelJS usa 1-indexed → sumar 1 a columnas y filas
+    const colsDeCliente = (cols: ColsDetectadas): ColsDetectadas => ({
+      headerRow: cols.headerRow + 1,
+      colItem: cols.colItem + 1,
+      colValor: cols.colValor + 1,
+      colLink: cols.colLink >= 0 ? cols.colLink + 1 : -1,
+    });
+
     let filled = 0;
 
-    // ── Pestaña COSTEO: rellenar precios y links ────────────────────────────────
-    if (seleccionados.length) {
+    if (formato === 'lineas' && seleccionados.length) {
+      // ── Formato LÍNEAS: rellenar cada hoja LINEAn por separado ──────────────────
+      const porHoja = new Map<string, typeof seleccionados>();
+      for (const s of seleccionados) {
+        if (!s.hoja) continue;
+        if (!porHoja.has(s.hoja)) porHoja.set(s.hoja, []);
+        porHoja.get(s.hoja)!.push(s);
+      }
+
+      for (const [hoja, items] of porHoja) {
+        const ws = wb.getWorksheet(hoja);
+        if (!ws) continue;
+
+        const cols = colsPorHoja?.[hoja] ? colsDeCliente(colsPorHoja[hoja]) : detectarColumnasHoja(ws);
+        if (!cols) continue;
+        const { headerRow, colItem, colValor, colLink } = cols;
+
+        const mapa = new Map(items.map(s => [s.itemOriginal ?? '', s]));
+
+        for (let rn = headerRow + 1; rn <= ws.rowCount; rn++) {
+          const row = ws.getRow(rn);
+          const rawKey = cellText(row.getCell(colItem)).trim();
+          if (!rawKey) continue;
+
+          let dato = mapa.get(rawKey);
+          if (!dato) dato = mapa.get(String(parseFloat(rawKey)));
+          if (!dato) continue;
+
+          row.getCell(colValor).value = dato.precio;
+          if (colLink > 0 && dato.link) row.getCell(colLink).value = dato.link;
+          filled++;
+        }
+      }
+
+      if (!filled)
+        return NextResponse.json({ error: 'No se encontraron ítems para rellenar — verifica que los números de ítem coincidan' }, { status: 400 });
+
+    } else if (seleccionados.length) {
+      // ── Pestaña COSTEO: rellenar precios y links ────────────────────────────────
       const ws = wb.getWorksheet(sheetName) || wb.worksheets[0];
       if (!ws) return NextResponse.json({ error: 'No se encontró la pestaña' }, { status: 400 });
 
       // ── Usar índices enviados por el cliente (SheetJS los detecta correctamente) ─
-      // SheetJS usa 0-indexed; ExcelJS usa 1-indexed → sumar 1 a columnas y filas
-      let headerRow: number, colItem: number, colValor: number, colLink: number;
-
+      let cols: ColsDetectadas | null;
       if (colsRaw) {
         // El cliente ya detectó correctamente con SheetJS — usamos esos índices
-        const cols = JSON.parse(colsRaw);
-        headerRow = cols.headerRow + 1;   // SheetJS 0-indexed → ExcelJS 1-indexed
-        colItem   = cols.colItem   + 1;
-        colValor  = cols.colValor  + 1;
-        colLink   = cols.colLink >= 0 ? cols.colLink + 1 : -1;
+        cols = colsDeCliente(JSON.parse(colsRaw));
       } else {
-        // Fallback: detección propia con ExcelJS (1-indexed)
-        headerRow = -1; colItem = -1; colValor = -1; colLink = -1;
-        for (let rn = 1; rn <= Math.min(25, ws.rowCount); rn++) {
-          const cells: string[] = [];
-          ws.getRow(rn).eachCell({ includeEmpty: true }, (cell, cn) => {
-            cells[cn] = cellText(cell).toUpperCase().trim();
-          });
-          if (cells.some(h => h && (h === 'ITEM' || h.includes('ITEM')))) {
-            headerRow = rn;
-            cells.forEach((h, cn) => {
-              if (!h) return;
-              if ((h === 'ITEM' || h.includes('ITEM')) && colItem < 0) colItem = cn;
-              else if ((h.includes('VALOR') || h.includes('PRECIO')) && h.includes('IVA')) colValor = cn;
-              else if (h.startsWith('LINK') && colLink < 0) colLink = cn;
-            });
-            break;
-          }
-        }
-        if (headerRow < 0 || colItem < 0)
-          return NextResponse.json({ error: 'No se encontró columna ITEM' }, { status: 400 });
-        if (colValor < 0)
-          return NextResponse.json({ error: 'No se encontró columna VALOR C/IVA' }, { status: 400 });
+        cols = detectarColumnasHoja(ws);
+        if (!cols) return NextResponse.json({ error: 'No se encontró columna ITEM o VALOR C/IVA' }, { status: 400 });
       }
+      const { headerRow, colItem, colValor, colLink } = cols;
 
       // ── Rellenar precios y links ──────────────────────────────────────────────
       const mapa = new Map(seleccionados.map(s => [s.numero, s]));

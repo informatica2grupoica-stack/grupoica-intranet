@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import {
+  type ProductoExcel, type ColsDetectadas,
+  detectarHojasLineas, procesarHojaCosteo, procesarHojasLineas,
+} from '@/lib/excel/costeo';
+import {
   Search, ExternalLink, Loader2, BarChart3,
   Trash2, ChevronRight, CheckCircle2, AlertCircle, X,
   Download, FileSpreadsheet, ShoppingBag,
@@ -40,16 +44,8 @@ interface ItemLista {
   procesando: boolean;
   error?: string;
   mejor_match?: ProductoResultado;
-}
-
-interface ProductoExcel {
-  numero: number | string;
-  nombre: string;
-  cantidad: number;
-  valor_civa: number;
-  link_referencia: string;
-  conversion: string;
-  _fila?: number;
+  _hoja?: string;
+  _itemOriginal?: string;
 }
 
 interface BusquedaGuardada {
@@ -717,7 +713,12 @@ export default function MonitorMasivoICA() {
   const [pestanas, setPestanas]               = useState<string[]>([]);
   const [archivoExcel, setArchivoExcel]       = useState<File | null>(null);
   const [workbook, setWorkbook]               = useState<XLSX.WorkBook | null>(null);
-  const [colsExcel, setColsExcel] = useState<{ headerRow: number; colItem: number; colValor: number; colLink: number } | null>(null);
+  const [colsExcel, setColsExcel] = useState<ColsDetectadas | null>(null);
+
+  // ─── Formato del Excel: COSTEO (una pestaña) o LÍNEAS (varias hojas LINEAn) ───
+  const [formatoExcel, setFormatoExcel]       = useState<'costeo' | 'lineas'>('costeo');
+  const [colsExcelPorHoja, setColsExcelPorHoja] = useState<Record<string, ColsDetectadas> | null>(null);
+  const [eleccionFormato, setEleccionFormato] = useState<{ wb: XLSX.WorkBook; hojasLineas: string[]; totalItemsLineas: number } | null>(null);
 
   const [contexto, setContexto]           = useState('');
   const [mostrarConfig, setMostrarConfig] = useState(false);
@@ -780,12 +781,20 @@ export default function MonitorMasivoICA() {
     if (!raw) return;
     sessionStorage.removeItem('viabilidad_excel_archivo');
     try {
-      const info = JSON.parse(raw) as { base64: string; nombre: string; cols: typeof colsExcel; sheetName: string };
+      const info = JSON.parse(raw) as {
+        base64: string; nombre: string; cols: ColsDetectadas | null; sheetName: string;
+        formato?: 'costeo' | 'lineas'; colsPorHoja?: Record<string, ColsDetectadas>;
+      };
       if (!info.base64 || !info.nombre) return;
       const file = base64ToFile(info.base64, info.nombre);
       setArchivoExcel(file);
-      if (info.sheetName) setSheetNameActual(info.sheetName);
-      if (info.cols) setColsExcel(info.cols);
+      if (info.formato === 'lineas') {
+        setFormatoExcel('lineas');
+        if (info.colsPorHoja) setColsExcelPorHoja(info.colsPorHoja);
+      } else {
+        if (info.sheetName) setSheetNameActual(info.sheetName);
+        if (info.cols) setColsExcel(info.cols);
+      }
 
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -988,6 +997,14 @@ export default function MonitorMasivoICA() {
       const wb = XLSX.read(data, { type: 'array' });
       setWorkbook(wb);
       setPestanas(wb.SheetNames);
+
+      const hojasLineas = detectarHojasLineas(wb);
+      if (hojasLineas.length > 0) {
+        const { items } = procesarHojasLineas(wb, hojasLineas);
+        setEleccionFormato({ wb, hojasLineas, totalItemsLineas: items.length });
+        return;
+      }
+
       const sheet = wb.SheetNames.includes('COSTEO') ? 'COSTEO' : wb.SheetNames[0];
       setSheetNameActual(sheet);
       procesarPestana(wb, sheet);
@@ -997,79 +1014,48 @@ export default function MonitorMasivoICA() {
   };
 
   const procesarPestana = (wb: XLSX.WorkBook, sheetName: string) => {
-    const ws = wb.Sheets[sheetName];
-    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-    if (!jsonData.length) { notify('Pestaña vacía', 'warning'); return; }
+    const resultado = procesarHojaCosteo(wb, sheetName);
+    if (!resultado) { notify('No se encontraron encabezados en el Excel', 'error'); return; }
+    if (!resultado.items.length) { notify('No se encontraron productos', 'error'); return; }
 
-    let headerRow = -1;
-    let colItem = -1, colDetalle = -1, colCantidad = -1, colValor = -1, colLink = -1, colConversion = -1;
-
-    for (let i = 0; i < Math.min(20, jsonData.length); i++) {
-      const row = jsonData[i];
-      if (!row) continue;
-      if (row.some((c: any) => ['ITEM','DETALLE','CANTIDAD'].includes(String(c||'').toUpperCase().trim()))) {
-        headerRow = i;
-        row.forEach((c: any, j: number) => {
-          const h = String(c||'').toUpperCase().trim();
-          if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
-          else if (h.includes('DETALLE')) colDetalle = j;
-          else if (h.includes('CANTIDAD')) colCantidad = j;
-          else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
-          else if (h.includes('CONVERSION')) colConversion = j;
-          else if (h.includes('LINK')) colLink = j;
-        });
-        setColsExcel({ headerRow: i, colItem, colValor, colLink });
-        break;
-      }
-    }
-
-    if (headerRow === -1) { notify('No se encontraron encabezados en el Excel', 'error'); return; }
-
-    // Palabras que indican una fila administrativa (no es un producto)
-    const ADMIN_WORDS = ['TOTAL','VERDADERO','COSTEADO','SUBTOTAL','ENTREGA','SOLICITA','FICHA','CIUDAD','REGION','REGIÓN','OBSERVACI','NOTA:','NOTA ','PLAZO','CONTRATO','DIRECCIÓN','DIRECCION'];
-
-    const items: ProductoExcel[] = [];
-    for (let i = headerRow + 1; i < jsonData.length; i++) {
-      const row = jsonData[i];
-      if (!row || !row.length) continue;
-      const detalle = colDetalle >= 0 ? String(row[colDetalle]||'').trim() : '';
-      if (!detalle) continue;
-      // Filtrar filas administrativas (notas, totales, condiciones de entrega, etc.)
-      if (ADMIN_WORDS.some(s => detalle.toUpperCase().includes(s))) continue;
-      // Filtrar frases largas sin número de ítem válido (son notas del documento)
-      const itemRaw = colItem >= 0 ? String(row[colItem]||'').trim() : '';
-      if (!itemRaw && detalle.split(' ').length > 6) continue; // frase larga sin ítem → nota
-      const conversion = colConversion >= 0 ? String(row[colConversion]||'').trim().toLowerCase() : 'unidad';
-      let valorCIVA = 0;
-      if (colValor >= 0 && row[colValor] != null) {
-        const raw = row[colValor];
-        valorCIVA = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[$\.]/g,'').replace(',','.')) || 0;
-      }
-      // Número de ítem: soporta numérico (4), decimal (4.1) y alfanumérico (C2, B)
-      // Usar String siempre para evitar NaN con prefijos tipo "B", "C2", "B SC"
-      const numeroRaw = itemRaw || String(i - headerRow);
-      const numero = isNaN(Number(numeroRaw)) ? numeroRaw : Number(numeroRaw);
-      items.push({
-        numero: numero as number,
-        nombre: detalle,
-        cantidad: colCantidad >= 0 ? Number(row[colCantidad])||1 : 1,
-        valor_civa: valorCIVA,
-        link_referencia: colLink >= 0 ? String(row[colLink]||'').trim() : '',
-        conversion: conversion || 'unidad',
-        _fila: i,
-      });
-    }
-
-    if (!items.length) { notify('No se encontraron productos', 'error'); return; }
-    setProductosExcel(items);
+    setFormatoExcel('costeo');
+    setColsExcelPorHoja(null);
+    setColsExcel(resultado.cols);
+    setProductosExcel(resultado.items);
     setShowModal(true);
     if (!basesInfo) setPreguntarBases(true);
-    notify(`${items.length} productos desde "${sheetName}"`, 'success');
+    notify(`${resultado.items.length} productos desde "${sheetName}"`, 'success');
   };
 
   const cambiarPestana = (s: string) => {
     setSheetNameActual(s);
     if (workbook) procesarPestana(workbook, s);
+  };
+
+  // ─── Elección de formato: COSTEO (una pestaña) vs LÍNEAS (varias hojas) ───────
+  const elegirFormatoLineas = () => {
+    if (!eleccionFormato) return;
+    const { wb, hojasLineas } = eleccionFormato;
+    const { items, colsPorHoja } = procesarHojasLineas(wb, hojasLineas);
+    if (!items.length) { notify('No se encontraron productos en las hojas LÍNEA', 'error'); setEleccionFormato(null); return; }
+
+    setFormatoExcel('lineas');
+    setColsExcelPorHoja(colsPorHoja);
+    setColsExcel(null);
+    setProductosExcel(items);
+    setShowModal(true);
+    if (!basesInfo) setPreguntarBases(true);
+    setEleccionFormato(null);
+    notify(`${items.length} productos desde ${hojasLineas.length} hojas (${hojasLineas.join(', ')})`, 'success');
+  };
+
+  const elegirFormatoCosteo = () => {
+    if (!eleccionFormato) return;
+    const { wb, hojasLineas } = eleccionFormato;
+    const sheet = wb.SheetNames.find(s => !hojasLineas.includes(s) && /costeo/i.test(s)) || wb.SheetNames[0];
+    setEleccionFormato(null);
+    setSheetNameActual(sheet);
+    procesarPestana(wb, sheet);
   };
 
   // ─── Búsqueda de un producto ──────────────────────────────────────────────────
@@ -1165,11 +1151,11 @@ export default function MonitorMasivoICA() {
   };
 
   // ─── Barrido masivo ───────────────────────────────────────────────────────────
-  const iniciarBarrido = async (items: { numero: string; nombre: string; conversion?: string }[]) => {
+  const iniciarBarrido = async (items: { numero: string; nombre: string; conversion?: string; hoja?: string; itemOriginal?: string }[]) => {
     if (!items.length) { notify('No hay productos', 'error'); return; }
     setProcesando(true);
     abortRef.current = false;
-    setItemsLista(items.map(i => ({ numero: i.numero, nombre: i.nombre, conversion: i.conversion||'', resultados: [], total_encontrados: 0, procesando: true })));
+    setItemsLista(items.map(i => ({ numero: i.numero, nombre: i.nombre, conversion: i.conversion||'', resultados: [], total_encontrados: 0, procesando: true, _hoja: i.hoja, _itemOriginal: i.itemOriginal })));
     setProgreso({ actual: 0, total: items.length });
 
     const sem = crearSemaforo(3);
@@ -1180,14 +1166,14 @@ export default function MonitorMasivoICA() {
         const r = await buscarProducto(item.nombre, item.numero, item.conversion || 'unidad');
         done++;
         setProgreso({ actual: done, total: items.length });
-        setItemsLista(prev => prev.map(p => p.numero === item.numero ? r : p));
+        setItemsLista(prev => prev.map(p => p.numero === item.numero ? { ...r, _hoja: item.hoja, _itemOriginal: item.itemOriginal } : p));
       })
     ));
     setProcesando(false);
     notify(`Barrido completado: ${done} productos`, 'success');
   };
 
-  const iniciarExcel = () => { setShowModal(false); iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion }))); };
+  const iniciarExcel = () => { setShowModal(false); iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion, hoja: p._hoja, itemOriginal: p._itemOriginal }))); };
   const iniciarTexto = () => iniciarBarrido(parsearLista(inputMasivo));
   const cancelar = () => { abortRef.current = true; notify('Cancelando barrido...', 'warning'); };
 
@@ -1222,7 +1208,10 @@ export default function MonitorMasivoICA() {
     const seleccionados = itemsLista.flatMap(item => {
       const sel = elegirPorModo(item, modo);
       if (!sel?.precio_valor) return [];
-      return [{ numero: String(item.numero), precio: sel.precio_valor, link: sel.link || '', tienda: sel.tienda || '', match: sel.matching?.porcentaje ?? 0 }];
+      return [{
+        numero: String(item.numero), precio: sel.precio_valor, link: sel.link || '', tienda: sel.tienda || '', match: sel.matching?.porcentaje ?? 0,
+        ...(formatoExcel === 'lineas' ? { hoja: item._hoja, itemOriginal: item._itemOriginal } : {}),
+      }];
     });
     if (!seleccionados.length) { notify('Sin resultados para exportar', 'warning'); return; }
     const nombreModo: Record<string, string> = { manual: 'seleccion', mejor_match: 'mejor-match', menor_precio: 'menor-precio', equilibrado: 'equilibrado' };
@@ -1231,10 +1220,15 @@ export default function MonitorMasivoICA() {
     try {
       const fd = new FormData();
       fd.append('file', archivoExcel, archivoExcel.name);
-      fd.append('sheetName', sheetNameActual);
       fd.append('seleccionados', JSON.stringify(seleccionados));
       fd.append('modo', modo);
-      if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
+      fd.append('formato', formatoExcel);
+      if (formatoExcel === 'lineas') {
+        if (colsExcelPorHoja) fd.append('colsPorHoja', JSON.stringify(colsExcelPorHoja));
+      } else {
+        fd.append('sheetName', sheetNameActual);
+        if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
+      }
 
       const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
 
@@ -1270,10 +1264,13 @@ export default function MonitorMasivoICA() {
       const sel = elegirPorModo(item, 'manual');
       const cantidad = productosExcel.find(p => String(p.numero) === item.numero)?.cantidad || 1;
 
+      const hojaInfo = formatoExcel === 'lineas' ? { hoja: item._hoja, itemOriginal: item._itemOriginal } : {};
+
       if (!sel?.precio_valor) {
         itemsAltoRiesgo.push({
           numero: String(item.numero), nombre: item.nombre,
           motivo: 'Sin resultados encontrados — cotizar manualmente', match: 0,
+          ...hojaInfo,
         });
         return [];
       }
@@ -1285,13 +1282,14 @@ export default function MonitorMasivoICA() {
       } else if (pct < 60) {
         motivo = sel.matching?.razon || 'Coincidencia baja — verificar ficha técnica del producto encontrado';
       }
-      if (motivo) itemsAltoRiesgo.push({ numero: String(item.numero), nombre: item.nombre, motivo, match: pct });
+      if (motivo) itemsAltoRiesgo.push({ numero: String(item.numero), nombre: item.nombre, motivo, match: pct, ...hojaInfo });
 
       return [{
         numero: String(item.numero), nombre: item.nombre,
         precio: sel.precio_valor, cantidad,
         tienda: sel.tienda || '', link: sel.link || '',
         match: pct,
+        ...hojaInfo,
       }];
     });
 
@@ -1304,6 +1302,8 @@ export default function MonitorMasivoICA() {
       items: seleccionados,
       itemsAltoRiesgo,
       totalConIva, totalNeto, totalItems, itemsConPrecio,
+      formato: formatoExcel,
+      ...(formatoExcel === 'lineas' && colsExcelPorHoja ? { colsPorHoja: colsExcelPorHoja } : {}),
       fecha: new Date().toISOString(),
     }));
     notify('Enviando resultados a Viabilidad...', 'success');
@@ -1758,6 +1758,23 @@ export default function MonitorMasivoICA() {
               </div>
             )}
 
+            {/* Elección de formato: COSTEO (una pestaña) vs LÍNEAS (varias hojas) */}
+            {eleccionFormato && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                <p className="text-[11px] text-amber-800 font-medium">
+                  Este Excel tiene hojas {eleccionFormato.hojasLineas.join(', ')}. ¿Cómo quieres procesarlo?
+                </p>
+                <button onClick={elegirFormatoLineas}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg text-xs font-semibold transition-colors">
+                  Procesar por LÍNEAS ({eleccionFormato.hojasLineas.length} hojas, {eleccionFormato.totalItemsLineas} ítems)
+                </button>
+                <button onClick={elegirFormatoCosteo}
+                  className="w-full bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 py-2 rounded-lg text-xs font-semibold transition-colors">
+                  Procesar solo una pestaña (COSTEO)
+                </button>
+              </div>
+            )}
+
             {preguntarBases && !basesInfo && (
               <div className="mt-3 p-3 bg-violet-50 border border-blue-200 rounded-lg">
                 <p className="text-[11px] text-violet-800 font-medium mb-2">
@@ -1806,7 +1823,7 @@ export default function MonitorMasivoICA() {
                   ))}
                   {productosExcel.length > 5 && <div className="text-[10px] text-slate-400">+{productosExcel.length-5} más</div>}
                 </div>
-                <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion })))}
+                <button onClick={() => iniciarBarrido(productosExcel.map(p => ({ numero: String(p.numero), nombre: p.nombre, conversion: p.conversion, hoja: p._hoja, itemOriginal: p._itemOriginal })))}
                   disabled={procesando}
                   className="mt-2 w-full bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-slate-200 text-white py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
                   <Sparkles size={12} /> Buscar todos

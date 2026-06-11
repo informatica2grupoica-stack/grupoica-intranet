@@ -12,17 +12,12 @@ import {
   Bookmark, Trash2, ExternalLink, RefreshCw, ChevronDown, Wallet,
   ClipboardList, Users, Gavel, Download, Calculator,
 } from 'lucide-react';
+import {
+  type ProductoExcel, type ColsDetectadas,
+  detectarHojasLineas, procesarHojaCosteo, procesarHojasLineas,
+} from '@/lib/excel/costeo';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
-interface ProductoExcel {
-  numero: number | string;
-  nombre: string;
-  cantidad: number;
-  valor_civa: number;
-  link_referencia: string;
-  conversion: string;
-  _fila?: number;
-}
 
 interface ItemViabilidad {
   item: string;
@@ -87,6 +82,8 @@ interface ItemResultadoBuscador {
   tienda: string;
   link: string;
   match: number;
+  hoja?: string;
+  itemOriginal?: string;
 }
 
 interface ItemAltoRiesgo {
@@ -94,6 +91,8 @@ interface ItemAltoRiesgo {
   nombre: string;
   motivo: string;
   match: number;
+  hoja?: string;
+  itemOriginal?: string;
 }
 
 interface ResultadosBuscador {
@@ -103,6 +102,8 @@ interface ResultadosBuscador {
   totalNeto: number;
   totalItems: number;
   itemsConPrecio: number;
+  formato?: 'costeo' | 'lineas';
+  colsPorHoja?: Record<string, ColsDetectadas>;
   fecha: string;
 }
 
@@ -186,8 +187,13 @@ export default function ViabilidadPage() {
   // Excel COSTEO
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
   const [productosExcel, setProductosExcel] = useState<ProductoExcel[]>([]);
-  const [colsExcel, setColsExcel] = useState<{ headerRow: number; colItem: number; colValor: number; colLink: number } | null>(null);
+  const [colsExcel, setColsExcel] = useState<ColsDetectadas | null>(null);
   const [sheetName, setSheetName] = useState('COSTEO');
+
+  // Formato del Excel: COSTEO (una pestaña) o LÍNEAS (varias hojas LINEAn)
+  const [formatoExcel, setFormatoExcel] = useState<'costeo' | 'lineas'>('costeo');
+  const [colsExcelPorHoja, setColsExcelPorHoja] = useState<Record<string, ColsDetectadas> | null>(null);
+  const [eleccionFormato, setEleccionFormato] = useState<{ wb: XLSX.WorkBook; hojasLineas: string[]; totalItemsLineas: number } | null>(null);
 
   // Documentos de la licitación
   const [documentos, setDocumentos] = useState<File[]>([]);
@@ -254,6 +260,8 @@ export default function ViabilidadPage() {
       if (data.nombreProyecto) setNombreProyecto(data.nombreProyecto);
       if (data.colsExcel) setColsExcel(data.colsExcel);
       if (data.sheetName) setSheetName(data.sheetName);
+      if (data.formatoExcel) setFormatoExcel(data.formatoExcel);
+      if (data.colsExcelPorHoja) setColsExcelPorHoja(data.colsExcelPorHoja);
       if (data.archivoBase64 && data.archivoNombre) {
         const file = base64ToFile(data.archivoBase64, data.archivoNombre);
         archivoBase64Ref.current = { file, base64: data.archivoBase64 };
@@ -277,9 +285,10 @@ export default function ViabilidadPage() {
     const archivoBase64 = await obtenerArchivoBase64();
     sessionStorage.setItem('viabilidad_estado', JSON.stringify({
       resultado, productosExcel, nombreProyecto, colsExcel, sheetName,
+      formatoExcel, colsExcelPorHoja,
       archivoBase64, archivoNombre: archivoExcel?.name || null,
     }));
-  }, [resultado, productosExcel, nombreProyecto, colsExcel, sheetName, archivoExcel, obtenerArchivoBase64]);
+  }, [resultado, productosExcel, nombreProyecto, colsExcel, sheetName, formatoExcel, colsExcelPorHoja, archivoExcel, obtenerArchivoBase64]);
 
   useEffect(() => {
     const t = setTimeout(() => { persistirEstado(); }, 400);
@@ -287,6 +296,22 @@ export default function ViabilidadPage() {
   }, [persistirEstado]);
 
   // ─── Cargar Excel COSTEO ─────────────────────────────────────────────────────
+  const procesarPestanaCosteo = (wb: XLSX.WorkBook, sheet: string, file: File) => {
+    const resultado = procesarHojaCosteo(wb, sheet);
+    if (!resultado) { toast('No se encontraron encabezados en el Excel', 'error'); return; }
+    if (!resultado.items.length) { toast('No se encontraron productos en el Excel', 'error'); return; }
+
+    setFormatoExcel('costeo');
+    setColsExcelPorHoja(null);
+    setProductosExcel(resultado.items);
+    setSheetName(sheet);
+    setColsExcel(resultado.cols);
+    if (!nombreProyecto.trim()) {
+      setNombreProyecto(file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim());
+    }
+    toast(`${resultado.items.length} ítems detectados en "${sheet}"`, 'success');
+  };
+
   const cargarExcel = (file: File) => {
     setArchivoExcel(file);
     const reader = new FileReader();
@@ -294,78 +319,48 @@ export default function ViabilidadPage() {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const sheetName = wb.SheetNames.includes('COSTEO') ? 'COSTEO' : wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-        if (!jsonData.length) { toast('Pestaña vacía', 'warning'); return; }
 
-        let headerRow = -1;
-        let colItem = -1, colDetalle = -1, colCantidad = -1, colValor = -1, colLink = -1, colConversion = -1;
-
-        for (let i = 0; i < Math.min(20, jsonData.length); i++) {
-          const row = jsonData[i];
-          if (!row) continue;
-          if (row.some((c: any) => ['ITEM', 'DETALLE', 'CANTIDAD'].includes(String(c || '').toUpperCase().trim()))) {
-            headerRow = i;
-            row.forEach((c: any, j: number) => {
-              const h = String(c || '').toUpperCase().trim();
-              if (h === 'ITEM' || h.includes('ITEM')) colItem = j;
-              else if (h.includes('DETALLE')) colDetalle = j;
-              else if (h.includes('CANTIDAD')) colCantidad = j;
-              else if (h.includes('VALOR') && h.includes('IVA')) colValor = j;
-              else if (h.includes('CONVERSION')) colConversion = j;
-              else if (h.includes('LINK')) colLink = j;
-            });
-            break;
-          }
+        const hojasLineas = detectarHojasLineas(wb);
+        if (hojasLineas.length > 0) {
+          const { items } = procesarHojasLineas(wb, hojasLineas);
+          setEleccionFormato({ wb, hojasLineas, totalItemsLineas: items.length });
+          return;
         }
 
-        if (headerRow === -1) { toast('No se encontraron encabezados en el Excel', 'error'); return; }
-
-        const ADMIN_WORDS = ['TOTAL', 'VERDADERO', 'COSTEADO', 'SUBTOTAL', 'ENTREGA', 'SOLICITA', 'FICHA', 'CIUDAD', 'REGION', 'REGIÓN', 'OBSERVACI', 'NOTA:', 'NOTA ', 'PLAZO', 'CONTRATO', 'DIRECCIÓN', 'DIRECCION'];
-
-        const items: ProductoExcel[] = [];
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || !row.length) continue;
-          const detalle = colDetalle >= 0 ? String(row[colDetalle] || '').trim() : '';
-          if (!detalle) continue;
-          if (ADMIN_WORDS.some(s => detalle.toUpperCase().includes(s))) continue;
-          const itemRaw = colItem >= 0 ? String(row[colItem] || '').trim() : '';
-          if (!itemRaw && detalle.split(' ').length > 6) continue;
-          const conversion = colConversion >= 0 ? String(row[colConversion] || '').trim().toLowerCase() : 'unidad';
-          let valorCIVA = 0;
-          if (colValor >= 0 && row[colValor] != null) {
-            const raw = row[colValor];
-            valorCIVA = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[$.]/g, '').replace(',', '.')) || 0;
-          }
-          const numeroRaw = itemRaw || String(i - headerRow);
-          const numero = isNaN(Number(numeroRaw)) ? numeroRaw : Number(numeroRaw);
-          items.push({
-            numero: numero as number,
-            nombre: detalle,
-            cantidad: colCantidad >= 0 ? Number(row[colCantidad]) || 1 : 1,
-            valor_civa: valorCIVA,
-            link_referencia: colLink >= 0 ? String(row[colLink] || '').trim() : '',
-            conversion: conversion || 'unidad',
-            _fila: i,
-          });
-        }
-
-        if (!items.length) { toast('No se encontraron productos en el Excel', 'error'); return; }
-        setProductosExcel(items);
-        setSheetName(sheetName);
-        setColsExcel({ headerRow, colItem, colValor, colLink });
-        if (!nombreProyecto.trim()) {
-          setNombreProyecto(file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim());
-        }
-        toast(`${items.length} ítems detectados en "${sheetName}"`, 'success');
+        const sheet = wb.SheetNames.includes('COSTEO') ? 'COSTEO' : wb.SheetNames[0];
+        procesarPestanaCosteo(wb, sheet, file);
       } catch (err: any) {
         toast(`Error leyendo Excel: ${err.message}`, 'error');
       }
     };
     reader.onerror = () => toast('Error al leer el archivo Excel', 'error');
     reader.readAsArrayBuffer(file);
+  };
+
+  // ─── Elección de formato: COSTEO (una pestaña) vs LÍNEAS (varias hojas) ───────
+  const elegirFormatoLineas = () => {
+    if (!eleccionFormato) return;
+    const { wb, hojasLineas } = eleccionFormato;
+    const { items, colsPorHoja } = procesarHojasLineas(wb, hojasLineas);
+    if (!items.length) { toast('No se encontraron productos en las hojas LÍNEA', 'error'); setEleccionFormato(null); return; }
+
+    setFormatoExcel('lineas');
+    setColsExcelPorHoja(colsPorHoja);
+    setColsExcel(null);
+    setProductosExcel(items);
+    if (!nombreProyecto.trim() && archivoExcel) {
+      setNombreProyecto(archivoExcel.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim());
+    }
+    setEleccionFormato(null);
+    toast(`${items.length} productos desde ${hojasLineas.length} hojas (${hojasLineas.join(', ')})`, 'success');
+  };
+
+  const elegirFormatoCosteo = () => {
+    if (!eleccionFormato || !archivoExcel) return;
+    const { wb, hojasLineas } = eleccionFormato;
+    const sheet = wb.SheetNames.find(s => !hojasLineas.includes(s) && /costeo/i.test(s)) || wb.SheetNames[0];
+    setEleccionFormato(null);
+    procesarPestanaCosteo(wb, sheet, archivoExcel);
   };
 
   // ─── Manejo de documentos ────────────────────────────────────────────────────
@@ -468,6 +463,7 @@ export default function ViabilidadPage() {
         valor_civa: ref?.valor_civa || 0,
         link_referencia: ref?.link_referencia || '',
         conversion: ref?.conversion || (it.unidad ? it.unidad.toLowerCase() : 'unidad'),
+        ...(ref?._hoja ? { _hoja: ref._hoja, _itemOriginal: ref._itemOriginal } : {}),
       };
     }).filter(p => p.nombre);
 
@@ -481,6 +477,7 @@ export default function ViabilidadPage() {
         const archivoBase64 = await obtenerArchivoBase64();
         sessionStorage.setItem('viabilidad_excel_archivo', JSON.stringify({
           base64: archivoBase64, nombre: archivoExcel.name, cols: colsExcel, sheetName,
+          formato: formatoExcel, ...(formatoExcel === 'lineas' && colsExcelPorHoja ? { colsPorHoja: colsExcelPorHoja } : {}),
         }));
       } catch { /* si falla, igual se envían los ítems */ }
     }
@@ -548,12 +545,20 @@ export default function ViabilidadPage() {
     if (!resultado) { toast('Analiza la documentación primero', 'warning'); return; }
     setDescargandoExcel(true);
     try {
+      const formato = resultadosBuscador?.formato || formatoExcel;
+
       const fd = new FormData();
       fd.append('file', archivoExcel, archivoExcel.name);
-      fd.append('sheetName', sheetName);
       fd.append('modo', 'viabilidad');
+      fd.append('formato', formato);
       fd.append('analisis', JSON.stringify(resultado.analisis));
-      if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
+      if (formato === 'lineas') {
+        const colsPorHoja = resultadosBuscador?.colsPorHoja || colsExcelPorHoja;
+        if (colsPorHoja) fd.append('colsPorHoja', JSON.stringify(colsPorHoja));
+      } else {
+        fd.append('sheetName', sheetName);
+        if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
+      }
       if (resultadosBuscador?.items.length) fd.append('seleccionados', JSON.stringify(resultadosBuscador.items));
 
       const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
@@ -678,6 +683,23 @@ export default function ViabilidadPage() {
               <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1">
                 <CheckCircle2 size={11} /> {productosExcel.length} ítems detectados
               </p>
+            )}
+
+            {/* Elección de formato: COSTEO (una pestaña) vs LÍNEAS (varias hojas) */}
+            {eleccionFormato && (
+              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                <p className="text-[11px] text-amber-800 font-medium">
+                  Este Excel tiene hojas {eleccionFormato.hojasLineas.join(', ')}. ¿Cómo quieres procesarlo?
+                </p>
+                <button onClick={elegirFormatoLineas}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg text-xs font-semibold transition-colors">
+                  Procesar por LÍNEAS ({eleccionFormato.hojasLineas.length} hojas, {eleccionFormato.totalItemsLineas} ítems)
+                </button>
+                <button onClick={elegirFormatoCosteo}
+                  className="w-full bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 py-2 rounded-lg text-xs font-semibold transition-colors">
+                  Procesar solo una pestaña (COSTEO)
+                </button>
+              </div>
             )}
           </div>
 
