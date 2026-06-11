@@ -7,7 +7,7 @@ import {
   Users, Building2, Database, FileText, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
   BookOpen, CreditCard, Receipt, Briefcase, Lock, Bookmark, GraduationCap, ClipboardList, FolderOpen,
-  MapPin, BadgeCheck
+  MapPin, BadgeCheck, FileSearch
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/chat":                { id: "MP-CHT", label: "Chat Interno" },
   "/tareas":              { id: "MP-TAR", label: "Tareas" },
   "/dashboard":           { id: "MP-DSH", label: "Dashboard de Análisis" },
+  "/viabilidad":          { id: "MP-VIA", label: "Viabilidad de Licitaciones" },
   "/buscador-productos":   { id: "MP-BUS", label: "Buscador de Productos" },
   "/busquedas-guardadas":  { id: "MP-BGD", label: "Mis Búsquedas" },
   "/historial-precios":      { id: "MP-HIS", label: "Historial de Precios" },
@@ -45,6 +46,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "chat":               MessageSquare,
   "tareas":             CheckSquare,
   "dashboard":          BarChart3,
+  "viabilidad":         FileSearch,
   "buscador-productos":  Box,
   "busquedas-guardadas": Bookmark,
   "historial-precios":      TrendingUp,

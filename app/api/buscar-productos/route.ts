@@ -741,7 +741,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const producto = (sp.get('producto') || '').trim();
   const numeroItem = sp.get('numero') || '';
-  const minimo = Math.min(parseInt(sp.get('minimo') || '10', 10), 10); // máx 10 por item
+  const minimo = Math.min(parseInt(sp.get('minimo') || '5', 10), 5); // máx 5 por item (ahorro Serper)
   const conversion = (sp.get('conversion') || 'unidad').trim().toLowerCase();
   const contexto = (sp.get('contexto') || '').trim();
   const region = (sp.get('region') || '').trim();

@@ -752,6 +752,22 @@ export default function MonitorMasivoICA() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Recibir ítems enviados desde el módulo de Viabilidad
+  useEffect(() => {
+    const raw = sessionStorage.getItem('viabilidad_items_excel');
+    if (!raw) return;
+    sessionStorage.removeItem('viabilidad_items_excel');
+    try {
+      const items = JSON.parse(raw) as ProductoExcel[];
+      if (items.length) {
+        setProductosExcel(items);
+        setShowModal(true);
+        notify(`${items.length} ítems recibidos desde Viabilidad`, 'success');
+      }
+    } catch { /* ignorar */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ordena los resultados de un item según el modo elegido (match o precio)
   const resultadosOrdenados = useCallback((item: ItemLista): ProductoResultado[] => {
     const modo = ordenItem.get(item.numero) || 'match';
@@ -775,7 +791,7 @@ export default function MonitorMasivoICA() {
       if (!key || tiendasVistas.has(key)) return false;
       tiendasVistas.add(key);
       return true;
-    }).slice(0, 10); // máx 10 por ítem
+    }).slice(0, 5); // máx 5 por ítem (ahorro Serper)
   }, [ordenItem]);
 
   // ─── Notify ──────────────────────────────────────────────────────────────────
@@ -1037,7 +1053,7 @@ export default function MonitorMasivoICA() {
 
       const ctxParam = contexto.trim() ? `&contexto=${encodeURIComponent(contexto.trim())}` : '';
       const regionParam = region.trim() ? `&region=${encodeURIComponent(region.trim())}` : '';
-      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=10&conversion=${encodeURIComponent(conversion)}${ctxParam}${regionParam}`;
+      const url = `/api/buscar-productos?producto=${encodeURIComponent(productoBuscar)}&numero=${encodeURIComponent(numero)}&minimo=5&conversion=${encodeURIComponent(conversion)}${ctxParam}${regionParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1052,7 +1068,7 @@ export default function MonitorMasivoICA() {
             body: JSON.stringify({
               producto,
               numero_item: numero,
-              minimo_requerido: 15,
+              minimo_requerido: 5,
               resultados_raw: raw,
               analisis_producto: data.analisis_producto,
               entidades_detectadas: data.entidades_detectadas || null,
