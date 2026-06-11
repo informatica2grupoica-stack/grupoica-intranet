@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   GEMINI_KEY,
   subirArchivoAGemini, generarConGemini, parsearJSONSeguro, type GeminiPart,
+  esDocumentoOffice, extraerTextoOffice,
 } from '@/lib/gemini/documentos';
 
 export const dynamic = 'force-dynamic';
@@ -57,14 +58,28 @@ export async function POST(req: Request) {
 
     const fileParts: GeminiPart[] = await Promise.all(
       archivos.map(async (a) => {
+        const nombre = a.nombre || a.path;
         const { data: blob, error: dlErr } = await supabase.storage.from(a.bucket).download(a.path);
-        if (dlErr || !blob) throw new Error(`No se pudo descargar "${a.nombre || a.path}": ${dlErr?.message || 'no encontrado'}`);
+        if (dlErr || !blob) throw new Error(`No se pudo descargar "${nombre}": ${dlErr?.message || 'no encontrado'}`);
         const bytes = await blob.arrayBuffer();
-        if (bytes.byteLength < 100) throw new Error(`El archivo "${a.nombre || a.path}" está vacío o corrupto`);
-        if (bytes.byteLength > 60 * 1024 * 1024) throw new Error(`El archivo "${a.nombre || a.path}" supera los 60MB`);
+        if (bytes.byteLength < 100) throw new Error(`El archivo "${nombre}" está vacío o corrupto`);
+        if (bytes.byteLength > 60 * 1024 * 1024) throw new Error(`El archivo "${nombre}" supera los 60MB`);
 
-        const fileUri = await subirArchivoAGemini(bytes, bytes.byteLength, a.mimeType, a.nombre || a.path);
-        console.log(`[viabilidad] ✅ Subido a Gemini: ${a.nombre || a.path}`);
+        // Word/Excel: Gemini no los soporta como fileData → se extrae el texto y se envía como parte de texto
+        if (esDocumentoOffice(a.mimeType)) {
+          try {
+            const texto = await extraerTextoOffice(bytes, a.mimeType, nombre);
+            console.log(`[viabilidad] ✅ Texto extraído de ${nombre} (${texto.length} chars)`);
+            return { text: `=== Documento: ${nombre} ===\n${texto.slice(0, 50000)}` };
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'error desconocido';
+            console.warn(`[viabilidad] ⚠️ No se pudo extraer texto de ${nombre}: ${msg}`);
+            return { text: `=== Documento: ${nombre} ===\n(No se pudo leer el contenido de este archivo)` };
+          }
+        }
+
+        const fileUri = await subirArchivoAGemini(bytes, bytes.byteLength, a.mimeType, nombre);
+        console.log(`[viabilidad] ✅ Subido a Gemini: ${nombre}`);
         return { fileData: { mimeType: a.mimeType, fileUri } };
       })
     );

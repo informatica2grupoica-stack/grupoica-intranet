@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import {
@@ -10,7 +11,7 @@ import {
   Upload, Eye, Settings, ChevronDown, ChevronUp,
   TrendingDown, TrendingUp, Minus, RefreshCw, Sparkles,
   FileText, Zap, Bookmark, FolderOpen, Save,
-  MapPin, Building2
+  MapPin, Building2, ArrowLeftCircle
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -694,6 +695,7 @@ const REGIONES_CHILE = [
 ];
 
 export default function MonitorMasivoICA() {
+  const router = useRouter();
   const [inputManual, setInputManual]   = useState('');
   const [inputMasivo, setInputMasivo]   = useState('');
   const [itemsLista, setItemsLista]     = useState<ItemLista[]>([]);
@@ -743,6 +745,9 @@ export default function MonitorMasivoICA() {
   const [notaLocales, setNotaLocales]                 = useState('');
   const [buscandoLocalesProductos, setBuscandoLocalesProductos] = useState(false);
 
+  // ─── Handoff con el módulo de Viabilidad ─────────────────────────────────────
+  const [vieneDeViabilidad, setVieneDeViabilidad]     = useState(false);
+
   // Restaurar automáticamente si venimos desde la página de búsquedas guardadas
   useEffect(() => {
     const id = sessionStorage.getItem('restaurar_busqueda');
@@ -762,6 +767,7 @@ export default function MonitorMasivoICA() {
       if (items.length) {
         setProductosExcel(items);
         setShowModal(true);
+        setVieneDeViabilidad(true);
         notify(`${items.length} ítems recibidos desde Viabilidad`, 'success');
       }
     } catch { /* ignorar */ }
@@ -1228,6 +1234,34 @@ export default function MonitorMasivoICA() {
     }
   };
 
+  // ─── Enviar resultados de vuelta al módulo de Viabilidad ─────────────────────
+  const enviarResultadosAViabilidad = () => {
+    const seleccionados = itemsLista.flatMap(item => {
+      const sel = elegirPorModo(item, 'manual');
+      if (!sel?.precio_valor) return [];
+      const cantidad = productosExcel.find(p => String(p.numero) === item.numero)?.cantidad || 1;
+      return [{
+        numero: String(item.numero), nombre: item.nombre,
+        precio: sel.precio_valor, cantidad,
+        tienda: sel.tienda || '', link: sel.link || '',
+        match: sel.matching?.porcentaje ?? 0,
+      }];
+    });
+
+    const totalConIva = seleccionados.reduce((acc, s) => acc + s.precio * s.cantidad, 0);
+    const totalNeto = Math.round(totalConIva / IVA);
+    const totalItems = itemsLista.length;
+    const itemsConPrecio = seleccionados.length;
+
+    sessionStorage.setItem('viabilidad_resultados_buscador', JSON.stringify({
+      items: seleccionados,
+      totalConIva, totalNeto, totalItems, itemsConPrecio,
+      fecha: new Date().toISOString(),
+    }));
+    notify('Enviando resultados a Viabilidad...', 'success');
+    router.push('/viabilidad');
+  };
+
   const descargarXlsx = (wb: import('xlsx').WorkBook, filename: string) => {
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1548,6 +1582,17 @@ export default function MonitorMasivoICA() {
                 {buscandoUno ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
               </button>
             </div>
+
+            {/* Volver a Viabilidad con los resultados */}
+            {vieneDeViabilidad && itemsLista.length > 0 && (
+              <button
+                onClick={enviarResultadosAViabilidad}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                title="Enviar estos resultados de vuelta a Viabilidad"
+              >
+                <ArrowLeftCircle size={14} /> Enviar a Viabilidad
+              </button>
+            )}
 
             {/* Guardar búsqueda actual */}
             {itemsLista.length > 0 && !procesando && (

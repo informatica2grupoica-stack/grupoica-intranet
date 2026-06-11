@@ -15,6 +15,10 @@ const BUCKET = 'viabilidad-docs';
 
 const EXT_POR_MIME: Record<string, string> = {
   'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xls',
   'image/jpeg': 'jpg',
   'image/png': 'png',
 };

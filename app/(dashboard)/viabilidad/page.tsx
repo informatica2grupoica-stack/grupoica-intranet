@@ -10,7 +10,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Sparkles, Send, Save,
   Calendar, Building2, MapPin, Percent, ShieldCheck, Package,
   Bookmark, Trash2, ExternalLink, RefreshCw, ChevronDown, Wallet,
-  ClipboardList, Users, Gavel,
+  ClipboardList, Users, Gavel, Download, Calculator,
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -79,17 +79,50 @@ interface AnalisisGuardado {
   user_nombre: string;
 }
 
-const ACCEPT_DOCS = '.pdf,.jpg,.jpeg,.png';
+interface ItemResultadoBuscador {
+  numero: string;
+  nombre: string;
+  precio: number;
+  cantidad: number;
+  tienda: string;
+  link: string;
+  match: number;
+}
+
+interface ResultadosBuscador {
+  items: ItemResultadoBuscador[];
+  totalConIva: number;
+  totalNeto: number;
+  totalItems: number;
+  itemsConPrecio: number;
+  fecha: string;
+}
+
+// Convierte montos en formato chileno ("$5.000.000", "5.000.000,50") a número
+function parsearMontoCLP(str: string): number {
+  if (!str) return 0;
+  const limpio = String(str).replace(/[^\d,.-]/g, '');
+  if (!limpio) return 0;
+  const normalizado = limpio.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(normalizado);
+  return isNaN(n) ? 0 : n;
+}
+
+const ACCEPT_DOCS = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
 
 const MIME_POR_EXT: Record<string, string> = {
   pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
 };
 
-// Extensiones que Gemini NO puede leer directamente (Office) — se rechazan con un aviso.
-const EXTENSIONES_NO_SOPORTADAS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+// Formatos que aún no se pueden analizar (PowerPoint, etc.) — se rechazan con un aviso.
+const EXTENSIONES_NO_SOPORTADAS = ['ppt', 'pptx'];
 
 function mimeDeArchivo(file: File): string {
   if (file.type) return file.type;
@@ -121,6 +154,8 @@ export default function ViabilidadPage() {
   // Excel COSTEO
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
   const [productosExcel, setProductosExcel] = useState<ProductoExcel[]>([]);
+  const [colsExcel, setColsExcel] = useState<{ headerRow: number; colItem: number; colValor: number; colLink: number } | null>(null);
+  const [sheetName, setSheetName] = useState('COSTEO');
 
   // Documentos de la licitación
   const [documentos, setDocumentos] = useState<File[]>([]);
@@ -131,6 +166,11 @@ export default function ViabilidadPage() {
   const [resultado, setResultado] = useState<ResultadoAnalisis | null>(null);
   const [nombreProyecto, setNombreProyecto] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  // Resultados del buscador de productos (handoff de vuelta) y veredicto final
+  const [resultadosBuscador, setResultadosBuscador] = useState<ResultadosBuscador | null>(null);
+  const [calculandoVeredicto, setCalculandoVeredicto] = useState(false);
+  const [descargandoExcel, setDescargandoExcel] = useState(false);
 
   // Análisis guardados
   const [guardados, setGuardados] = useState<AnalisisGuardado[]>([]);
@@ -154,6 +194,21 @@ export default function ViabilidadPage() {
   }, []);
 
   useEffect(() => { cargarGuardados(); }, [cargarGuardados]);
+
+  // Recibir resultados enviados desde el buscador de productos
+  useEffect(() => {
+    const raw = sessionStorage.getItem('viabilidad_resultados_buscador');
+    if (!raw) return;
+    sessionStorage.removeItem('viabilidad_resultados_buscador');
+    try {
+      const data = JSON.parse(raw) as ResultadosBuscador;
+      if (data?.items?.length) {
+        setResultadosBuscador(data);
+        toast(`${data.itemsConPrecio} de ${data.totalItems} ítems con precio recibidos del buscador`, 'success');
+      }
+    } catch { /* ignorar */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Cargar Excel COSTEO ─────────────────────────────────────────────────────
   const cargarExcel = (file: File) => {
@@ -223,6 +278,8 @@ export default function ViabilidadPage() {
 
         if (!items.length) { toast('No se encontraron productos en el Excel', 'error'); return; }
         setProductosExcel(items);
+        setSheetName(sheetName);
+        setColsExcel({ headerRow, colItem, colValor, colLink });
         if (!nombreProyecto.trim()) {
           setNombreProyecto(file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim());
         }
@@ -249,7 +306,7 @@ export default function ViabilidadPage() {
     });
     const rechazados = sinLocks.length - nuevos.length;
     if (rechazados > 0) {
-      toast(`${rechazados} archivo(s) Word/Excel/PowerPoint no se pueden analizar con IA y fueron omitidos. Usa el cargador de Excel COSTEO para la planilla.`, 'warning');
+      toast(`${rechazados} archivo(s) PowerPoint no se pueden analizar con IA y fueron omitidos.`, 'warning');
     }
 
     setDocumentos(prev => {
@@ -345,6 +402,79 @@ export default function ViabilidadPage() {
     router.push('/buscador-productos');
   };
 
+  // ─── Calcular veredicto final (cruza presupuesto + costo real del buscador) ─
+  const calcularVeredicto = async () => {
+    if (!resultado || !resultadosBuscador) return;
+    setCalculandoVeredicto(true);
+    try {
+      const res = await fetch('/api/viabilidad-veredicto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analisis: resultado.analisis,
+          costoTotalConIva: resultadosBuscador.totalConIva,
+          costoTotalNeto: resultadosBuscador.totalNeto,
+          totalItems: resultadosBuscador.totalItems,
+          itemsConPrecio: resultadosBuscador.itemsConPrecio,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo calcular el veredicto');
+
+      setResultado(prev => prev ? {
+        ...prev,
+        analisis: {
+          ...prev.analisis,
+          proyecto_viable: data.proyecto_viable,
+          justificacion_viabilidad: data.justificacion_viabilidad,
+          observaciones: data.observaciones,
+        },
+      } : prev);
+      toast('Veredicto final actualizado', 'success');
+    } catch (e: any) {
+      toast(`Error: ${e.message}`, 'error');
+    } finally {
+      setCalculandoVeredicto(false);
+    }
+  };
+
+  // ─── Descargar Excel completo (COSTEO con precios + pestaña Análisis) ───────
+  const descargarExcelCompleto = async () => {
+    if (!archivoExcel) { toast('Sube el Excel COSTEO primero', 'warning'); return; }
+    if (!resultado) { toast('Analiza la documentación primero', 'warning'); return; }
+    setDescargandoExcel(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', archivoExcel, archivoExcel.name);
+      fd.append('sheetName', sheetName);
+      fd.append('modo', 'viabilidad');
+      fd.append('analisis', JSON.stringify(resultado.analisis));
+      if (colsExcel) fd.append('cols', JSON.stringify(colsExcel));
+      if (resultadosBuscador?.items.length) fd.append('seleccionados', JSON.stringify(resultadosBuscador.items));
+
+      const res = await fetch('/api/exportar-excel', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || 'No se pudo generar el Excel');
+      }
+
+      const blob = await res.blob();
+      const nombreLimpio = (nombreProyecto || 'proyecto').replace(/[^\w-]+/g, '_');
+      const filename = `Viabilidad_${nombreLimpio}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: filename,
+      });
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast('Excel descargado', 'success');
+    } catch (e: any) {
+      toast(`Error: ${e.message}`, 'error');
+    } finally {
+      setDescargandoExcel(false);
+    }
+  };
+
   // ─── Guardar análisis ────────────────────────────────────────────────────────
   const guardarAnalisis = async () => {
     if (!resultado) return;
@@ -400,6 +530,10 @@ export default function ViabilidadPage() {
 
   const a = resultado?.analisis;
   const viable = a?.proyecto_viable?.trim().toUpperCase();
+  const presupuesto = a ? parsearMontoCLP(a.presupuesto_con_iva) : 0;
+  const margenPct = (presupuesto > 0 && resultadosBuscador)
+    ? ((presupuesto - resultadosBuscador.totalConIva) / presupuesto) * 100
+    : null;
 
   return (
     <div className="space-y-6">
@@ -460,7 +594,7 @@ export default function ViabilidadPage() {
               onClick={() => inputDocsRef.current?.click()}
               className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-[#2563EB]/40 hover:bg-blue-50/50 rounded-xl py-4 text-xs font-semibold text-slate-500 hover:text-[#2563EB] transition-colors"
             >
-              <Upload size={14} /> Bases, anexos, formularios... (solo PDF e imágenes — Excel COSTEO va arriba)
+              <Upload size={14} /> Bases, anexos, formularios... (PDF, Word, Excel, imágenes)
             </button>
           </div>
         </div>
@@ -536,6 +670,53 @@ export default function ViabilidadPage() {
               <p className="text-sm text-slate-600 mt-3 bg-white/60 rounded-xl p-3">{a.justificacion_viabilidad}</p>
             )}
           </div>
+
+          {/* Resumen financiero (resultados del buscador de productos) */}
+          {resultadosBuscador && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <Wallet size={13} /> Resumen financiero (buscador de productos)
+              </h4>
+              <div className="flex flex-wrap gap-2.5">
+                <div className="flex-1 min-w-[140px] bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-black text-slate-700 leading-none">
+                    {presupuesto > 0 ? `$${presupuesto.toLocaleString('es-CL')}` : '—'}
+                  </p>
+                  <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide font-bold">Presupuesto c/IVA</p>
+                </div>
+                <div className="flex-1 min-w-[140px] bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-black text-slate-700 leading-none">
+                    ${resultadosBuscador.totalConIva.toLocaleString('es-CL')}
+                  </p>
+                  <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide font-bold">Costo real c/IVA</p>
+                </div>
+                <div className={`flex-1 min-w-[140px] rounded-xl p-3 text-center ${
+                  margenPct === null ? 'bg-slate-50' : margenPct >= 0 ? 'bg-emerald-50' : 'bg-red-50'
+                }`}>
+                  <p className={`text-lg font-black leading-none ${
+                    margenPct === null ? 'text-slate-700' : margenPct >= 0 ? 'text-emerald-600' : 'text-red-600'
+                  }`}>
+                    {margenPct !== null ? `${margenPct.toFixed(1)}%` : '—'}
+                  </p>
+                  <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide font-bold">Margen</p>
+                </div>
+                <div className="flex-1 min-w-[140px] bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-black text-slate-700 leading-none">
+                    {resultadosBuscador.itemsConPrecio}/{resultadosBuscador.totalItems}
+                  </p>
+                  <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide font-bold">Ítems con precio</p>
+                </div>
+              </div>
+              <button
+                onClick={calcularVeredicto}
+                disabled={calculandoVeredicto}
+                className="mt-3 w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white font-bold text-sm py-3 rounded-xl transition-colors"
+              >
+                {calculandoVeredicto ? <Loader2 size={15} className="animate-spin" /> : <Calculator size={15} />}
+                Calcular veredicto final con IA
+              </button>
+            </div>
+          )}
 
           {/* Datos generales */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -631,6 +812,15 @@ export default function ViabilidadPage() {
               className="flex-1 min-w-[160px] flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-bold text-sm py-3 rounded-xl transition-colors"
             >
               {guardando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar análisis
+            </button>
+            <button
+              onClick={descargarExcelCompleto}
+              disabled={descargandoExcel || !archivoExcel}
+              title={!archivoExcel ? 'Sube el Excel COSTEO para habilitar la descarga' : undefined}
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-sm py-3 rounded-xl transition-colors"
+            >
+              {descargandoExcel ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              Descargar Excel completo (COSTEO + Análisis)
             </button>
           </div>
         </div>

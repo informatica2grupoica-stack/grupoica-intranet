@@ -2,6 +2,9 @@
 // Utilidades compartidas para subir documentos a Gemini File API, generar
 // contenido multimodal (multi-archivo) y parsear respuestas JSON tolerantes.
 // Usado por: app/api/leer-bases (1 PDF) y app/api/viabilidad-analizar (N documentos).
+import mammoth from 'mammoth';
+import WordExtractor from 'word-extractor';
+import * as XLSX from 'xlsx';
 
 export const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 export const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
@@ -336,6 +339,45 @@ export function extraerArrayBalanceado(txt: string, inicio: number): string | nu
     return recortado;
   }
   return null;
+}
+
+// ─── Extracción de texto desde documentos Office ─────────────────────────────
+// Gemini generateContent no soporta Word/Excel como fileData, así que el texto
+// se extrae aquí y se envía como parte de tipo {text} dentro del prompt.
+
+const MIME_OFFICE_TEXTO = new Set([
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword',                                                       // .doc
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',        // .xlsx
+  'application/vnd.ms-excel',                                                 // .xls
+]);
+
+export function esDocumentoOffice(mimeType: string): boolean {
+  return MIME_OFFICE_TEXTO.has(mimeType);
+}
+
+export async function extraerTextoOffice(bytes: ArrayBuffer, mimeType: string, nombre: string): Promise<string> {
+  const buffer = Buffer.from(bytes);
+
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    const { value } = await mammoth.extractRawText({ buffer });
+    return value.trim();
+  }
+
+  if (mimeType === 'application/msword') {
+    const doc = await new WordExtractor().extract(buffer);
+    return doc.getBody().trim();
+  }
+
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    return wb.SheetNames.map((name) => {
+      const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+      return `--- Hoja: ${name} ---\n${csv}`;
+    }).join('\n\n').trim();
+  }
+
+  throw new Error(`No se pudo extraer texto de "${nombre}": tipo no soportado (${mimeType})`);
 }
 
 // Normaliza claves: si Gemini usó "productos" en vez de "items", etc.
