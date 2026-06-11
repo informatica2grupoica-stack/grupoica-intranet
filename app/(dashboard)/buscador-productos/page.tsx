@@ -1311,8 +1311,11 @@ export default function MonitorMasivoICA() {
       }
 
       const pct = sel.matching?.porcentaje ?? 0;
+      const esManual = seleccion.has(item.numero);
       let motivo = '';
-      if (sel.alerta_unidad) {
+      if (esManual) {
+        motivo = 'Selección manual del usuario — verificar precio/tienda antes de cotizar';
+      } else if (sel.alerta_unidad) {
         motivo = `Posible diferencia de unidad${sel.unidad_detectada ? ` (detectada: ${sel.unidad_detectada})` : ''} — verificar ficha técnica`;
       } else if (pct < 60) {
         motivo = sel.matching?.razon || 'Coincidencia baja — verificar ficha técnica del producto encontrado';
@@ -1323,7 +1326,7 @@ export default function MonitorMasivoICA() {
         numero: String(item.numero), nombre: item.nombre,
         precio: sel.precio_valor, cantidad,
         tienda: sel.tienda || '', link: sel.link || '',
-        match: pct,
+        match: pct, seleccionManual: esManual,
         ...hojaInfo,
       }];
     });

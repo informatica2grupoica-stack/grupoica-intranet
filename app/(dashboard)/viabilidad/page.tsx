@@ -82,6 +82,7 @@ interface ItemResultadoBuscador {
   tienda: string;
   link: string;
   match: number;
+  seleccionManual?: boolean;
   hoja?: string;
   itemOriginal?: string;
 }
