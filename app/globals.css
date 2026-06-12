@@ -1,3 +1,146 @@
-/* app/globals.css */
+/* app/globals.css — Design System Comercial MP Workspace (2026) */
 @import "tailwindcss";
 
+/* ─── Tokens de diseño ──────────────────────────────────────────────────── */
+@theme {
+  --color-brand-50:  #EFF6FF;
+  --color-brand-100: #DBEAFE;
+  --color-brand-500: #3B82F6;
+  --color-brand-600: #2563EB;
+  --color-brand-700: #1D4ED8;
+  --color-surface:   #F8FAFC;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius-card: 1rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-pop:  0 10px 38px -10px rgb(15 23 42 / 0.18), 0 10px 20px -15px rgb(15 23 42 / 0.12);
+
+  --animate-fade-up:  fade-up 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+  --animate-scale-in: scale-in 0.18s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+  --animate-shimmer:  shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+  }
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11"; /* Inter: formas modernas de a/g/y */
+    letter-spacing: -0.011em;
+  }
+
+  /* Selección de texto con la marca */
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-brand-700);
+  }
+
+  /* Cifras tabulares en tablas: los montos quedan alineados */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Inputs modernos en TODA la app (aditivo, no pisa estilos existentes) ── */
+  input, select, textarea {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: none;
+    border-color: var(--color-brand-500);
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
+  }
+  input::placeholder, textarea::placeholder {
+    color: #94A3B8;
+    font-weight: 450;
+  }
+
+  /* ── Botones: micro-interacción global ── */
+  button {
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+  button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Respeto a usuarios con movimiento reducido */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ─── Scrollbars modernos (global) ─────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: #94A3B8; }
+
+/* Variante para el sidebar oscuro */
+.custom-scrollbar { scrollbar-color: rgb(255 255 255 / 0.14) transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgb(255 255 255 / 0.14); }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgb(255 255 255 / 0.28); }
+
+/* ─── Utilidades del design system ─────────────────────────────────────── */
+@utility card {
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+@utility skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+  border-radius: 0.5rem;
+}
+
+@utility glass {
+  background: rgb(255 255 255 / 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+
+@utility animate-fade-up { animation: var(--animate-fade-up); }
+@utility animate-scale-in { animation: var(--animate-scale-in); }

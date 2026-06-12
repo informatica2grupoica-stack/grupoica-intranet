@@ -1,7 +1,7 @@
 ﻿"use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Mail, Lock, Loader2, AlertCircle, ArrowRight, Sparkles } from "lucide-react";
+import { Mail, Lock, Loader2, AlertCircle, ArrowRight, Sparkles, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => { supabase.auth.signOut(); }, []);
 
@@ -52,7 +53,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#111827] via-[#1E293B] to-[#0F172A] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#0B1220] via-[#111827] to-[#0F172A] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Grid sutil de fondo */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.35]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(148,163,184,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.07) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+          maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent)",
+          WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent)",
+        }}
+      />
       {/* Orbes animados de fondo */}
       <motion.div
         animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.25, 0.15] }}
@@ -121,10 +133,19 @@ export default function LoginPage() {
           <div className="relative group">
             <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-[#2563EB] transition-colors" />
             <input
-              type="password" placeholder="Contraseña" required disabled={loading}
-              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#2563EB]/30 focus:bg-white rounded-2xl pl-14 pr-5 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
+              type={showPassword ? "text" : "password"} placeholder="Contraseña" required disabled={loading}
+              className="w-full bg-slate-50 border-2 border-transparent focus:border-[#2563EB]/30 focus:bg-white rounded-2xl pl-14 pr-12 py-4 font-semibold outline-none transition-all disabled:opacity-50 text-sm text-slate-700"
               value={password} onChange={e => setPassword(e.target.value)}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(s => !s)}
+              tabIndex={-1}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-300 hover:text-slate-500 transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+            </button>
           </div>
 
           <div className="flex justify-end px-1">
@@ -140,7 +161,9 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all flex items-center justify-center gap-3 disabled:opacity-60 mt-3"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>Ingresar al Workspace</span><ArrowRight className="w-4 h-4" /></>}
+            {loading
+              ? <><Loader2 className="w-4.5 h-4.5 animate-spin" /><span>Verificando…</span></>
+              : <><span>Ingresar al Workspace</span><ArrowRight className="w-4 h-4" /></>}
           </motion.button>
         </motion.form>
 
