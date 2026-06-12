@@ -1,11 +1,8 @@
 // app/api/rrhh/asistencias/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = supabaseAdmin;
 
 // Parámetros específicos GRUPO ICA
 const HORA_COLACION = 1;  // 1 hora de colación

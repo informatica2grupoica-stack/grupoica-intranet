@@ -118,12 +118,14 @@ const HANDLERS: Record<string, (payload: any) => Promise<void>> = {
 
 export async function POST(req: NextRequest) {
   try {
-    // Validar secreto si estÃ¡ configurado
-    if (WEBHOOK_SECRET) {
-      const secret = req.headers.get('x-obuma-secret') || req.nextUrl.searchParams.get('secret');
-      if (secret !== WEBHOOK_SECRET) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    // El secreto es OBLIGATORIO: sin configurar, el webhook queda deshabilitado
+    // (antes, si faltaba la env var, se aceptaba cualquier petición sin validar).
+    if (!WEBHOOK_SECRET) {
+      return NextResponse.json({ error: 'Webhook no configurado (falta OBUMA_WEBHOOK_SECRET)' }, { status: 503 });
+    }
+    const secret = req.headers.get('x-obuma-secret') || req.nextUrl.searchParams.get('secret');
+    if (secret !== WEBHOOK_SECRET) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();

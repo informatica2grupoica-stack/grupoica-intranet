@@ -1,11 +1,9 @@
 // app/api/rrhh/capacitaciones/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { sanitizarBusqueda } from '@/lib/sanitize';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = supabaseAdmin;
 
 // GET: Listar capacitaciones
 export async function GET(request: NextRequest) {
@@ -20,8 +18,9 @@ export async function GET(request: NextRequest) {
       .from('capacitaciones')
       .select('*', { count: 'exact' });
 
-    if (search) {
-      query = query.or(`nombre.ilike.%${search}%,proveedor.ilike.%${search}%`);
+    const s = sanitizarBusqueda(search);
+    if (s) {
+      query = query.or(`nombre.ilike.%${s}%,proveedor.ilike.%${s}%`);
     }
     if (activo !== '') {
       query = query.eq('activo', activo === 'true');

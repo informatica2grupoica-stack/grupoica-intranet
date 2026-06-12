@@ -1,11 +1,9 @@
 // app/api/rrhh/empleados/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { sanitizarBusqueda } from '@/lib/sanitize';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = supabaseAdmin;
 
 // GET: Listar empleados con filtros
 export async function GET(request: NextRequest) {
@@ -21,8 +19,9 @@ export async function GET(request: NextRequest) {
       .from('empleados')
       .select('*', { count: 'exact' });
     
-    if (search) {
-      query = query.or(`nombre_completo.ilike.%${search}%,rut.ilike.%${search}%,email_corporativo.ilike.%${search}%`);
+    const s = sanitizarBusqueda(search);
+    if (s) {
+      query = query.or(`nombre_completo.ilike.%${s}%,rut.ilike.%${s}%,email_corporativo.ilike.%${s}%`);
     }
     if (estado) {
       query = query.eq('estado', estado);

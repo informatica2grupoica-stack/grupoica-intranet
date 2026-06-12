@@ -1,6 +1,7 @@
 // app/api/proyectos/route.ts — CRUD de proyectos en Supabase
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sanitizarBusqueda } from '@/lib/sanitize';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,8 +34,9 @@ export async function GET(req: NextRequest) {
 
     if (estado)   q = q.eq('estado', estado);
     if (tipo)     q = q.eq('tipo', tipo);
-    if (cliente)  q = q.ilike('cliente_nombre', `%${cliente}%`);
-    if (busqueda) q = q.or(`nombre.ilike.%${busqueda}%,descripcion.ilike.%${busqueda}%,cliente_nombre.ilike.%${busqueda}%`);
+    if (cliente)  q = q.ilike('cliente_nombre', `%${sanitizarBusqueda(cliente)}%`);
+    const sb = sanitizarBusqueda(busqueda);
+    if (sb) q = q.or(`nombre.ilike.%${sb}%,descripcion.ilike.%${sb}%,cliente_nombre.ilike.%${sb}%`);
 
     const { data, error, count } = await q;
     if (error) throw error;

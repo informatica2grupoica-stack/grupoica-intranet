@@ -1,9 +1,27 @@
 import { NextResponse } from 'next/server';
+import { requireRol } from '@/lib/authServer';
 
 export async function POST(req: Request) {
   try {
+    // Muta precios y stock del ERP — solo administradores.
+    // (El proxy ya lo exige; esto es defensa en profundidad por si la ruta
+    // queda expuesta por un cambio en el matcher.)
+    const auth = await requireRol([]);
+    if (auth.error) return auth.error;
+
     const { accion, producto_id, sku, nuevo_precio, nuevo_stock } = await req.json();
-    
+
+    // Validación básica del payload antes de tocar el ERP
+    if (!producto_id || typeof producto_id !== 'string' && typeof producto_id !== 'number') {
+      return NextResponse.json({ error: 'producto_id inválido' }, { status: 422 });
+    }
+    if (accion === 'cambiar_precio' && (typeof nuevo_precio !== 'number' || !Number.isFinite(nuevo_precio) || nuevo_precio <= 0 || nuevo_precio > 100_000_000)) {
+      return NextResponse.json({ error: 'nuevo_precio inválido' }, { status: 422 });
+    }
+    if (accion === 'actualizar_stock' && (typeof nuevo_stock !== 'number' || !Number.isInteger(nuevo_stock) || Math.abs(nuevo_stock) > 1_000_000)) {
+      return NextResponse.json({ error: 'nuevo_stock inválido' }, { status: 422 });
+    }
+
     let resultado;
     
     switch (accion) {
