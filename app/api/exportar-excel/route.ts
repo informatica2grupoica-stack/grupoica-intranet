@@ -191,6 +191,32 @@ export async function POST(req: NextRequest) {
           porLinea.get(n)!.push(it);
         }
 
+        // Ajustar la plantilla al número real de líneas de las bases:
+        // crear las hojas LINEAn que falten (clonando una existente, aún en blanco)
+        // y eliminar las que sobren.
+        const hojasLinea = wb.worksheets.filter(w => /^LINEA\d+$/i.test(w.name));
+        const hojaBase = wb.getWorksheet('LINEA1') || hojasLinea[0];
+        if (hojaBase) {
+          const lineasOrdenadas = [...porLinea.keys()].sort((a, b) => a - b);
+          // orderNo no está tipado en exceljs pero existe y controla el orden de pestañas
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let orden = Math.max(...hojasLinea.map(w => (w as any).orderNo as number));
+          for (const n of lineasOrdenadas) {
+            if (wb.getWorksheet(`LINEA${n}`)) continue;
+            const nueva = wb.addWorksheet(`LINEA${n}`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            nueva.model = Object.assign({}, (hojaBase as any).model, { name: `LINEA${n}` });
+            nueva.name = `LINEA${n}`;
+            orden += 0.01;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (nueva as any).orderNo = orden;
+          }
+          for (const w of [...wb.worksheets]) {
+            const m = w.name.match(/^LINEA(\d+)$/i);
+            if (m && !porLinea.has(parseInt(m[1], 10))) wb.removeWorksheet(w.id);
+          }
+        }
+
         for (const [n, items] of porLinea) {
           const ws = wb.getWorksheet(`LINEA${n}`);
           if (!ws) continue;

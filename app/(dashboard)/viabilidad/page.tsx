@@ -972,18 +972,29 @@ export default function ViabilidadPage() {
           )}
 
           {/* Ítems detectados */}
-          {resultado!.items.length > 0 && (
+          {resultado!.items.length > 0 && (() => {
+            const hayLineas = resultado!.items.some(it => it.linea);
+            const totalLineas = hayLineas
+              ? new Set(resultado!.items.map(it => (it.linea || '').match(/(\d+)/)?.[1] || '1')).size
+              : 0;
+            return (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wide flex items-center gap-1.5">
                   <Package size={13} /> Ítems detectados ({resultado!.items.length})
                 </h4>
+                {hayLineas && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-full px-2.5 py-1">
+                    Licitación por líneas — {totalLineas} línea{totalLineas !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <div className="overflow-x-auto -mx-5 px-5">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-slate-400 uppercase text-[10px] tracking-wide border-b border-slate-100">
                       <th className="py-2 pr-3 font-bold">Item</th>
+                      {hayLineas && <th className="py-2 pr-3 font-bold">Línea</th>}
                       <th className="py-2 pr-3 font-bold">Nombre</th>
                       <th className="py-2 pr-3 font-bold">Especificaciones</th>
                       <th className="py-2 pr-3 font-bold text-right">Cantidad</th>
@@ -994,6 +1005,15 @@ export default function ViabilidadPage() {
                     {resultado!.items.map((it, idx) => (
                       <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="py-2 pr-3 font-mono text-slate-500">{it.item}</td>
+                        {hayLineas && (
+                          <td className="py-2 pr-3">
+                            {it.linea ? (
+                              <span className="inline-block text-[10px] font-bold bg-indigo-50 text-indigo-600 rounded px-1.5 py-0.5 whitespace-nowrap">
+                                {it.linea}
+                              </span>
+                            ) : <span className="text-slate-300">—</span>}
+                          </td>
+                        )}
                         <td className="py-2 pr-3 font-semibold text-slate-700">{it.nombre}</td>
                         <td className="py-2 pr-3 text-slate-500 max-w-[320px]">{it.especificaciones}</td>
                         <td className="py-2 pr-3 text-right text-slate-700">{it.cantidad}</td>
@@ -1004,7 +1024,8 @@ export default function ViabilidadPage() {
                 </table>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Acciones */}
           <div className="flex flex-wrap gap-3">
