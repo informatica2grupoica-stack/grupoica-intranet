@@ -8,6 +8,11 @@ import {
   ChevronDown, User, Hash, Calendar, Download
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { toast } from "@/components/Toast";
+import { confirmar } from "@/components/ui/Confirm";
+import { Modal } from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageLoader } from "@/components/ui/Spinner";
 
 type EstadoEquipo = "operativo" | "dañado" | "de baja";
 type TipoEquipo = "Notebook" | "Telefono" | "Monitor" | "Otro";
@@ -42,7 +47,6 @@ export default function DispositivosPage() {
   const [editMode, setEditMode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tabActivo, setTabActivo] = useState<TipoEquipo>("Notebook");
-  const [alert, setAlert] = useState<{ msg: string; tipo: "ok" | "err" } | null>(null);
 
   const [form, setForm] = useState({
     trabajador_id: "",
@@ -56,10 +60,8 @@ export default function DispositivosPage() {
     observacion: "",
   });
 
-  const showAlert = (msg: string, tipo: "ok" | "err" = "ok") => {
-    setAlert({ msg, tipo });
-    setTimeout(() => setAlert(null), 3500);
-  };
+  const showAlert = (msg: string, tipo: "ok" | "err" = "ok") =>
+    toast(msg, tipo === "ok" ? "success" : "error");
 
   useEffect(() => {
     (async () => {
@@ -209,30 +211,21 @@ export default function DispositivosPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar este dispositivo del inventario?")) return;
+    if (!(await confirmar({
+      titulo: "¿Eliminar este dispositivo del inventario?",
+      descripcion: "El registro se borrará permanentemente.",
+      danger: true,
+    }))) return;
     const { error } = await supabase.from("dispositivos").delete().eq("id", id);
     if (error) { showAlert(error.message, "err"); return; }
     showAlert("Dispositivo eliminado");
     fetchData();
   };
 
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-      <Loader2 className="animate-spin text-[#2563EB]" size={40} />
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando inventario...</p>
-    </div>
-  );
+  if (loading) return <PageLoader label="Cargando inventario…" />;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-
-      {/* Alert toast */}
-      {alert && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-white text-sm font-bold animate-in slide-in-from-top duration-300 ${alert.tipo === "ok" ? "bg-emerald-600" : "bg-rose-600"}`}>
-          {alert.tipo === "ok" ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-          {alert.msg}
-        </div>
-      )}
+    <div className="space-y-6 pb-10 animate-fade-up">
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -297,7 +290,18 @@ export default function DispositivosPage() {
       {vistaAgrupada ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {grupos.length === 0 ? (
-            <div className="col-span-2 text-center py-20 text-slate-400">No hay equipos que coincidan con los filtros.</div>
+            <div className="col-span-2 card">
+              <EmptyState
+                icon={Laptop}
+                title="Sin equipos que coincidan"
+                description="Ajusta la búsqueda o los filtros, o registra un equipo nuevo."
+                action={canEdit ? (
+                  <button onClick={openNew} className="px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                    <Plus size={14} /> Nuevo equipo
+                  </button>
+                ) : undefined}
+              />
+            </div>
           ) : grupos.map((grupo) => (
             <div key={grupo.id} className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm hover:border-[#A7F3D0] transition-all group/card">
               <div className="flex items-start justify-between mb-5">
@@ -338,11 +342,18 @@ export default function DispositivosPage() {
                     </div>
                     <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-lg flex-shrink-0 ${estadoColor(eq.estado)}`}>{eq.estado}</span>
                     {canEdit && (
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(eq.id); }}
-                        className="opacity-0 group-hover/eq:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition-all rounded-lg"
-                        title="Eliminar">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button onClick={(e) => { e.stopPropagation(); openEdit(eq); }}
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-[#2563EB] hover:bg-blue-50 transition-all"
+                          title="Editar">
+                          <Edit3 size={14} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(eq.id); }}
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                          title="Eliminar">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -402,18 +413,26 @@ export default function DispositivosPage() {
       )}
 
       {/* MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-y-auto max-h-[90vh] relative">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                {editMode ? <Edit3 size={18} className="text-[#2563EB]" /> : <Plus size={18} className="text-[#2563EB]" />}
-                {editMode ? "Editar Dispositivo" : "Registrar Nuevo Equipo"}
-              </h3>
-              <button onClick={closeModal} className="text-slate-300 hover:text-rose-500 transition-colors"><X size={22} /></button>
-            </div>
-
-            <div className="p-6 space-y-5">
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title={editMode ? "Editar dispositivo" : "Registrar nuevo equipo"}
+        subtitle={editMode ? "Modifica los datos y guarda los cambios" : "Completa los datos del equipo y asígnalo"}
+        size="lg"
+        footer={
+          <>
+            <button onClick={closeModal} className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleSave}
+              className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-[13px] font-bold shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-colors">
+              <CheckCircle2 size={15} />
+              {editMode ? "Guardar cambios" : "Registrar equipo"}
+            </button>
+          </>
+        }
+      >
+            <div className="space-y-5">
               {/* Asignado a */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">Asignar a trabajador</label>
@@ -424,13 +443,13 @@ export default function DispositivosPage() {
                 </select>
               </div>
 
-              {/* Tabs tipo equipo */}
-              {!editMode && (
+              {/* Tabs tipo equipo (también editable al modificar un equipo) */}
+              {(
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 block mb-2">Tipo de equipo</label>
                   <div className="flex gap-2 flex-wrap">
                     {TIPOS.map((t) => (
-                      <button key={t} onClick={() => setTabActivo(t)}
+                      <button key={t} onClick={() => { setTabActivo(t); setForm(f => ({ ...f, tipo: t })); }}
                         className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5 ${tabActivo === t ? "bg-[#2563EB] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
                         {t === "Notebook" && <Laptop size={13} />}
                         {t === "Telefono" && <Smartphone size={13} />}
@@ -496,16 +515,8 @@ export default function DispositivosPage() {
                   className="w-full p-3 bg-slate-50 rounded-xl text-sm border border-slate-200 outline-none resize-none focus:ring-2 focus:ring-[#2563EB]/20"
                   value={form.observacion} onChange={(e) => setForm({ ...form, observacion: e.target.value })} />
               </div>
-
-              <button onClick={handleSave}
-                className="w-full py-4 bg-[#2563EB] text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 hover:bg-[#1D4ED8] transition-all active:scale-[0.98]">
-                <CheckCircle2 size={18} />
-                {editMode ? "Guardar cambios" : "Registrar equipo"}
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

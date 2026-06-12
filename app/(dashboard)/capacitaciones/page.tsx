@@ -7,6 +7,7 @@ import {
   CheckCircle2, AlertCircle, BookOpen, Monitor, Award,
   ChevronDown, Download, UserCheck, UserMinus, Filter
 } from "lucide-react";
+import { confirmar } from "@/components/ui/Confirm";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Capacitacion {
@@ -259,7 +260,11 @@ export default function CapacitacionesPage() {
 
   // ─── Eliminar capacitación ────────────────────────────────────────────────
   const handleDelete = async (cap: Capacitacion) => {
-    if (!confirm(`¿Eliminar "${cap.nombre}"? Esta acción es irreversible.`)) return;
+    if (!(await confirmar({
+      titulo: `¿Eliminar "${cap.nombre}"?`,
+      descripcion: "Esta acción es irreversible.",
+      danger: true,
+    }))) return;
     const res = await fetch(`/api/rrhh/capacitaciones/${cap.id}`, { method: "DELETE" });
     const json = await res.json();
     if (json.success) {

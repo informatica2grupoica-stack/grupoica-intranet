@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Upload, User, Download, Printer, RotateCcw, Check, BadgeCheck, FileImage } from "lucide-react";
 import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
+import { toast } from "@/components/Toast";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 interface CredData {
@@ -59,170 +60,185 @@ function PhotoBlock({ foto, height, placeholderSize = 80 }: { foto: string | nul
   );
 }
 
+/* Tipografía compartida de las credenciales (usa la Inter de la app al capturar) */
+const CARD_FONT = "var(--font-inter), Inter, Arial, sans-serif";
+
 /* ══════════════════════════════════════════════════════════════════════════
-   DISEÑO 1 — AZUL NAVY · DORADO
-   Foto full-bleed arriba · Sección info navy · Acentos dorados
+   DISEÑO 1 — EJECUTIVO NAVY
+   Foto full-bleed que se funde en panel navy · acentos dorados finos
 ══════════════════════════════════════════════════════════════════════════ */
 function D1Frente({ d, foto }: { d: CredData; foto: string | null }) {
+  const NAVY = "#13294B";
   return (
-    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", fontFamily: "Arial,sans-serif" }}>
-      <PhotoBlock foto={foto} height={PH} />
+    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", fontFamily: CARD_FONT, background: NAVY }}>
+      <PhotoBlock foto={foto} height={PH + 40} />
 
-      {/* Barra dorada separadora */}
-      <div style={{ position: "absolute", top: PH, left: 0, right: 0, height: 6, background: "#F59E0B" }} />
+      {/* La foto se funde en el panel navy (sin corte duro) */}
+      <div style={{ position: "absolute", top: PH - 60, left: 0, right: 0, height: 100, background: `linear-gradient(180deg, rgba(19,41,75,0) 0%, ${NAVY} 92%)` }} />
+      <div style={{ position: "absolute", top: PH + 40, left: 0, right: 0, bottom: 0, background: NAVY }} />
 
-      {/* Sección info — navy */}
-      <div style={{ position: "absolute", top: PH + 6, left: 0, right: 0, bottom: 0, background: "#1E3A6E" }} />
-
-      {/* Franja dorada izquierda */}
-      <div style={{ position: "absolute", top: PH + 6, left: 0, bottom: 0, width: 5, background: "#F59E0B" }} />
+      {/* Marca discreta arriba */}
+      <div style={{ position: "absolute", top: 14, left: 16, display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", background: "rgba(15,23,42,0.55)", borderRadius: 8, backdropFilter: "blur(4px)" }}>
+        <span style={{ width: 7, height: 7, borderRadius: 2, background: "#D9A441" }} />
+        <span style={{ fontSize: 9, fontWeight: 800, color: "#FFFFFF", letterSpacing: "0.18em" }}>RRHH ICA</span>
+      </div>
 
       {/* Nombre */}
-      <p style={{ position: "absolute", top: PH + 22, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 17, fontWeight: 900, color: "#FFFFFF", lineHeight: 1.22, textTransform: "uppercase" }}>{d.nombre}</p>
+      <p style={{ position: "absolute", top: PH + 8, left: 20, right: 20, margin: 0, textAlign: "center", fontSize: 19, fontWeight: 800, color: "#FFFFFF", lineHeight: 1.18, textTransform: "uppercase", letterSpacing: "0.01em" }}>{d.nombre}</p>
 
-      {/* RUT */}
-      <p style={{ position: "absolute", top: PH + 74, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#F59E0B", letterSpacing: "0.06em" }}>{d.rut}</p>
+      {/* RUT en chip dorado */}
+      <div style={{ position: "absolute", top: PH + 62, left: 0, right: 0, textAlign: "center" }}>
+        <span style={{ display: "inline-block", padding: "4px 14px", fontSize: 11, fontWeight: 700, color: "#E8C275", letterSpacing: "0.08em", border: "1px solid rgba(217,164,65,0.45)", borderRadius: 999 }}>{d.rut}</span>
+      </div>
 
       {/* Cargo */}
-      <p style={{ position: "absolute", top: PH + 94, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 10.5, color: "#93C5FD", lineHeight: 1.4 }}>{d.cargo}</p>
+      <p style={{ position: "absolute", top: PH + 94, left: 24, right: 24, margin: 0, textAlign: "center", fontSize: 10.5, fontWeight: 500, color: "#8FA6C9", lineHeight: 1.4 }}>{d.cargo}</p>
 
-      {/* Línea separadora */}
-      <div style={{ position: "absolute", top: PH + 136, left: 18, right: 14, height: 1, background: "rgba(245,158,11,0.35)" }} />
+      {/* Mini divisor dorado centrado */}
+      <div style={{ position: "absolute", top: PH + 132, left: "50%", transform: "translateX(-50%)", width: 34, height: 2, borderRadius: 2, background: "#D9A441" }} />
 
-      {/* Empresa */}
-      <div style={{ position: "absolute", top: PH + 148, left: 18, right: 14 }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.1em" }}>Empresa</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, fontWeight: 600, color: "#FFFFFF" }}>{d.empresa}</p>
+      {/* Empresa / Mandante */}
+      <div style={{ position: "absolute", top: PH + 148, left: 24, right: 24 }}>
+        <p style={{ margin: 0, fontSize: 8, fontWeight: 700, color: "#D9A441", textTransform: "uppercase", letterSpacing: "0.16em" }}>Empresa</p>
+        <p style={{ margin: "3px 0 0", fontSize: 11.5, fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.01em" }}>{d.empresa}</p>
+      </div>
+      <div style={{ position: "absolute", top: PH + 186, left: 24, right: 24 }}>
+        <p style={{ margin: 0, fontSize: 8, fontWeight: 700, color: "#D9A441", textTransform: "uppercase", letterSpacing: "0.16em" }}>Mandante</p>
+        <p style={{ margin: "3px 0 0", fontSize: 11.5, fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.01em" }}>{d.mandante}</p>
       </div>
 
-      {/* Mandante */}
-      <div style={{ position: "absolute", top: PH + 184, left: 18, right: 14 }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.1em" }}>Mandante</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, fontWeight: 600, color: "#FFFFFF" }}>{d.mandante}</p>
-      </div>
-
-      {/* Vigencia */}
-      <p style={{ position: "absolute", bottom: 14, right: 14, margin: 0, fontSize: 9, color: "rgba(255,255,255,0.45)", fontStyle: "italic" }}>Vigencia: {d.vigencia}</p>
+      {/* Footer: línea fina + vigencia */}
+      <div style={{ position: "absolute", bottom: 30, left: 24, right: 24, height: 1, background: "rgba(255,255,255,0.12)" }} />
+      <p style={{ position: "absolute", bottom: 11, left: 24, margin: 0, fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.14em", textTransform: "uppercase" }}>Credencial corporativa</p>
+      <p style={{ position: "absolute", bottom: 11, right: 24, margin: 0, fontSize: 8.5, fontWeight: 700, color: "#E8C275", letterSpacing: "0.06em" }}>VIGENCIA {d.vigencia}</p>
     </div>
   );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   DISEÑO 2 — AMARILLO · BLANCO
-   Foto full-bleed · Barra amarilla · Sección info blanca · Nombre coral
+   DISEÑO 2 — CORPORATIVO CLARO
+   Tarjeta blanca · cabecera navy con marca · foto enmarcada con sombra
 ══════════════════════════════════════════════════════════════════════════ */
 function D2Frente({ d, foto }: { d: CredData; foto: string | null }) {
+  const NAVY = "#13294B", BLUE = "#2563EB";
+  const PW = 188, PHH = 210; // foto rectangular enmarcada
   return (
-    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", fontFamily: "Arial,sans-serif" }}>
-      <PhotoBlock foto={foto} height={PH} />
+    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", fontFamily: CARD_FONT, background: "#FFFFFF" }}>
+      {/* Cabecera navy con marca */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 66, background: NAVY }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 66, background: `linear-gradient(120deg, rgba(37,99,235,0.35) 0%, rgba(37,99,235,0) 55%)` }} />
+      <p style={{ position: "absolute", top: 16, left: 0, right: 0, margin: 0, textAlign: "center", fontSize: 13, fontWeight: 800, color: "#FFFFFF", letterSpacing: "0.22em" }}>RRHH ICA</p>
+      <p style={{ position: "absolute", top: 36, left: 0, right: 0, margin: 0, textAlign: "center", fontSize: 7.5, fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.3em" }}>CREDENCIAL CORPORATIVA</p>
 
-      {/* Barra amarilla separadora */}
-      <div style={{ position: "absolute", top: PH, left: 0, right: 0, height: 6, background: "#EAB308" }} />
+      {/* Foto enmarcada */}
+      <div style={{
+        position: "absolute", top: 92, left: "50%", transform: "translateX(-50%)",
+        width: PW, height: PHH, borderRadius: 14, overflow: "hidden",
+        background: "#E2E8F0", boxShadow: "0 14px 30px rgba(19,41,75,0.22)",
+        border: "4px solid #FFFFFF", outline: "1px solid #E2E8F0",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        {foto
+          ? <img src={foto} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} alt="" />
+          : <User size={64} color="#94A3B8" />}
+      </div>
 
-      {/* Sección info — blanco */}
-      <div style={{ position: "absolute", top: PH + 6, left: 0, right: 0, bottom: 0, background: "#FFFFFF" }} />
-
-      {/* Franja roja izquierda en info */}
-      <div style={{ position: "absolute", top: PH + 6, left: 0, bottom: 0, width: 5, background: "#DC2626" }} />
-
-      {/* Nombre — coral */}
-      <p style={{ position: "absolute", top: PH + 22, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 17, fontWeight: 900, color: "#F05A28", lineHeight: 1.22, textTransform: "uppercase" }}>{d.nombre}</p>
+      {/* Nombre */}
+      <p style={{ position: "absolute", top: 320, left: 20, right: 20, margin: 0, textAlign: "center", fontSize: 18, fontWeight: 800, color: NAVY, lineHeight: 1.2, textTransform: "uppercase" }}>{d.nombre}</p>
 
       {/* RUT */}
-      <p style={{ position: "absolute", top: PH + 72, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#1B2A6B", letterSpacing: "0.06em" }}>{d.rut}</p>
+      <p style={{ position: "absolute", top: 366, left: 20, right: 20, margin: 0, textAlign: "center", fontSize: 11.5, fontWeight: 700, color: BLUE, letterSpacing: "0.08em" }}>{d.rut}</p>
 
-      {/* Cargo */}
-      <p style={{ position: "absolute", top: PH + 92, left: 18, right: 14, margin: 0, textAlign: "center", fontSize: 10.5, color: "#475569", lineHeight: 1.4 }}>{d.cargo}</p>
-
-      {/* Línea separadora */}
-      <div style={{ position: "absolute", top: PH + 134, left: 18, right: 14, height: 1, background: "#E2E8F0" }} />
-
-      {/* Empresa */}
-      <div style={{ position: "absolute", top: PH + 146, left: 18, right: 14 }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#EAB308", textTransform: "uppercase", letterSpacing: "0.1em" }}>Empresa</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, fontWeight: 700, color: "#1B2A6B" }}>{d.empresa}</p>
+      {/* Cargo en chip */}
+      <div style={{ position: "absolute", top: 386, left: 0, right: 0, textAlign: "center" }}>
+        <span style={{ display: "inline-block", maxWidth: 270, padding: "4px 14px", fontSize: 9.5, fontWeight: 600, color: "#475569", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 999 }}>{d.cargo}</span>
       </div>
 
-      {/* Mandante */}
-      <div style={{ position: "absolute", top: PH + 182, left: 18, right: 14 }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#EAB308", textTransform: "uppercase", letterSpacing: "0.1em" }}>Mandante</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, fontWeight: 700, color: "#1B2A6B" }}>{d.mandante}</p>
+      {/* Empresa / Mandante en dos columnas */}
+      <div style={{ position: "absolute", top: 430, left: 24, right: 24, display: "flex", gap: 14 }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 7.5, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Empresa</p>
+          <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 700, color: NAVY, lineHeight: 1.3 }}>{d.empresa}</p>
+        </div>
+        <div style={{ width: 1, background: "#E2E8F0" }} />
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 7.5, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.14em" }}>Mandante</p>
+          <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 700, color: NAVY, lineHeight: 1.3 }}>{d.mandante}</p>
+        </div>
       </div>
 
-      {/* Vigencia */}
-      <p style={{ position: "absolute", bottom: 14, right: 14, margin: 0, fontSize: 9, color: "#94A3B8", fontStyle: "italic" }}>Vigencia: {d.vigencia}</p>
+      {/* Footer con vigencia + banda azul */}
+      <p style={{ position: "absolute", bottom: 18, left: 0, right: 0, margin: 0, textAlign: "center", fontSize: 8.5, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em" }}>VIGENCIA {d.vigencia}</p>
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 7, background: `linear-gradient(90deg, ${NAVY}, ${BLUE})` }} />
     </div>
   );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   DISEÑO 3 — BLANCO · NARANJA · FOTO CIRCULAR GRANDE
-   Ondas naranja/amarillo arriba y abajo · Foto circular prominente
+   DISEÑO 3 — MODERNO OSCURO
+   Fondo gradiente nocturno con geometría sutil · foto circular con doble anillo
 ══════════════════════════════════════════════════════════════════════════ */
 function D3Frente({ d, foto }: { d: CredData; foto: string | null }) {
-  const WAVE_TOP = 114;  // altura zona ondas arriba
-  const PHOTO_D  = 172;  // diámetro foto circular
-  const PHOTO_CY = WAVE_TOP + 14; // top de la foto
+  const PHOTO_D = 168;
+  const PHOTO_TOP = 96;
+  const AFTER = PHOTO_TOP + PHOTO_D; // 264
   return (
     <div style={{
-      position: "relative", width: W, height: H, overflow: "hidden", fontFamily: "Arial,sans-serif",
-      background: "#FAFAFA",
-      backgroundImage: "repeating-linear-gradient(45deg,#E5E7EB 0,#E5E7EB 1px,transparent 0,transparent 50%)",
-      backgroundSize: "16px 16px",
+      position: "relative", width: W, height: H, overflow: "hidden", fontFamily: CARD_FONT,
+      background: "linear-gradient(160deg, #0B1220 0%, #13294B 58%, #1D3A6E 100%)",
     }}>
-
-      {/* Ondas superiores */}
-      <svg style={{ position: "absolute", top: 0, left: 0 }} width={W} height={WAVE_TOP} viewBox={`0 0 ${W} ${WAVE_TOP}`} preserveAspectRatio="none">
-        <path d={`M-4,0 L${W+4},0 L${W+4},74 C${W*0.65},96 ${W*0.3},64 -4,80 Z`} fill="#EAB308" />
-        <path d={`M-4,80 C${W*0.3},64 ${W*0.65},96 ${W+4},74 L${W+4},98 C${W*0.65},114 ${W*0.3},88 -4,104 Z`} fill="#F97316" />
-        <path d={`M-4,104 C${W*0.3},88 ${W*0.65},114 ${W+4},98 L${W+4},${WAVE_TOP} C${W*0.65},${WAVE_TOP-6} ${W*0.3},${WAVE_TOP+4} -4,${WAVE_TOP-2} Z`} fill="#E05A28" />
+      {/* Geometría decorativa sutil */}
+      <svg style={{ position: "absolute", inset: 0 }} width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <circle cx={W - 30} cy={50} r={110} fill="none" stroke="rgba(96,165,250,0.10)" strokeWidth="1.5" />
+        <circle cx={W - 30} cy={50} r={70} fill="none" stroke="rgba(96,165,250,0.14)" strokeWidth="1.5" />
+        <circle cx={16} cy={H - 70} r={90} fill="none" stroke="rgba(96,165,250,0.08)" strokeWidth="1.5" />
+        <circle cx={40} cy={86} r={3} fill="rgba(96,165,250,0.35)" />
+        <circle cx={W - 56} cy={H - 120} r={2.5} fill="rgba(232,194,117,0.45)" />
       </svg>
 
-      {/* Foto circular grande */}
+      {/* Marca */}
+      <p style={{ position: "absolute", top: 22, left: 0, right: 0, margin: 0, textAlign: "center", fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.9)", letterSpacing: "0.32em" }}>RRHH ICA</p>
+      <div style={{ position: "absolute", top: 42, left: "50%", transform: "translateX(-50%)", width: 26, height: 2, borderRadius: 2, background: "#60A5FA" }} />
+
+      {/* Foto circular con doble anillo */}
+      <div style={{ position: "absolute", top: PHOTO_TOP - 7, left: "50%", transform: "translateX(-50%)", width: PHOTO_D + 14, height: PHOTO_D + 14, borderRadius: "50%", background: "linear-gradient(135deg, #60A5FA, rgba(96,165,250,0.12) 60%, #E8C275)" }} />
       <div style={{
-        position: "absolute", top: PHOTO_CY, left: "50%", transform: "translateX(-50%)",
+        position: "absolute", top: PHOTO_TOP, left: "50%", transform: "translateX(-50%)",
         width: PHOTO_D, height: PHOTO_D, borderRadius: "50%",
-        border: "9px solid #1E3A6E", background: "#D1D5DB",
+        border: "4px solid #0B1220", background: "#1E293B",
         overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         {foto
           ? <img src={foto} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
-          : <User size={70} color="#9CA3AF" />}
+          : <User size={64} color="#475569" />}
       </div>
 
       {/* Nombre */}
-      <p style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 12, left: 14, right: 14, margin: 0, textAlign: "center", fontSize: 18, fontWeight: 900, color: "#1E3A6E", lineHeight: 1.2, textTransform: "uppercase" }}>{d.nombre}</p>
+      <p style={{ position: "absolute", top: AFTER + 24, left: 18, right: 18, margin: 0, textAlign: "center", fontSize: 18, fontWeight: 800, color: "#FFFFFF", lineHeight: 1.2, textTransform: "uppercase" }}>{d.nombre}</p>
 
       {/* RUT */}
-      <p style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 58, left: 14, right: 14, margin: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#1E3A6E" }}>{d.rut}</p>
+      <p style={{ position: "absolute", top: AFTER + 70, left: 18, right: 18, margin: 0, textAlign: "center", fontSize: 11.5, fontWeight: 700, color: "#60A5FA", letterSpacing: "0.1em" }}>{d.rut}</p>
 
-      {/* Cargo */}
-      <p style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 78, left: 16, right: 16, margin: 0, textAlign: "center", fontSize: 10.5, color: "#475569", lineHeight: 1.4 }}>{d.cargo}</p>
-
-      {/* Línea separadora */}
-      <div style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 118, left: 22, right: 22, height: 1.5, background: "#E2E8F0" }} />
-
-      {/* Empresa */}
-      <div style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 130, left: 22, right: 22, textAlign: "center" }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#F97316", textTransform: "uppercase", letterSpacing: "0.1em" }}>Empresa</p>
-        <p style={{ margin: "2px 0 0", fontSize: 11, fontWeight: 700, color: "#1E3A6E" }}>{d.empresa}</p>
+      {/* Cargo en chip translúcido */}
+      <div style={{ position: "absolute", top: AFTER + 92, left: 0, right: 0, textAlign: "center" }}>
+        <span style={{ display: "inline-block", maxWidth: 270, padding: "4px 14px", fontSize: 9.5, fontWeight: 600, color: "#C7D6EE", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999 }}>{d.cargo}</span>
       </div>
 
-      {/* Mandante */}
-      <div style={{ position: "absolute", top: PHOTO_CY + PHOTO_D + 166, left: 22, right: 22, textAlign: "center" }}>
-        <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: "#F97316", textTransform: "uppercase", letterSpacing: "0.1em" }}>Mandante</p>
-        <p style={{ margin: "2px 0 0", fontSize: 11, fontWeight: 700, color: "#1E3A6E" }}>{d.mandante}</p>
+      {/* Empresa / Mandante en tarjeta translúcida */}
+      <div style={{ position: "absolute", top: AFTER + 136, left: 22, right: 22, padding: "12px 16px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 14, display: "flex", gap: 14 }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 7.5, fontWeight: 700, color: "#E8C275", textTransform: "uppercase", letterSpacing: "0.14em" }}>Empresa</p>
+          <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 600, color: "#FFFFFF", lineHeight: 1.3 }}>{d.empresa}</p>
+        </div>
+        <div style={{ width: 1, background: "rgba(255,255,255,0.12)" }} />
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontSize: 7.5, fontWeight: 700, color: "#E8C275", textTransform: "uppercase", letterSpacing: "0.14em" }}>Mandante</p>
+          <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 600, color: "#FFFFFF", lineHeight: 1.3 }}>{d.mandante}</p>
+        </div>
       </div>
-
-      {/* Ondas inferiores */}
-      <svg style={{ position: "absolute", bottom: 0, left: 0 }} width={W} height={94} viewBox={`0 0 ${W} 94`} preserveAspectRatio="none">
-        <path d={`M-4,0 C${W*0.35},18 ${W*0.65},-4 ${W+4},10 L${W+4},94 L-4,94 Z`} fill="#E05A28" />
-        <path d={`M-4,22 C${W*0.35},40 ${W*0.65},18 ${W+4},30 L${W+4},10 C${W*0.65},-4 ${W*0.35},18 -4,0 Z`} fill="#F97316" />
-        <path d={`M-4,44 C${W*0.35},60 ${W*0.65},38 ${W+4},50 L${W+4},30 C${W*0.65},18 ${W*0.35},40 -4,22 Z`} fill="#EAB308" />
-      </svg>
 
       {/* Vigencia */}
-      <p style={{ position: "absolute", bottom: 104, left: 14, right: 14, margin: 0, textAlign: "center", fontSize: 9, color: "#64748B", fontStyle: "italic" }}>Vigencia: {d.vigencia}</p>
+      <p style={{ position: "absolute", bottom: 14, left: 0, right: 0, margin: 0, textAlign: "center", fontSize: 8.5, fontWeight: 700, color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em" }}>VIGENCIA {d.vigencia}</p>
     </div>
   );
 }
@@ -234,9 +250,9 @@ function D3Frente({ d, foto }: { d: CredData; foto: string | null }) {
 interface BackTheme { headerBg: string; titleColor: string; subColor: string; accent: string; bodyBg: string; textColor: string; mutedColor: string; }
 
 const BACK_THEMES: Record<Diseño, BackTheme> = {
-  1: { headerBg: "#1E3A6E", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.75)", accent: "#F59E0B",  bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
-  2: { headerBg: "#1B2A6B", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.75)", accent: "#EAB308",  bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
-  3: { headerBg: "#0F172A", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.7)",  accent: "#F97316",  bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
+  1: { headerBg: "#13294B", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.65)", accent: "#D9A441", bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
+  2: { headerBg: "#13294B", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.65)", accent: "#2563EB", bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
+  3: { headerBg: "#0B1220", titleColor: "#FFFFFF", subColor: "rgba(255,255,255,0.6)",  accent: "#60A5FA", bodyBg: "#FFFFFF", textColor: "#1E293B", mutedColor: "#64748B" },
 };
 
 /* Layout back (posiciones fijas, sin solapamiento):
@@ -250,54 +266,49 @@ const BACK_THEMES: Record<Diseño, BackTheme> = {
 */
 function CardReverso({ d, qrText, diseño }: { d: CredData; qrText: string; diseño: Diseño }) {
   const t = BACK_THEMES[diseño];
+  const CONTACTO: Array<[string, string]> = [
+    ["DIRECCIÓN", d.direccion],
+    ["EMAIL", d.emailContacto],
+    ["TELÉFONO", d.telefono],
+  ];
   return (
-    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", background: t.bodyBg, fontFamily: "Arial,sans-serif" }}>
+    <div style={{ position: "relative", width: W, height: H, overflow: "hidden", background: t.bodyBg, fontFamily: CARD_FONT }}>
 
       {/* Header coloreado */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 82, background: t.headerBg }} />
-
-      {/* Diagonal sutil al borde inferior del header */}
-      <svg style={{ position: "absolute", top: 76, left: 0 }} width={W} height={10} viewBox={`0 0 ${W} 10`} preserveAspectRatio="none">
-        <polygon points={`0,0 ${W},10 ${W},0`} fill={t.headerBg} />
-      </svg>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 80, background: t.headerBg }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 80, background: `linear-gradient(120deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 50%)` }} />
 
       {/* RRHH ICA */}
-      <p style={{ position: "absolute", top: 15, left: 24, margin: 0, fontSize: 22, fontWeight: 900, color: t.titleColor }}>RRHH ICA</p>
-      <p style={{ position: "absolute", top: 45, left: 24, margin: 0, fontSize: 11, fontWeight: 700, color: t.subColor, letterSpacing: "0.04em" }}>TÉRMINOS Y CONDICIONES</p>
-      <div style={{ position: "absolute", top: 64, left: 24, width: 46, height: 3, background: t.accent, borderRadius: 2 }} />
+      <p style={{ position: "absolute", top: 16, left: 24, margin: 0, fontSize: 19, fontWeight: 800, color: t.titleColor, letterSpacing: "0.04em" }}>RRHH ICA</p>
+      <p style={{ position: "absolute", top: 44, left: 24, margin: 0, fontSize: 9, fontWeight: 700, color: t.subColor, letterSpacing: "0.18em" }}>TÉRMINOS Y CONDICIONES</p>
+      <div style={{ position: "absolute", top: 62, left: 24, width: 40, height: 2.5, background: t.accent, borderRadius: 2 }} />
 
       {/* Cláusulas */}
-      <p style={{ position: "absolute", top: 90, left: 24, right: 24, margin: 0, fontSize: 9.5, lineHeight: 1.72, color: t.textColor, opacity: 0.82 }}>{d.clausulas}</p>
+      <p style={{ position: "absolute", top: 94, left: 24, right: 24, margin: 0, fontSize: 9.5, lineHeight: 1.7, color: t.textColor, opacity: 0.8 }}>{d.clausulas}</p>
 
-      {/* Divider 1 */}
-      <div style={{ position: "absolute", top: 296, left: 24, right: 24, height: 1, background: t.textColor, opacity: 0.1 }} />
-
-      {/* Contacto — 3 líneas sin solapamiento */}
-      {([["📍", d.direccion], ["✉", d.emailContacto], ["📞", d.telefono]] as [string, string][]).map(([ico, val], i) => (
-        <div key={i} style={{ position: "absolute", top: 305 + i * 14, left: 24, right: 24, display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 11, lineHeight: 1 }}>{ico}</span>
-          <p style={{ margin: 0, fontSize: 9.5, color: t.textColor, fontWeight: 600, opacity: 0.85 }}>{val}</p>
-        </div>
-      ))}
-      {/* Último contacto: 305 + 2×14 = 333, altura ~12 → termina en 345 */}
-
-      {/* Divider 2 */}
-      <div style={{ position: "absolute", top: 352, left: 24, right: 24, height: 1, background: t.textColor, opacity: 0.08 }} />
-
-      {/* QR — top=360, size=124, padding=6 → box bottom = 360+136 = 496 */}
-      <div style={{ position: "absolute", top: 360, left: "50%", transform: "translateX(-50%)", padding: 6, background: "#FFFFFF", boxShadow: "0 2px 12px rgba(0,0,0,0.10)", borderRadius: 2 }}>
-        <QRImg text={qrText} size={124} />
+      {/* Contacto — etiqueta + valor, alineado y sin emojis */}
+      <div style={{ position: "absolute", top: 298, left: 24, right: 24, borderTop: "1px solid rgba(15,23,42,0.08)", paddingTop: 9 }}>
+        {CONTACTO.map(([label, val], i) => (
+          <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: i ? 5 : 0 }}>
+            <span style={{ width: 62, fontSize: 7, fontWeight: 700, color: t.accent, letterSpacing: "0.12em" }}>{label}</span>
+            <span style={{ flex: 1, fontSize: 9.5, color: t.textColor, fontWeight: 600, opacity: 0.85 }}>{val}</span>
+          </div>
+        ))}
       </div>
 
-      {/* FIRMA RESPONSABLE — top ≥ 500, siempre debajo del QR (496) */}
-      <p style={{ position: "absolute", top: 502, left: 24, right: 24, margin: 0, textAlign: "center", fontSize: 9, fontWeight: 700, color: t.mutedColor, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+      {/* QR con marco fino */}
+      <div style={{ position: "absolute", top: 362, left: "50%", transform: "translateX(-50%)", padding: 7, background: "#FFFFFF", border: "1px solid #E2E8F0", boxShadow: "0 6px 20px rgba(15,23,42,0.10)", borderRadius: 10 }}>
+        <QRImg text={qrText} size={120} />
+      </div>
+
+      {/* Firma responsable */}
+      <div style={{ position: "absolute", top: 504, left: 90, right: 90, borderTop: `1px solid ${t.mutedColor}`, opacity: 0.55 }} />
+      <p style={{ position: "absolute", top: 509, left: 24, right: 24, margin: 0, textAlign: "center", fontSize: 8, fontWeight: 700, color: t.mutedColor, letterSpacing: "0.16em", textTransform: "uppercase" }}>
         Firma Responsable
       </p>
 
-      {/* Acento inferior decorativo (solo diseño 3) */}
-      {diseño === 3 && (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 8, background: "#F97316" }} />
-      )}
+      {/* Acento inferior */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 6, background: t.accent }} />
     </div>
   );
 }
@@ -325,9 +336,9 @@ function Field({ label, value, onChange, span2 = true, as = "input", rows = 4 }:
 }
 
 const DISENOS_INFO = [
-  { id: 1 as Diseño, label: "Diseño 1", sub: "Navy · Dorado",   colors: ["#1E3A6E", "#F59E0B", "#FFFFFF"] },
-  { id: 2 as Diseño, label: "Diseño 2", sub: "Blanco · Coral",  colors: ["#FFFFFF", "#F05A28", "#EAB308"] },
-  { id: 3 as Diseño, label: "Diseño 3", sub: "Blanco · Naranja", colors: ["#FAFAFA", "#F97316", "#EAB308"] },
+  { id: 1 as Diseño, label: "Ejecutivo",    sub: "Navy · Dorado",      colors: ["#13294B", "#D9A441", "#FFFFFF"] },
+  { id: 2 as Diseño, label: "Corporativo",  sub: "Blanco · Navy",      colors: ["#FFFFFF", "#13294B", "#2563EB"] },
+  { id: 3 as Diseño, label: "Moderno",      sub: "Nocturno · Acentos", colors: ["#0B1220", "#60A5FA", "#E8C275"] },
 ];
 
 /* ══ MAIN PAGE ══════════════════════════════════════════════════════════════ */
@@ -368,7 +379,7 @@ export default function CredencialesPage() {
       pdf.save(`credencial-D${diseño}-${data.nombre.replace(/\s+/g, "_")}.pdf`);
     } catch (e) {
       console.error("PDF error:", e);
-      alert("Error al generar el PDF. Revisa la consola.");
+      toast("Error al generar el PDF. Revisa la consola.", "error");
     } finally { setBusy(false); }
   };
 
@@ -382,7 +393,7 @@ export default function CredencialesPage() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     } catch (e) {
       console.error("PNG error:", e);
-      alert("Error al exportar PNG.");
+      toast("Error al exportar PNG.", "error");
     } finally { setBusy(false); }
   };
 
@@ -391,7 +402,7 @@ export default function CredencialesPage() {
     // Abrir ventana ANTES del await para evitar bloqueo de popup
     const win = window.open("", "_blank");
     if (!win) {
-      alert("Permite ventanas emergentes en este sitio para imprimir.");
+      toast("Permite ventanas emergentes en este sitio para imprimir.", "warning");
       setBusy(false);
       return;
     }
@@ -406,7 +417,7 @@ export default function CredencialesPage() {
     } catch (e) {
       console.error("Print error:", e);
       win.close();
-      alert("Error al generar la impresión.");
+      toast("Error al generar la impresión.", "error");
     } finally { setBusy(false); }
   };
 

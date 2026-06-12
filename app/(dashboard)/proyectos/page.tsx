@@ -9,6 +9,8 @@ import {
   ArrowUpRight
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { toast } from "@/components/Toast";
+import { confirmar } from "@/components/ui/Confirm";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Proyecto {
@@ -144,13 +146,18 @@ export default function ProyectosPage() {
       if (!res.ok) throw new Error((await res.json()).error);
       setModal(null);
       cargar();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { toast(e.message, "error"); }
     finally { setGuardando(false); }
   };
 
   const eliminar = async (id: string) => {
-    if (!confirm("¿Archivar este proyecto?")) return;
+    if (!(await confirmar({
+      titulo: "¿Archivar este proyecto?",
+      descripcion: "El proyecto dejará de aparecer en la lista de activos.",
+      confirmText: "Archivar",
+    }))) return;
     await fetch(`/api/proyectos/${id}`, { method: "DELETE" });
+    toast("Proyecto archivado", "success");
     cargar();
   };
 

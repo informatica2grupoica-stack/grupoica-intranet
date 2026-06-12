@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, Edit3, Save, X, ChevronLeft, ChevronRight, ListIcon, Plus, AlertTriangle, RefreshCcw } from "lucide-react";
 import Link from "next/link";
+import { toast } from "@/components/Toast";
 
 // --- MOVIDO FUERA PARA EVITAR PÉRDIDA DE FOCO ---
 const RenderForm = ({ 
@@ -145,14 +146,14 @@ export default function ObumaProductosListado() {
       const res = await fetch('/api/obuma/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        alert(`✅ Sincronización completada!\n📦 Productos: ${data.sincronizados}\n❌ Errores: ${data.errores}\n⏱️ Duración: ${data.duracion_ms}ms`);
+        toast(`Sincronización completada: ${data.sincronizados} productos (${data.errores} errores, ${data.duracion_ms}ms)`, "success");
         await fetchProductos();
       } else {
-        alert(`❌ Error en sincronización: ${data.error}`);
+        toast(`Error en sincronización: ${data.error}`, "error");
       }
     } catch (error) {
       console.error("Error sincronizando:", error);
-      alert("❌ Error al conectar con el servidor");
+      toast("Error al conectar con el servidor", "error");
     } finally {
       setSincronizando(false);
     }

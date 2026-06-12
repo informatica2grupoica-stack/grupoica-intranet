@@ -12,6 +12,7 @@ import {
   Bookmark, Trash2, ExternalLink, RefreshCw, ChevronDown, Wallet,
   ClipboardList, Users, Gavel, Download, Calculator,
 } from 'lucide-react';
+import { confirmar } from '@/components/ui/Confirm';
 import {
   type ProductoExcel, type ColsDetectadas,
   detectarHojasLineas, procesarHojaCosteo, procesarHojasLineas,
@@ -503,6 +504,27 @@ export default function ViabilidadPage() {
     router.push('/buscador-productos');
   };
 
+  // ─── Limpiar todo: estado + sessionStorage (empieza un análisis desde cero) ─
+  const limpiarTodo = async () => {
+    if (!(await confirmar({
+      titulo: '¿Limpiar todo el análisis?',
+      descripcion: 'Se borrará el análisis actual, el Excel cargado, los documentos y los resultados del buscador. Los análisis guardados no se tocan.',
+      confirmText: 'Limpiar todo',
+      danger: true,
+    }))) return;
+
+    for (const k of ['viabilidad_estado', 'viabilidad_resultados_buscador', 'viabilidad_items_excel', 'viabilidad_excel_archivo']) {
+      sessionStorage.removeItem(k);
+    }
+    setArchivoExcel(null); setProductosExcel([]); setColsExcel(null); setSheetName('COSTEO');
+    setFormatoExcel('costeo'); setColsExcelPorHoja(null); setEleccionFormato(null);
+    setDocumentos([]); setResultado(null); setNombreProyecto('');
+    setResultadosBuscador(null);
+    archivoBase64Ref.current = null;
+    veredictoAutoRef.current = false;
+    toast('Análisis limpiado — puedes empezar uno nuevo', 'success');
+  };
+
   // ─── Calcular veredicto final (cruza presupuesto + costo real del buscador) ─
   const calcularVeredicto = async () => {
     if (!resultado || !resultadosBuscador) return;
@@ -708,6 +730,15 @@ export default function ViabilidadPage() {
             <h2 className="font-bold text-slate-800 text-sm">Análisis de Viabilidad</h2>
             <p className="text-[11px] text-slate-400">Sube los documentos de la licitación y la IA extraerá los datos clave</p>
           </div>
+          {(resultado || archivoExcel || documentos.length > 0 || resultadosBuscador) && (
+            <button
+              onClick={limpiarTodo}
+              className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 border border-rose-100 transition-colors"
+              title="Borrar el análisis actual y empezar desde cero"
+            >
+              <Trash2 size={13} /> Limpiar todo
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

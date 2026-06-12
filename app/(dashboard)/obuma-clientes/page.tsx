@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Search, Loader2, Edit3, ChevronLeft, ChevronRight, ListIcon, Plus, Mail, Phone, MapPin, Users, Building, CheckCircle, XCircle, RefreshCcw, Download, Filter, Globe } from "lucide-react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
+import { toast } from "@/components/Toast";
 
 interface Cliente {
   id: string;
@@ -71,15 +72,15 @@ export default function ObumaClientesListado() {
       const res = await fetch('/api/obuma/clientes/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        alert(`✅ Sincronización completada!\n📦 Clientes: ${data.sincronizados}\n❌ Errores: ${data.errores}\n⏱️ Duración: ${data.duracion_ms}ms`);
+        toast(`Sincronización completada: ${data.sincronizados} clientes (${data.errores} errores, ${data.duracion_ms}ms)`, "success");
         await fetchClientes(true);
       } else {
-        alert(`❌ Error en sincronización: ${data.error}`);
+        toast(`Error en sincronización: ${data.error}`, "error");
         setError(data.error);
       }
     } catch (error) {
       console.error("Error sincronizando:", error);
-      alert("❌ Error al conectar con el servidor");
+      toast("Error al conectar con el servidor", "error");
       setError("Error de conexión al sincronizar");
     } finally {
       setSincronizando(false);

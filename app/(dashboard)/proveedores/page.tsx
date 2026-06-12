@@ -11,6 +11,7 @@ import {
   Database, Package, ExternalLink, Smartphone,
   ChevronLeft, ChevronRight, Shield, ShieldAlert
 } from 'lucide-react';
+import { confirmar } from '@/components/ui/Confirm';
 
 interface Proveedor {
   id: string;
@@ -438,7 +439,11 @@ export default function ProveedoresPage() {
       return;
     }
     
-    if (!window.confirm("⚠️ ¿Eliminar este proveedor permanentemente? Esta acción no se puede deshacer.")) return;
+    if (!(await confirmar({
+      titulo: "¿Eliminar este proveedor permanentemente?",
+      descripcion: "Esta acción no se puede deshacer.",
+      danger: true,
+    }))) return;
     
     setLoading(true);
     const { error } = await supabase.from('proveedores').delete().eq('id', id);

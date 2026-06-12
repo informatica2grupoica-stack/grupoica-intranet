@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { SECTIONS_CONFIG, getDefaultSecciones } from "@/lib/sections";
+import { toast } from "@/components/Toast";
+import { confirmar } from "@/components/ui/Confirm";
 import {
   UserPlus, Loader2, X, Pencil, Trash2, Search,
   Lock, Briefcase, CheckCircle2, Circle, LayoutList, Package, Laptop,
@@ -224,11 +226,16 @@ export default function GestionUsuarios() {
   }
 
   async function handleEliminar(user: any) {
-    if (user.rol === "superuser") return alert("❌ El Superusuario es intocable.");
-    if (!confirm(`¿Eliminar a ${user.nombre} ${user.apellido}?`)) return;
+    if (user.rol === "superuser") return toast("El Superusuario no se puede eliminar.", "warning");
+    const ok = await confirmar({
+      titulo: `¿Eliminar a ${user.nombre} ${user.apellido}?`,
+      descripcion: "Se eliminará su perfil y perderá el acceso a la intranet. Esta acción no se puede deshacer.",
+      danger: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("perfiles").delete().eq("id", user.id);
-    if (!error) obtenerUsuariosYSesion();
-    else alert("No tienes permisos suficientes.");
+    if (!error) { toast("Usuario eliminado", "success"); obtenerUsuariosYSesion(); }
+    else toast("No tienes permisos suficientes.", "error");
   }
 
   async function toggleEstado(user: any) {

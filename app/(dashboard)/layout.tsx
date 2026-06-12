@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ChatBot from "@/components/ChatBot";
 import { ToastContainer } from "@/components/Toast";
 import { PageLoader } from "@/components/ui/Spinner";
+import { ConfirmHost } from "@/components/ui/Confirm";
 
 // ─── Metadatos de vista ───────────────────────────────────────────────────────
 const VIEW_META: Record<string, { id: string; label: string }> = {
@@ -166,7 +167,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   });
 
   // ─── Marca ────────────────────────────────────────────────────────────────
-  const Brand = () => (
+  // NOTA: estos bloques son constantes JSX (no componentes función) a propósito:
+  // un componente definido dentro del render cambia de identidad en cada render
+  // y React lo desmonta/remonta — eso reseteaba el scroll del sidebar al navegar.
+  const brand = (
     <div className="flex items-center gap-3">
       <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#3B82F6] flex items-center justify-center shadow-lg shadow-blue-900/40">
         <Sparkles className="w-5 h-5 text-white" />
@@ -182,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   // ─── Tarjeta usuario ──────────────────────────────────────────────────────
-  const UserCard = () => (
+  const userCard = (
     <div className="relative">
       <AnimatePresence>
         {showPerms && (
@@ -252,7 +256,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   // ─── Navegación (compartida entre sidebar fijo y drawer móvil) ────────────
-  const SidebarNav = () => (
+  const sidebarNav = (
     <nav className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
       {visibleSections.map((section, idx) => (
         <div key={idx} className="mb-5">
@@ -293,11 +297,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </nav>
   );
 
-  const SidebarInner = () => (
+  const sidebarInner = (
     <>
-      <div className="px-5 py-6 border-b border-white/[0.06]"><Brand /></div>
-      <SidebarNav />
-      <div className="p-3 border-t border-white/[0.06]"><UserCard /></div>
+      <div className="px-5 py-6 border-b border-white/[0.06]">{brand}</div>
+      {sidebarNav}
+      <div className="p-3 border-t border-white/[0.06]">{userCard}</div>
     </>
   );
 
@@ -306,7 +310,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-[#F8FAFC]">
       {/* SIDEBAR escritorio */}
       <aside className="hidden lg:flex w-64 fixed h-full z-30 flex-col bg-gradient-to-b from-[#0F172A] via-[#111827] to-[#1E293B] border-r border-white/[0.06]">
-        <SidebarInner />
+        {sidebarInner}
       </aside>
 
       {/* SIDEBAR móvil (drawer) */}
@@ -330,7 +334,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <X className="w-4.5 h-4.5" />
               </button>
-              <SidebarInner />
+              {sidebarInner}
             </motion.aside>
           </>
         )}
@@ -381,6 +385,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <ChatBot />
       <ToastContainer />
+      <ConfirmHost />
     </div>
   );
 }
