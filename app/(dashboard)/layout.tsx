@@ -7,7 +7,7 @@ import {
   Users, Building2, Database, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
   BookOpen, Bookmark, GraduationCap,
-  MapPin, BadgeCheck, FileSearch, Menu
+  MapPin, BadgeCheck, FileSearch, Menu, Gavel, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -294,6 +294,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       ))}
+
+      {/* Herramientas externas */}
+      <div className="mb-5">
+        <h3 className="px-3 text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2">Herramientas</h3>
+        <a
+          href="https://licitapyme-clone-1erz.vercel.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+        >
+          <Gavel className="w-[18px] h-[18px] text-slate-500 group-hover:text-[#60A5FA] group-hover:scale-110 transition-all" />
+          <span className="truncate">LicitaICA</span>
+          <ExternalLink className="w-3 h-3 ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
+        </a>
+      </div>
     </nav>
   );
 
