@@ -37,6 +37,7 @@ export const SECTIONS_CONFIG: SectionGroup[] = [
       { key: "busquedas-guardadas",  path: "/busquedas-guardadas",  label: "Mis Búsquedas" },
       { key: "historial-precios",    path: "/historial-precios",    label: "Historial de Precios" },
       { key: "georeferencia",         path: "/georeferencia",         label: "Georeferencia" },
+      { key: "bi-export",            path: "/bi-export",            label: "BI Export (prueba)" },
     ],
   },
   {

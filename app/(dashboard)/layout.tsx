@@ -7,7 +7,7 @@ import {
   Users, Building2, Database, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
   BookOpen, Bookmark, GraduationCap,
-  MapPin, BadgeCheck, FileSearch, Menu, Gavel, ExternalLink
+  MapPin, BadgeCheck, FileSearch, Menu, Gavel, ExternalLink, Database
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +29,7 @@ const VIEW_META: Record<string, { id: string; label: string }> = {
   "/busquedas-guardadas":  { id: "MP-BGD", label: "Mis Búsquedas" },
   "/historial-precios":      { id: "MP-HIS", label: "Historial de Precios" },
   "/georeferencia":          { id: "MP-GEO", label: "Georeferencia" },
+  "/bi-export":              { id: "MP-BI",  label: "BI Export (prueba)" },
   "/obuma-clientes":      { id: "MP-CLI", label: "Clientes Obuma" },
   "/proveedores":         { id: "MP-PRV", label: "Mis Proveedores" },
   "/obuma-proveedores":   { id: "MP-OPV", label: "Proveedores Obuma" },
@@ -53,6 +54,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   "busquedas-guardadas": Bookmark,
   "historial-precios":      TrendingUp,
   "georeferencia":          MapPin,
+  "bi-export":              Database,
   "obuma-clientes":     Users,
   "ventas":             TrendingUp,
   "obuma-productos":    Package,
