@@ -5,7 +5,7 @@ import {
   Database, RefreshCw, AlertTriangle, CheckCircle2, XCircle,
   Search, ExternalLink, Clock, Building2, Wallet, Tag,
   Eye, Star, Trash2, FileText, Users, Gavel, MessageSquare,
-  History, ChevronRight, Info, ShieldAlert,
+  History, ChevronRight, Info, ShieldAlert, Mail, UserCheck, UserX, Contact,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { TableSkeleton } from "@/components/ui/Spinner";
@@ -152,6 +152,8 @@ export default function BiExportPage() {
   const [soloActivas, setSoloActivas] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<any | null>(null);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberPage, setMemberPage] = useState(1);
 
   const cargar = async () => {
     setLoading(true);
@@ -176,6 +178,7 @@ export default function BiExportPage() {
 
   useEffect(() => { cargar(); }, []);
   useEffect(() => { setPage(1); }, [search, soloActivas]);
+  useEffect(() => { setMemberPage(1); }, [memberSearch]);
 
   // ── KPIs ───────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -213,6 +216,49 @@ export default function BiExportPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const pageRows = filtradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // ── Member / usuario asignado — agregado por miembro ───────
+  const members = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const r of rows) {
+      const key = `${r.MEMBER_ID ?? "?"}-${r.USER_ID ?? "?"}-${r.MEMBER_NAME ?? "?"}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          MEMBER_ID: r.MEMBER_ID,
+          MEMBER_NAME: r.MEMBER_NAME,
+          MEMBER_TYPE: r.MEMBER_TYPE,
+          MEMBER_ACTIVE: r.MEMBER_ACTIVE,
+          IS_CONTACT: r.IS_CONTACT,
+          USER_ID: r.USER_ID,
+          USER_MAIL: r.USER_MAIL,
+          oportunidades: 0,
+        });
+      }
+      map.get(key).oportunidades += 1;
+    }
+    return Array.from(map.values()).sort((a, b) => b.oportunidades - a.oportunidades);
+  }, [rows]);
+
+  const memberKpis = useMemo(() => {
+    const total = members.length;
+    const activos = members.filter((m) => isTrue(m.MEMBER_ACTIVE)).length;
+    const contactos = members.filter((m) => isTrue(m.IS_CONTACT)).length;
+    const conUsuario = members.filter((m) => m.USER_ID).length;
+    const conEmail = members.filter((m) => m.USER_MAIL).length;
+    return { total, activos, contactos, internos: total - contactos, conUsuario, conEmail };
+  }, [members]);
+
+  const membersFiltrados = useMemo(() => {
+    if (!memberSearch.trim()) return members;
+    const q = memberSearch.trim().toLowerCase();
+    return members.filter((m) =>
+      [m.MEMBER_NAME, m.MEMBER_TYPE, m.USER_MAIL, m.USER_ID, m.MEMBER_ID]
+        .some((v) => (v ?? "").toString().toLowerCase().includes(q))
+    );
+  }, [members, memberSearch]);
+
+  const memberTotalPages = Math.max(1, Math.ceil(membersFiltrados.length / PAGE_SIZE));
+  const memberPageRows = membersFiltrados.slice((memberPage - 1) * PAGE_SIZE, memberPage * PAGE_SIZE);
 
   // ── Render ─────────────────────────────────────────────────
   return (
@@ -441,6 +487,95 @@ export default function BiExportPage() {
             </div>
             <div className="pb-5">
               <Paginacion currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Member / usuario asignado ──────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-50">
+          <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#2563EB]" /> Member / Usuario asignado
+          </h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Miembros del workspace que aparecen como responsables de alguna oportunidad, con su vínculo a un usuario LiciTaLab.
+          </p>
+        </div>
+
+        {!error && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 px-5 pt-5">
+            <KpiCard icon={Users} color="sky" label="Total miembros" value={loading ? "—" : memberKpis.total} />
+            <KpiCard icon={UserCheck} color="emerald" label="Miembros activos" value={loading ? "—" : memberKpis.activos} />
+            <KpiCard icon={Contact} color="violet" label="Contactos externos" value={loading ? "—" : memberKpis.contactos} />
+            <KpiCard icon={UserX} color="slate" label="Miembros internos" value={loading ? "—" : memberKpis.internos} />
+            <KpiCard icon={Mail} color="amber" label="Con email vinculado" value={loading ? "—" : memberKpis.conEmail} sub={!loading ? `${memberKpis.conUsuario} con usuario LiciTaLab` : undefined} />
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+          <h3 className="font-bold text-[#111827] text-xs flex items-center gap-2">
+            Miembros ({membersFiltrados.length})
+          </h3>
+          <div className="relative flex-1 sm:max-w-xs sm:ml-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+            <input
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              placeholder="Buscar por nombre, tipo, email, ID…"
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="px-5 pb-5"><TableSkeleton rows={6} /></div>
+        ) : error ? null : membersFiltrados.length === 0 ? (
+          <EmptyState icon={Users} title="Sin miembros" description="No hay miembros asignados a oportunidades, o el filtro no encontró resultados." />
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-50">
+                    <th className="px-5 py-3">Nombre</th>
+                    <th className="px-5 py-3 whitespace-nowrap">Tipo</th>
+                    <th className="px-5 py-3 whitespace-nowrap text-center">Activo</th>
+                    <th className="px-5 py-3 whitespace-nowrap text-center">Es contacto</th>
+                    <th className="px-5 py-3 whitespace-nowrap">User ID</th>
+                    <th className="px-5 py-3 whitespace-nowrap">Email</th>
+                    <th className="px-5 py-3 whitespace-nowrap text-right">Oportunidades</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {memberPageRows.map((m, i) => (
+                    <tr key={`${m.MEMBER_ID ?? "?"}-${m.USER_ID ?? "?"}-${i}`} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-5 py-3 font-bold text-slate-700 whitespace-nowrap max-w-[220px] truncate">{m.MEMBER_NAME || "—"}</td>
+                      <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{m.MEMBER_TYPE || "—"}</td>
+                      <td className="px-5 py-3 text-center">
+                        {isTrue(m.MEMBER_ACTIVE)
+                          ? <CheckCircle2 className="w-4 h-4 text-emerald-500 inline" />
+                          : <XCircle className="w-4 h-4 text-slate-300 inline" />}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        {isTrue(m.IS_CONTACT)
+                          ? <Contact className="w-4 h-4 text-violet-500 inline" />
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-5 py-3 text-slate-500 font-mono whitespace-nowrap">{m.USER_ID || "—"}</td>
+                      <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
+                        {m.USER_MAIL
+                          ? <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-slate-300" />{m.USER_MAIL}</span>
+                          : "—"}
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums font-bold text-[#2563EB]">{m.oportunidades}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="pb-5">
+              <Paginacion currentPage={memberPage} totalPages={memberTotalPages} onPageChange={setMemberPage} />
             </div>
           </>
         )}
