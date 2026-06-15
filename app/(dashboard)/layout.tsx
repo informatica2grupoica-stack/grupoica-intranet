@@ -7,7 +7,7 @@ import {
   Users, Building2, Database, Package, ShoppingCart,
   Laptop, LogOut, ChevronRight, ShieldCheck, Sparkles, X,
   BookOpen, Bookmark, GraduationCap,
-  MapPin, BadgeCheck, FileSearch, Menu, Gavel, ExternalLink, Database
+  MapPin, BadgeCheck, FileSearch, Menu, Gavel, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
