@@ -16,18 +16,21 @@ import {
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface Oportunidad {
-  OPPORTUNITY_ID: string;
+  OPPORTUNITY_CODE: string;
   OPPORTUNITY_NAME: string;
-  OPPORTUNITY_CLOSING_DATE?: string;
-  BUDGET?: number;
-  CATEGORY_NAME?: string;
-  ENTITY_NAME?: string;
-  REGION_NAME?: string;
+  CLOSING_DATE?: string;
+  AVAILABLE_AMOUNT?: number;
+  B_LINE?: string;
+  ORGANISM?: string;
+  REGION?: string;
   MEMBER_NAME?: string;
   USER_MAIL?: string;
+  USER_ID?: string;
+  MEMBER_TYPE?: string;
   MEMBER_ACTIVE?: string | boolean | number;
-  TAG_NAME?: string;
-  GESTION?: string;
+  TRANSLATED_TAGS?: string;
+  MANAGED_STATUS_NAME?: string;
+  WON_AMOUNT?: number;
   [key: string]: any;
 }
 
@@ -170,7 +173,7 @@ export default function LicitacionesMPPage() {
   const [filtrosOpen, setFiltrosOpen]   = useState(false);
 
   // Tabla
-  const [sortCol, setSortCol] = useState("OPPORTUNITY_CLOSING_DATE");
+  const [sortCol, setSortCol] = useState("CLOSING_DATE");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage]       = useState(1);
 
@@ -222,8 +225,8 @@ export default function LicitacionesMPPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── Computed ──────────────────────────────────────────────────────────────
-  const getEstado = useCallback((id: string): PipelineEstado =>
-    pipeline[id]?.estado ?? "sin_iniciar", [pipeline]);
+  const getEstado = useCallback((code: string): PipelineEstado =>
+    pipeline[code]?.estado ?? "sin_iniciar", [pipeline]);
 
   // Solo miembros activos
   const rowsActivos = useMemo(() =>
@@ -242,16 +245,22 @@ export default function LicitacionesMPPage() {
       const q = busqueda.toLowerCase();
       list = list.filter(r =>
         (r.OPPORTUNITY_NAME || "").toLowerCase().includes(q) ||
-        (r.ENTITY_NAME || "").toLowerCase().includes(q) ||
-        (r.CATEGORY_NAME || "").toLowerCase().includes(q)
+        (r.ORGANISM || "").toLowerCase().includes(q) ||
+        (r.B_LINE || "").toLowerCase().includes(q)
       );
     }
-    if (estadoFiltro) list = list.filter(r => getEstado(r.OPPORTUNITY_ID) === estadoFiltro);
+    if (estadoFiltro) list = list.filter(r => getEstado(r.OPPORTUNITY_CODE) === estadoFiltro);
     if (miembroFiltro) list = list.filter(r => r.MEMBER_NAME === miembroFiltro);
     return [...list].sort((a, b) => {
-      let va = a[sortCol] ?? "", vb = b[sortCol] ?? "";
-      if (typeof va === "string") va = va.toLowerCase();
-      if (typeof vb === "string") vb = vb.toLowerCase();
+      let va: any = a[sortCol] ?? "", vb: any = b[sortCol] ?? "";
+      if (sortCol === "CLOSING_DATE") {
+        va = va ? new Date(va).getTime() : 0;
+        vb = vb ? new Date(vb).getTime() : 0;
+      } else if (sortCol === "AVAILABLE_AMOUNT") {
+        va = Number(va) || 0; vb = Number(vb) || 0;
+      } else {
+        va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+      }
       return sortDir === "asc" ? (va < vb ? -1 : va > vb ? 1 : 0) : (va > vb ? -1 : va < vb ? 1 : 0);
     });
   }, [rowsActivos, busqueda, estadoFiltro, miembroFiltro, sortCol, sortDir, getEstado]);
@@ -265,14 +274,14 @@ export default function LicitacionesMPPage() {
 
   const kpis = useMemo(() => ({
     total:       filtradas.length,
-    viables:     filtradas.filter(r => getEstado(r.OPPORTUNITY_ID) === "viable").length,
-    enOferta:    filtradas.filter(r => getEstado(r.OPPORTUNITY_ID) === "en_oferta").length,
-    urgentes:    filtradas.filter(r => { const d = daysLeft(r.OPPORTUNITY_CLOSING_DATE); return d !== null && d <= 3 && d >= 0; }).length,
-    presupTotal: filtradas.reduce((s, r) => s + (r.BUDGET || 0), 0),
+    viables:     filtradas.filter(r => getEstado(r.OPPORTUNITY_CODE) === "viable").length,
+    enOferta:    filtradas.filter(r => getEstado(r.OPPORTUNITY_CODE) === "en_oferta").length,
+    urgentes:    filtradas.filter(r => { const d = daysLeft(r.CLOSING_DATE); return d !== null && d <= 3 && d >= 0; }).length,
+    presupTotal: filtradas.reduce((s, r) => s + (Number(r.AVAILABLE_AMOUNT) || 0), 0),
   }), [filtradas, getEstado]);
 
-  function setEstadoRow(id: string, estado: PipelineEstado) {
-    savePipeline({ ...pipeline, [id]: { id, estado, updatedAt: new Date().toISOString() } });
+  function setEstadoRow(code: string, estado: PipelineEstado) {
+    savePipeline({ ...pipeline, [code]: { id: code, estado, updatedAt: new Date().toISOString() } });
   }
 
   function toggleSort(col: string) {
@@ -477,12 +486,12 @@ export default function LicitacionesMPPage() {
               <thead>
                 <tr className="border-b border-slate-100">
                   {[
-                    { col: "OPPORTUNITY_NAME",         label: "Licitación",   w: "min-w-[240px]" },
-                    { col: "ENTITY_NAME",              label: "Entidad",      w: "min-w-[160px]" },
-                    { col: "BUDGET",                   label: "Presupuesto",  w: "min-w-[120px]" },
-                    { col: "OPPORTUNITY_CLOSING_DATE", label: "Cierre",       w: "min-w-[110px]" },
-                    { col: "MEMBER_NAME",              label: "Asignado",     w: "min-w-[120px]" },
-                    { col: "__pipeline__",             label: "Pipeline",     w: "min-w-[140px]" },
+                    { col: "OPPORTUNITY_NAME",  label: "Licitación",   w: "min-w-[240px]" },
+                    { col: "ORGANISM",          label: "Entidad",      w: "min-w-[160px]" },
+                    { col: "AVAILABLE_AMOUNT",  label: "Presupuesto",  w: "min-w-[120px]" },
+                    { col: "CLOSING_DATE",      label: "Cierre",       w: "min-w-[110px]" },
+                    { col: "MEMBER_NAME",       label: "Asignado",     w: "min-w-[120px]" },
+                    { col: "__pipeline__",      label: "Pipeline",     w: "min-w-[140px]" },
                   ].map(({ col, label, w }) => (
                     <th key={col} onClick={() => col !== "__pipeline__" && toggleSort(col)}
                       className={`${w} px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap ${col !== "__pipeline__" ? "cursor-pointer hover:text-blue-500 select-none" : ""} transition-colors`}>
@@ -507,15 +516,15 @@ export default function LicitacionesMPPage() {
                     </td>
                   </tr>
                 ) : pagina.map((row) => {
-                  const estado  = getEstado(row.OPPORTUNITY_ID);
-                  const days    = daysLeft(row.OPPORTUNITY_CLOSING_DATE);
+                  const estado  = getEstado(row.OPPORTUNITY_CODE);
+                  const days    = daysLeft(row.CLOSING_DATE);
                   const urgent  = days !== null && days <= 3 && days >= 0;
                   const vencida = days !== null && days < 0;
-                  const clasif  = !!clasifCache[row.OPPORTUNITY_ID];
+                  const clasif  = !!clasifCache[row.OPPORTUNITY_CODE];
 
                   return (
-                    <tr key={row.OPPORTUNITY_ID}
-                      onClick={() => { setSelected(row); setTabModal("info"); setErrorAccion(null); setEditEstado(null); }}
+                    <tr key={row.OPPORTUNITY_CODE}
+                      onClick={() => { setSelected(row); setTabModal("info"); setErrorAccion(null); setEditEstado(null); setDescargando(null); setClasificando(null); }}
                       className={`group cursor-pointer hover:bg-blue-50/40 transition-colors ${estado === "descartada" ? "opacity-40" : ""}`}>
 
                       {/* Licitación */}
@@ -526,8 +535,8 @@ export default function LicitacionesMPPage() {
                             <p className="font-semibold text-slate-800 text-xs truncate max-w-[260px] group-hover:text-blue-700 transition-colors">
                               {row.OPPORTUNITY_NAME || "Sin nombre"}
                             </p>
-                            {row.CATEGORY_NAME && (
-                              <p className="text-[10px] text-slate-400 truncate max-w-[260px] mt-0.5">{row.CATEGORY_NAME}</p>
+                            {row.B_LINE && (
+                              <p className="text-[10px] text-slate-400 truncate max-w-[260px] mt-0.5">{row.B_LINE}</p>
                             )}
                           </div>
                         </div>
@@ -535,19 +544,19 @@ export default function LicitacionesMPPage() {
 
                       {/* Entidad */}
                       <td className="px-4 py-3">
-                        <p className="text-xs text-slate-600 truncate max-w-[160px]">{row.ENTITY_NAME || "—"}</p>
-                        {row.REGION_NAME && <p className="text-[10px] text-slate-400 truncate">{row.REGION_NAME}</p>}
+                        <p className="text-xs text-slate-600 truncate max-w-[160px]">{row.ORGANISM || "—"}</p>
+                        {row.REGION && <p className="text-[10px] text-slate-400 truncate">{row.REGION}</p>}
                       </td>
 
                       {/* Presupuesto */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-xs font-semibold text-slate-700">{fmt(row.BUDGET)}</span>
+                        <span className="text-xs font-semibold text-slate-700">{fmt(row.AVAILABLE_AMOUNT)}</span>
                       </td>
 
                       {/* Cierre */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <p className={`text-xs font-medium ${urgent ? "text-red-600" : vencida ? "text-slate-300 line-through" : "text-slate-600"}`}>
-                          {fmtDate(row.OPPORTUNITY_CLOSING_DATE)}
+                          {fmtDate(row.CLOSING_DATE)}
                         </p>
                         {days !== null && !vencida && (
                           <p className={`text-[10px] mt-0.5 font-medium ${urgent ? "text-red-500" : "text-slate-400"}`}>
@@ -565,9 +574,9 @@ export default function LicitacionesMPPage() {
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="relative">
                           <PipelineBadge estado={estado}
-                            onClick={() => setEditEstado(editEstado === row.OPPORTUNITY_ID ? null : row.OPPORTUNITY_ID)} />
+                            onClick={() => setEditEstado(editEstado === row.OPPORTUNITY_CODE ? null : row.OPPORTUNITY_CODE)} />
                           <AnimatePresence>
-                            {editEstado === row.OPPORTUNITY_ID && (
+                            {editEstado === row.OPPORTUNITY_CODE && (
                               <motion.div
                                 initial={{ opacity: 0, y: 4, scale: 0.97 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -577,7 +586,7 @@ export default function LicitacionesMPPage() {
                               >
                                 {PIPELINE.map(p => { const Icon = p.icon; return (
                                   <button key={p.key}
-                                    onClick={() => { setEstadoRow(row.OPPORTUNITY_ID, p.key); setEditEstado(null); }}
+                                    onClick={() => { setEstadoRow(row.OPPORTUNITY_CODE, p.key); setEditEstado(null); }}
                                     className={`flex items-center gap-2 w-full px-3 py-2 text-xs font-medium transition-colors hover:bg-slate-50 ${estado === p.key ? "text-blue-600 bg-blue-50/60" : "text-slate-600"}`}>
                                     <Icon className="w-3.5 h-3.5" />{p.label}
                                   </button>
@@ -616,8 +625,8 @@ export default function LicitacionesMPPage() {
             >
               {/* Header modal */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                <PipelineBadge estado={getEstado(selected.OPPORTUNITY_ID)} />
-                {clasifCache[selected.OPPORTUNITY_ID] && (
+                <PipelineBadge estado={getEstado(selected.OPPORTUNITY_CODE)} />
+                {clasifCache[selected.OPPORTUNITY_CODE] && (
                   <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 ring-1 ring-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />Clasificado
                   </span>
@@ -648,15 +657,15 @@ export default function LicitacionesMPPage() {
 
                     <dl className="space-y-2.5">
                       {[
-                        { label: "ID",          value: selected.OPPORTUNITY_ID },
-                        { label: "Entidad",     value: selected.ENTITY_NAME },
-                        { label: "Región",      value: selected.REGION_NAME },
-                        { label: "Categoría",   value: selected.CATEGORY_NAME },
-                        { label: "Presupuesto", value: fmt(selected.BUDGET) },
-                        { label: "Cierre",      value: fmtDate(selected.OPPORTUNITY_CLOSING_DATE) },
+                        { label: "Código",      value: selected.OPPORTUNITY_CODE },
+                        { label: "Entidad",     value: selected.ORGANISM },
+                        { label: "Región",      value: selected.REGION },
+                        { label: "Línea",       value: selected.B_LINE },
+                        { label: "Presupuesto", value: fmt(selected.AVAILABLE_AMOUNT) },
+                        { label: "Cierre",      value: fmtDate(selected.CLOSING_DATE) },
                         { label: "Asignado",    value: selected.MEMBER_NAME || selected.USER_MAIL },
-                        { label: "Gestión",     value: selected.GESTION },
-                        { label: "Tags",        value: selected.TAG_NAME },
+                        { label: "Gestión",     value: selected.MANAGED_STATUS_NAME },
+                        { label: "Tags",        value: selected.TRANSLATED_TAGS },
                       ].filter(f => f.value && f.value !== "—").map(f => (
                         <div key={f.label} className="flex gap-3">
                           <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-24 shrink-0 pt-0.5">{f.label}</dt>
@@ -669,8 +678,8 @@ export default function LicitacionesMPPage() {
                     <div className="pt-3 border-t border-slate-100">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">Cambiar pipeline</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {PIPELINE.map(p => { const Icon = p.icon; const active = getEstado(selected.OPPORTUNITY_ID) === p.key; return (
-                          <button key={p.key} onClick={() => setEstadoRow(selected.OPPORTUNITY_ID, p.key)}
+                        {PIPELINE.map(p => { const Icon = p.icon; const active = getEstado(selected.OPPORTUNITY_CODE) === p.key; return (
+                          <button key={p.key} onClick={() => setEstadoRow(selected.OPPORTUNITY_CODE, p.key)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${active ? "bg-slate-800 text-white border-slate-800 shadow-sm" : "text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"}`}>
                             <Icon className="w-3 h-3" />{p.label}
                           </button>
@@ -678,7 +687,7 @@ export default function LicitacionesMPPage() {
                       </div>
                     </div>
 
-                    <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${selected.OPPORTUNITY_ID}`}
+                    <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${selected.OPPORTUNITY_CODE}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
                       <ExternalLink className="w-4 h-4" />Ver en Mercado Público
@@ -696,23 +705,23 @@ export default function LicitacionesMPPage() {
                     )}
 
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => descargarDocs(selected.OPPORTUNITY_ID)}
+                      <button onClick={() => descargarDocs(selected.OPPORTUNITY_CODE)}
                         disabled={!!descargando || !!clasificando}
                         className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-blue-200 text-blue-700 text-xs font-semibold bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50">
-                        {descargando === selected.OPPORTUNITY_ID ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        {descargando === selected.OPPORTUNITY_ID ? "Descargando…" : "Descargar Docs"}
+                        {descargando === selected.OPPORTUNITY_CODE ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {descargando === selected.OPPORTUNITY_CODE ? "Descargando…" : "Descargar Docs"}
                       </button>
-                      <button onClick={() => clasificarDocs(selected.OPPORTUNITY_ID)}
+                      <button onClick={() => clasificarDocs(selected.OPPORTUNITY_CODE)}
                         disabled={!!clasificando || !!descargando}
                         className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-purple-200 text-purple-700 text-xs font-semibold bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50">
-                        {clasificando === selected.OPPORTUNITY_ID ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
-                        {clasificando === selected.OPPORTUNITY_ID ? "Clasificando…" : "Clasificar IA"}
+                        {clasificando === selected.OPPORTUNITY_CODE ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
+                        {clasificando === selected.OPPORTUNITY_CODE ? "Clasificando…" : "Clasificar IA"}
                       </button>
                     </div>
 
                     {/* Resultado clasificación */}
                     {(() => {
-                      const clasif = clasifCache[selected.OPPORTUNITY_ID];
+                      const clasif = clasifCache[selected.OPPORTUNITY_CODE];
                       if (!clasif) return (
                         <div className="text-center py-12 text-slate-400">
                           <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -726,7 +735,7 @@ export default function LicitacionesMPPage() {
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                               {clasif.total} docs · {fmtDate(clasif.clasificadoAt)}
                             </p>
-                            <button onClick={() => clasificarDocs(selected.OPPORTUNITY_ID)} disabled={!!clasificando}
+                            <button onClick={() => clasificarDocs(selected.OPPORTUNITY_CODE)} disabled={!!clasificando}
                               className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 disabled:opacity-50">
                               <RefreshCw className="w-3 h-3" />Re-clasificar
                             </button>
