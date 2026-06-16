@@ -4,7 +4,7 @@
 // el microservicio directamente al cliente.
 import { NextRequest, NextResponse } from "next/server";
 
-const BASE = process.env.LICITAPYME_URL || "http://localhost:3001";
+const BASE = process.env.LICITAPYME_URL || "http://localhost:3003";
 
 type Ctx = { params: Promise<{ proxy: string[] }> };
 
