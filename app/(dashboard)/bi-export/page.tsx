@@ -33,12 +33,12 @@ function parseTags(v: any): string[] {
 const PAGE_SIZE = 15;
 
 const GESTION_COLORS: Record<string, string> = {
-  Ganada:     "bg-emerald-100 text-emerald-700",
-  Postulado:  "bg-blue-100 text-blue-700",
-  Aceptado:   "bg-teal-100 text-teal-700",
-  Seguimiento:"bg-violet-100 text-violet-700",
-  Perdida:    "bg-rose-100 text-rose-700",
-  Rechazado:  "bg-orange-100 text-orange-700",
+  Ganada:        "bg-emerald-100 text-emerald-700",
+  Postulado:     "bg-blue-100 text-blue-700",
+  Aceptado:      "bg-teal-100 text-teal-700",
+  Seguimiento:   "bg-violet-100 text-violet-700",
+  Perdida:       "bg-rose-100 text-rose-700",
+  Rechazado:     "bg-orange-100 text-orange-700",
   "Sin Definir": "bg-slate-100 text-slate-500",
 };
 
@@ -49,7 +49,10 @@ export default function BiExportPage() {
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
+
+  // Filtros de la tabla de oportunidades
   const [selectedMemberKey, setSelectedMemberKey] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -75,9 +78,9 @@ export default function BiExportPage() {
   };
 
   useEffect(() => { cargar(); }, []);
-  useEffect(() => { setPage(1); }, [search, selectedMemberKey]);
+  useEffect(() => { setPage(1); }, [search, selectedMemberKey, selectedTags]);
 
-  // ── Miembros (solo filas con usuario asignado) ───────────────
+  // ── Miembros activos (solo filas con usuario asignado) ───────
   const members = useMemo(() => {
     const map = new Map<string, any>();
     for (const r of rows) {
@@ -101,13 +104,16 @@ export default function BiExportPage() {
       const g = r.MANAGED_STATUS_NAME || "Sin Definir";
       m.porGestion[g] = (m.porGestion[g] || 0) + 1;
     }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+    return Array.from(map.values())
+      .filter((m) => isTrue(m.MEMBER_ACTIVE)) // solo activos
+      .sort((a, b) => b.total - a.total);
   }, [rows]);
 
-  // ── Etiquetas globales ───────────────────────────────────────
+  // ── Etiquetas disponibles (sobre filas con miembro asignado) ─
   const tagsMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of rows) {
+      if (!r.MEMBER_NAME && !r.USER_MAIL) continue;
       for (const tag of parseTags(r.TRANSLATED_TAGS)) {
         map.set(tag, (map.get(tag) || 0) + 1);
       }
@@ -117,12 +123,26 @@ export default function BiExportPage() {
 
   // ── Oportunidades filtradas ──────────────────────────────────
   const filtradas = useMemo(() => {
-    let r = rows;
+    // Base: solo oportunidades con miembro asignado
+    let r = rows.filter((x) => x.MEMBER_NAME || x.USER_MAIL);
+
+    // Filtro por usuario
     if (selectedMemberKey) {
       r = r.filter((x) => `${x.USER_ID ?? ""}-${x.MEMBER_NAME ?? ""}` === selectedMemberKey);
-    } else {
-      r = r.filter((x) => x.MEMBER_NAME || x.USER_MAIL);
     }
+
+    // Filtro por etiquetas (la fila debe tener TODAS las seleccionadas)
+    if (selectedTags.size > 0) {
+      r = r.filter((x) => {
+        const rowTags = new Set(parseTags(x.TRANSLATED_TAGS));
+        for (const t of selectedTags) {
+          if (!rowTags.has(t)) return false;
+        }
+        return true;
+      });
+    }
+
+    // Búsqueda de texto
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       r = r.filter((x) =>
@@ -130,13 +150,24 @@ export default function BiExportPage() {
           .some((v) => (v || "").toString().toLowerCase().includes(q))
       );
     }
+
     return r;
-  }, [rows, search, selectedMemberKey]);
+  }, [rows, search, selectedMemberKey, selectedTags]);
 
   const totalPages = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const pageRows = filtradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const selectedMember = members.find((m) => m.key === selectedMemberKey);
+
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) => {
+      const next = new Set(prev);
+      next.has(tag) ? next.delete(tag) : next.add(tag);
+      return next;
+    });
+  }
+
+  const hasFilters = !!selectedMemberKey || selectedTags.size > 0 || search.trim();
 
   return (
     <div className="space-y-6">
@@ -177,18 +208,18 @@ export default function BiExportPage() {
         </div>
       )}
 
-      {/* ── Usuarios del workspace ───────────────────────────── */}
+      {/* ── Usuarios activos (cards) ──────────────────────────── */}
       {!error && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2 mb-4">
             <Users className="w-4 h-4 text-[#2563EB]" />
-            Usuarios del workspace{!loading && ` (${members.length})`}
+            Usuarios activos{!loading && ` (${members.length})`}
           </h2>
 
           {loading ? (
-            <TableSkeleton rows={3} />
+            <TableSkeleton rows={2} />
           ) : members.length === 0 ? (
-            <EmptyState icon={Users} title="Sin usuarios" description="No hay oportunidades asignadas a usuarios." />
+            <EmptyState icon={Users} title="Sin usuarios activos" description="No hay oportunidades asignadas a usuarios activos." />
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {members.map((m) => {
@@ -214,13 +245,11 @@ export default function BiExportPage() {
                         {m.total.toLocaleString("es-CL")}
                       </span>
                     </div>
-
                     {m.USER_MAIL && (
                       <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1 truncate">
                         <Mail className="w-3 h-3 text-slate-300 shrink-0" /> {m.USER_MAIL}
                       </p>
                     )}
-
                     <div className="flex flex-wrap gap-1 mt-2">
                       {Object.entries(m.porGestion as Record<string, number>)
                         .sort((a, b) => (b[1] as number) - (a[1] as number))
@@ -234,17 +263,11 @@ export default function BiExportPage() {
                           </span>
                         ))}
                     </div>
-
-                    <div className="flex items-center gap-2 mt-2">
-                      {isTrue(m.MEMBER_ACTIVE)
-                        ? <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" /> Activo</span>
-                        : <span className="text-[9px] font-bold text-slate-400 flex items-center gap-0.5"><XCircle className="w-3 h-3" /> Inactivo</span>}
-                      {isTrue(m.IS_CONTACT) && (
-                        <span className="text-[9px] font-bold text-violet-600 flex items-center gap-0.5">
-                          <Contact className="w-3 h-3" /> Contacto ext.
-                        </span>
-                      )}
-                    </div>
+                    {isTrue(m.IS_CONTACT) && (
+                      <p className="text-[9px] font-bold text-violet-600 flex items-center gap-0.5 mt-1.5">
+                        <Contact className="w-3 h-3" /> Contacto ext.
+                      </p>
+                    )}
                   </button>
                 );
               })}
@@ -255,41 +278,113 @@ export default function BiExportPage() {
 
       {/* ── Tabla oportunidades ──────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 border-b border-slate-50">
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2">
+
+        {/* Barra de filtros */}
+        <div className="px-5 py-4 border-b border-slate-50 space-y-3">
+
+          {/* Fila 1: título + búsqueda texto */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2 flex-1">
               <FileText className="w-4 h-4 text-[#2563EB]" />
-              {selectedMember
-                ? `Oportunidades de ${selectedMember.MEMBER_NAME || "usuario"} (${filtradas.length})`
-                : `Oportunidades asignadas (${loading ? "…" : filtradas.length})`}
+              Oportunidades asignadas ({loading ? "…" : filtradas.length})
             </h2>
-            {selectedMemberKey && (
-              <button
-                onClick={() => setSelectedMemberKey(null)}
-                className="text-[10px] text-[#2563EB] font-semibold mt-0.5 flex items-center gap-0.5 hover:underline"
-              >
-                <X className="w-3 h-3" /> Ver todos los usuarios
-              </button>
-            )}
+            <div className="relative sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Código, nombre, organismo…"
+                className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+              />
+            </div>
           </div>
-          <div className="relative sm:max-w-xs sm:ml-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Código, nombre, organismo, etiqueta…"
-              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
-            />
-          </div>
+
+          {/* Fila 2: selector de usuario */}
+          {!loading && members.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
+                <Users className="w-3 h-3" /> Usuario
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setSelectedMemberKey(null)}
+                  className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
+                    !selectedMemberKey
+                      ? "bg-[#2563EB] text-white border-[#2563EB]"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  Todos
+                </button>
+                {members.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setSelectedMemberKey(selectedMemberKey === m.key ? null : m.key)}
+                    className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
+                      selectedMemberKey === m.key
+                        ? "bg-[#2563EB] text-white border-[#2563EB]"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {m.MEMBER_NAME || m.USER_MAIL || "—"}
+                    <span className={`ml-1.5 text-[10px] font-normal ${selectedMemberKey === m.key ? "text-blue-200" : "text-slate-400"}`}>
+                      {m.total.toLocaleString("es-CL")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fila 3: filtro de etiquetas */}
+          {!loading && tagsMap.length > 0 && (
+            <div className="flex items-start gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1 pt-1">
+                <Tag className="w-3 h-3" /> Etiquetas
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {tagsMap.map(([tag, count]) => {
+                  const active = selectedTags.has(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                        active
+                          ? "bg-[#2563EB] text-white border-[#2563EB]"
+                          : "bg-blue-50 text-[#2563EB] border-blue-100 hover:bg-blue-100"
+                      }`}
+                    >
+                      <Hash className="w-2.5 h-2.5" /> {tag}
+                      <span className={`text-[10px] font-normal ${active ? "text-blue-200" : "text-blue-400"}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Limpiar filtros */}
+          {hasFilters && (
+            <button
+              onClick={() => { setSelectedMemberKey(null); setSelectedTags(new Set()); setSearch(""); }}
+              className="text-[11px] font-bold text-slate-400 hover:text-rose-500 flex items-center gap-1 transition-colors"
+            >
+              <X className="w-3 h-3" /> Limpiar filtros
+            </button>
+          )}
         </div>
 
+        {/* Tabla */}
         {loading ? (
           <div className="px-5 py-4"><TableSkeleton rows={8} /></div>
         ) : error ? null : filtradas.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title="Sin oportunidades"
-            description="Este usuario no tiene oportunidades asignadas o el filtro no encontró resultados."
+            title="Sin resultados"
+            description="Ninguna oportunidad coincide con los filtros aplicados."
           />
         ) : (
           <>
@@ -342,7 +437,14 @@ export default function BiExportPage() {
                           <div className="flex flex-wrap gap-1">
                             {tags.length > 0
                               ? tags.map((t) => (
-                                <span key={t} className="text-[9px] font-bold bg-blue-50 text-[#2563EB] rounded-full px-1.5 py-0.5">
+                                <span
+                                  key={t}
+                                  className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 ${
+                                    selectedTags.has(t)
+                                      ? "bg-[#2563EB] text-white"
+                                      : "bg-blue-50 text-[#2563EB]"
+                                  }`}
+                                >
                                   {t}
                                 </span>
                               ))
@@ -370,28 +472,6 @@ export default function BiExportPage() {
         )}
       </div>
 
-      {/* ── Etiquetas (TRANSLATED_TAGS) ─────────────────────── */}
-      {!error && !loading && tagsMap.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2 mb-4">
-            <Tag className="w-4 h-4 text-[#2563EB]" /> Etiquetas en uso ({tagsMap.length})
-            <span className="text-[10px] font-normal text-slate-400">— TRANSLATED_TAGS</span>
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {tagsMap.map(([tag, count]) => (
-              <button
-                key={tag}
-                onClick={() => { setSearch(tag); setSelectedMemberKey(null); }}
-                className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-[#2563EB] rounded-full px-3 py-1.5 transition-colors"
-              >
-                <Hash className="w-3 h-3" /> {tag}
-                <span className="text-blue-400 font-normal">{count}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── Modal detalle ───────────────────────────────────── */}
       <Modal
         open={!!selected}
@@ -403,7 +483,6 @@ export default function BiExportPage() {
         {selected && (
           <div className="space-y-4">
 
-            {/* Usuario asignado */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
                 <Users className="w-3.5 h-3.5 text-[#2563EB]" /> Usuario asignado
@@ -418,7 +497,6 @@ export default function BiExportPage() {
               </dl>
             </div>
 
-            {/* Etiquetas y clasificación */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
                 <Tag className="w-3.5 h-3.5 text-[#2563EB]" /> Etiquetas y clasificación
@@ -465,7 +543,6 @@ export default function BiExportPage() {
               </div>
             </div>
 
-            {/* Datos de la oportunidad */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
                 <FileText className="w-3.5 h-3.5 text-[#2563EB]" /> Datos de la oportunidad
