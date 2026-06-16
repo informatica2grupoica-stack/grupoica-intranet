@@ -12,7 +12,10 @@ async function handler(req: NextRequest, ctx: Ctx) {
   const { proxy } = await ctx.params;
   const path = proxy.join("/");
   const search = req.nextUrl.search;
-  const target = `${BASE}/${path}${search}`;
+  // licitapyme-clone tiene todos sus endpoints bajo /api/ — lo agregamos aquí
+  // para que la intranet pueda llamar /api/licitapyme/documentos/foo
+  // y el proxy reenvíe a http://localhost:3003/api/documentos/foo
+  const target = `${BASE}/api/${path}${search}`;
 
   const headers = new Headers();
   // Reenvía Content-Type si hay body

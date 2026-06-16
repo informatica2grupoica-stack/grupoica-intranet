@@ -687,7 +687,7 @@ export default function LicitacionesMPPage() {
                       </div>
                     </div>
 
-                    <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?qs=${selected.OPPORTUNITY_CODE}`}
+                    <a href={`https://www.mercadopublico.cl/Procurement/Modules/RFB/DetailsAcquisition.aspx?idlicitacion=${encodeURIComponent(selected.OPPORTUNITY_CODE)}`}
                       target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
                       <ExternalLink className="w-4 h-4" />Ver en Mercado Público
