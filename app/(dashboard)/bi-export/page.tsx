@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Database, RefreshCw, XCircle, Search, Tag,
   FileText, Users, Clock, CheckCircle2, Mail, Contact,
-  ChevronRight, Hash, X,
+  ChevronRight, Hash, X, Filter, ArrowUpDown, ArrowUp, ArrowDown,
+  Calendar, TrendingUp, Award, AlertCircle,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { TableSkeleton } from "@/components/ui/Spinner";
@@ -31,31 +33,65 @@ function parseTags(v: any): string[] {
 }
 
 const PAGE_SIZE = 15;
+const GESTIONES = ["Seguimiento", "Ganada", "Postulado", "Aceptado", "Perdida", "Rechazado", "Sin Definir"];
 
-const GESTION_COLORS: Record<string, string> = {
-  Ganada:        "bg-emerald-100 text-emerald-700",
-  Postulado:     "bg-blue-100 text-blue-700",
-  Aceptado:      "bg-teal-100 text-teal-700",
-  Seguimiento:   "bg-violet-100 text-violet-700",
-  Perdida:       "bg-rose-100 text-rose-700",
-  Rechazado:     "bg-orange-100 text-orange-700",
-  "Sin Definir": "bg-slate-100 text-slate-500",
+const GESTION_STYLE: Record<string, { pill: string; dot: string }> = {
+  Ganada:        { pill: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  Postulado:     { pill: "bg-blue-50 text-blue-700 border-blue-200",         dot: "bg-blue-500" },
+  Aceptado:      { pill: "bg-teal-50 text-teal-700 border-teal-200",         dot: "bg-teal-500" },
+  Seguimiento:   { pill: "bg-violet-50 text-violet-700 border-violet-200",   dot: "bg-violet-500" },
+  Perdida:       { pill: "bg-rose-50 text-rose-700 border-rose-200",         dot: "bg-rose-500" },
+  Rechazado:     { pill: "bg-orange-50 text-orange-700 border-orange-200",   dot: "bg-orange-500" },
+  "Sin Definir": { pill: "bg-slate-50 text-slate-500 border-slate-200",      dot: "bg-slate-300" },
 };
+
+function gestionPill(g: string) {
+  return GESTION_STYLE[g]?.pill ?? GESTION_STYLE["Sin Definir"].pill;
+}
+
+// ── Sub-componentes ───────────────────────────────────────────────
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#2563EB] text-white rounded-full px-2.5 py-1 shadow-sm shadow-blue-300/40">
+      {label}
+      <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="hover:text-blue-200 transition-colors">
+        <X className="w-2.5 h-2.5" />
+      </button>
+    </span>
+  );
+}
+
+function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string | null; sortDir: "asc" | "desc" }) {
+  if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-400 transition-colors" />;
+  return sortDir === "asc"
+    ? <ArrowUp className="w-3 h-3 text-[#2563EB]" />
+    : <ArrowDown className="w-3 h-3 text-[#2563EB]" />;
+}
 
 // ── Página ───────────────────────────────────────────────────────
 export default function BiExportPage() {
+  // ── Data ────────────────────────────────────────────────────
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
 
-  // Filtros de la tabla de oportunidades
-  const [selectedMemberKey, setSelectedMemberKey] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState("");
+  // ── Filtros ─────────────────────────────────────────────────
+  const [texto, setTexto] = useState("");
+  const [memberKey, setMemberKey] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [gestion, setGestion] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [filtrosOpen, setFiltrosOpen] = useState(false);
+
+  // ── Ordenación ──────────────────────────────────────────────
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
+  // ── Cargar datos ────────────────────────────────────────────
   const cargar = async () => {
     setLoading(true);
     setError(null);
@@ -78,9 +114,9 @@ export default function BiExportPage() {
   };
 
   useEffect(() => { cargar(); }, []);
-  useEffect(() => { setPage(1); }, [search, selectedMemberKey, selectedTags]);
+  useEffect(() => { setPage(1); }, [texto, memberKey, selectedTags, gestion, fechaDesde, fechaHasta]);
 
-  // ── Miembros activos (solo filas con usuario asignado) ───────
+  // ── Miembros activos ────────────────────────────────────────
   const members = useMemo(() => {
     const map = new Map<string, any>();
     for (const r of rows) {
@@ -105,11 +141,11 @@ export default function BiExportPage() {
       m.porGestion[g] = (m.porGestion[g] || 0) + 1;
     }
     return Array.from(map.values())
-      .filter((m) => isTrue(m.MEMBER_ACTIVE)) // solo activos
+      .filter((m) => isTrue(m.MEMBER_ACTIVE))
       .sort((a, b) => b.total - a.total);
   }, [rows]);
 
-  // ── Etiquetas disponibles (sobre filas con miembro asignado) ─
+  // ── Etiquetas disponibles ────────────────────────────────────
   const tagsMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of rows) {
@@ -121,100 +157,211 @@ export default function BiExportPage() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
-  // ── Oportunidades filtradas ──────────────────────────────────
+  // ── Total asignadas (base sin filtros) ───────────────────────
+  const totalAsignadas = useMemo(
+    () => rows.filter((x) => x.MEMBER_NAME || x.USER_MAIL).length,
+    [rows]
+  );
+
+  // ── Filtrado + ordenación ────────────────────────────────────
   const filtradas = useMemo(() => {
-    // Base: solo oportunidades con miembro asignado
     let r = rows.filter((x) => x.MEMBER_NAME || x.USER_MAIL);
 
-    // Filtro por usuario
-    if (selectedMemberKey) {
-      r = r.filter((x) => `${x.USER_ID ?? ""}-${x.MEMBER_NAME ?? ""}` === selectedMemberKey);
-    }
+    if (memberKey)
+      r = r.filter((x) => `${x.USER_ID ?? ""}-${x.MEMBER_NAME ?? ""}` === memberKey);
 
-    // Filtro por etiquetas (la fila debe tener TODAS las seleccionadas)
-    if (selectedTags.size > 0) {
+    if (selectedTags.length > 0)
       r = r.filter((x) => {
-        const rowTags = new Set(parseTags(x.TRANSLATED_TAGS));
-        for (const t of selectedTags) {
-          if (!rowTags.has(t)) return false;
-        }
-        return true;
+        const rt = new Set(parseTags(x.TRANSLATED_TAGS));
+        return selectedTags.every((t) => rt.has(t));
       });
+
+    if (gestion)
+      r = r.filter((x) => (x.MANAGED_STATUS_NAME || "Sin Definir") === gestion);
+
+    if (fechaDesde) {
+      const d = new Date(fechaDesde);
+      r = r.filter((x) => x.CLOSING_DATE && new Date(x.CLOSING_DATE) >= d);
+    }
+    if (fechaHasta) {
+      const d = new Date(fechaHasta);
+      d.setHours(23, 59, 59);
+      r = r.filter((x) => x.CLOSING_DATE && new Date(x.CLOSING_DATE) <= d);
     }
 
-    // Búsqueda de texto
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (texto.trim()) {
+      const q = texto.trim().toLowerCase();
       r = r.filter((x) =>
         [x.OPPORTUNITY_CODE, x.OPPORTUNITY_NAME, x.ORGANISM, x.TRANSLATED_TAGS, x.B_LINE, x.MEMBER_NAME]
           .some((v) => (v || "").toString().toLowerCase().includes(q))
       );
     }
 
+    if (sortCol) {
+      r = [...r].sort((a, b) => {
+        let av: any = a[sortCol] ?? "";
+        let bv: any = b[sortCol] ?? "";
+        if (["CLOSING_DATE", "PUBLISH_DATE", "ACTUAL_APPLICATION_DATE"].includes(sortCol)) {
+          av = av ? new Date(av).getTime() : 0;
+          bv = bv ? new Date(bv).getTime() : 0;
+        } else if (["AVAILABLE_AMOUNT", "APPLIED_AMOUNT", "WON_AMOUNT"].includes(sortCol)) {
+          av = Number(av) || 0;
+          bv = Number(bv) || 0;
+        } else {
+          av = String(av).toLowerCase();
+          bv = String(bv).toLowerCase();
+        }
+        if (av < bv) return sortDir === "asc" ? -1 : 1;
+        if (av > bv) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
     return r;
-  }, [rows, search, selectedMemberKey, selectedTags]);
+  }, [rows, texto, memberKey, selectedTags, gestion, fechaDesde, fechaHasta, sortCol, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const pageRows = filtradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const selectedMember = members.find((m) => m.key === selectedMemberKey);
+  const activeFilterCount =
+    [memberKey, gestion, fechaDesde, fechaHasta].filter(Boolean).length +
+    selectedTags.length +
+    (texto.trim() ? 1 : 0);
 
-  function toggleTag(tag: string) {
-    setSelectedTags((prev) => {
-      const next = new Set(prev);
-      next.has(tag) ? next.delete(tag) : next.add(tag);
-      return next;
-    });
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortCol(col); setSortDir("asc"); }
   }
 
-  const hasFilters = !!selectedMemberKey || selectedTags.size > 0 || search.trim();
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
 
+  function limpiarFiltros() {
+    setTexto(""); setMemberKey(""); setSelectedTags([]);
+    setGestion(""); setFechaDesde(""); setFechaHasta("");
+  }
+
+  const selectedMemberName = members.find((m) => m.key === memberKey)?.MEMBER_NAME;
+
+  // ── KPIs del header ─────────────────────────────────────────
+  const kpiGanadas = useMemo(() => rows.filter((r) => (r.MANAGED_STATUS_NAME || "") === "Ganada").length, [rows]);
+  const kpiSeguimiento = useMemo(() => rows.filter((r) => (r.MANAGED_STATUS_NAME || "") === "Seguimiento").length, [rows]);
+
+  // ────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ── Header ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-[#111827] flex items-center gap-2">
-            <Database className="w-5 h-5 text-[#2563EB]" /> LiciTaLab BI — Oportunidades por usuario
-          </h1>
-          {fetchedAt && (
-            <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-              <Clock className="w-3 h-3" /> Última consulta: {new Date(fetchedAt).toLocaleString("es-CL")}
+      {/* ── Header gradient ─────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F172A] via-[#111827] to-[#1a2744] p-6 md:p-8 shadow-xl shadow-slate-900/25">
+        <div className="absolute -top-24 -right-12 w-80 h-80 bg-[#3B82F6]/15 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-64 h-32 bg-[#6366F1]/10 blur-[80px] rounded-full pointer-events-none" />
+
+        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest bg-blue-500/15 text-[#60A5FA] px-3 py-1 rounded-full border border-blue-500/20">
+              <Database className="w-3 h-3" /> LiciTaLab · BI Export
+            </span>
+            <h1 className="text-2xl md:text-3xl font-black text-white mt-3 leading-tight">
+              Oportunidades{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#60A5FA] to-[#818CF8]">
+                por Usuario
+              </span>
+            </h1>
+            <p className="text-slate-500 text-xs mt-1">
+              Fuente: <code className="text-slate-400">LICITALAB.GOLD.VW_CLIENT_OPPORTUNITIES</code>
             </p>
-          )}
+
+            {/* KPI strip */}
+            {!loading && !error && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.3 }}
+                className="flex flex-wrap items-center gap-2 mt-4"
+              >
+                <div className="flex items-center gap-2 bg-white/[0.07] backdrop-blur-sm rounded-2xl px-4 py-2 border border-white/[0.08]">
+                  <Users className="w-4 h-4 text-[#60A5FA]" />
+                  <span className="text-white font-black text-base tabular-nums">{members.length}</span>
+                  <span className="text-slate-400 text-[11px]">usuarios activos</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/[0.07] backdrop-blur-sm rounded-2xl px-4 py-2 border border-white/[0.08]">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <span className="text-white font-black text-base tabular-nums">{totalAsignadas.toLocaleString("es-CL")}</span>
+                  <span className="text-slate-400 text-[11px]">asignadas</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/[0.07] backdrop-blur-sm rounded-2xl px-4 py-2 border border-white/[0.08]">
+                  <TrendingUp className="w-4 h-4 text-violet-400" />
+                  <span className="text-white font-black text-base tabular-nums">{kpiSeguimiento.toLocaleString("es-CL")}</span>
+                  <span className="text-slate-400 text-[11px]">en seguimiento</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/[0.07] backdrop-blur-sm rounded-2xl px-4 py-2 border border-white/[0.08]">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span className="text-white font-black text-base tabular-nums">{kpiGanadas}</span>
+                  <span className="text-slate-400 text-[11px]">ganadas</span>
+                </div>
+                {fetchedAt && (
+                  <p className="text-slate-600 text-[11px] flex items-center gap-1 ml-1">
+                    <Clock className="w-3 h-3" /> {new Date(fetchedAt).toLocaleString("es-CL")}
+                  </p>
+                )}
+              </motion.div>
+            )}
+          </div>
+
+          <button
+            onClick={cargar}
+            disabled={loading}
+            className="self-start flex items-center gap-2 text-[12px] font-bold text-white bg-gradient-to-r from-[#2563EB] to-[#3B82F6] px-5 py-2.5 rounded-xl shadow-lg shadow-blue-900/40 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            Actualizar datos
+          </button>
         </div>
-        <button
-          onClick={cargar}
-          disabled={loading}
-          className="flex items-center gap-1.5 text-[11px] font-bold text-white bg-gradient-to-r from-[#2563EB] to-[#3B82F6] px-3 py-2 rounded-xl shadow-lg shadow-blue-900/30 hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Actualizar
-        </button>
       </div>
 
       {/* ── Error ─────────────────────────────────────────────── */}
-      {error && (
-        <div className="bg-rose-50 border-l-4 border-[#EF4444] rounded-2xl px-5 py-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <XCircle className="w-5 h-5 text-[#EF4444] flex-shrink-0 mt-0.5" />
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 flex items-start gap-3 shadow-sm"
+          >
+            <XCircle className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-bold text-rose-800">
-                No se pudo obtener la data{error.status ? ` (HTTP ${error.status})` : ""}
+                Error al obtener datos{error.status ? ` · HTTP ${error.status}` : ""}
               </p>
-              <p className="text-xs text-rose-700 mt-0.5">{error.message}</p>
+              <p className="text-xs text-rose-600 mt-0.5">{error.message}</p>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* ── Usuarios activos (cards) ──────────────────────────── */}
+      {/* ── Usuarios activos ─────────────────────────────────── */}
       {!error && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2 mb-4">
-            <Users className="w-4 h-4 text-[#2563EB]" />
-            Usuarios activos{!loading && ` (${members.length})`}
-          </h2>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-black text-[#111827] text-sm flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#2563EB]" />
+              Usuarios activos
+              {!loading && (
+                <span className="text-[11px] font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+                  {members.length}
+                </span>
+              )}
+            </h2>
+            {memberKey && (
+              <button
+                onClick={() => setMemberKey("")}
+                className="text-[11px] font-bold text-[#2563EB] hover:text-blue-800 flex items-center gap-1 transition-colors"
+              >
+                <X className="w-3 h-3" /> Ver todos
+              </button>
+            )}
+          </div>
 
           {loading ? (
             <TableSkeleton rows={2} />
@@ -222,53 +369,75 @@ export default function BiExportPage() {
             <EmptyState icon={Users} title="Sin usuarios activos" description="No hay oportunidades asignadas a usuarios activos." />
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {members.map((m) => {
-                const isSelected = selectedMemberKey === m.key;
+              {members.map((m, idx) => {
+                const isSelected = memberKey === m.key;
+                const topGestion = Object.entries(m.porGestion as Record<string, number>)
+                  .sort((a, b) => (b[1] as number) - (a[1] as number))
+                  .slice(0, 3);
                 return (
-                  <button
+                  <motion.button
                     key={m.key}
-                    onClick={() => setSelectedMemberKey(isSelected ? null : m.key)}
-                    className={`text-left rounded-2xl border p-4 transition-all ${
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04, type: "spring", stiffness: 400, damping: 30 }}
+                    whileHover={{ scale: 1.02, y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setMemberKey(isSelected ? "" : m.key)}
+                    className={`text-left rounded-2xl border p-4 transition-colors ${
                       isSelected
-                        ? "border-[#2563EB] bg-blue-50 shadow-sm shadow-blue-100"
-                        : "border-slate-100 hover:border-slate-200 hover:bg-slate-50/60"
+                        ? "border-[#2563EB] bg-gradient-to-br from-blue-50 to-indigo-50 shadow-md shadow-blue-100"
+                        : "border-slate-100 hover:border-slate-200 hover:shadow-sm"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    {/* Avatar + nombre */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-[11px] font-black shrink-0 ${
+                        isSelected
+                          ? "bg-gradient-to-br from-[#2563EB] to-[#6366F1] shadow-md shadow-blue-300/40"
+                          : "bg-gradient-to-br from-slate-600 to-slate-700"
+                      }`}>
+                        {(m.MEMBER_NAME || "?").substring(0, 2).toUpperCase()}
+                      </div>
                       <div className="min-w-0">
-                        <p className="font-bold text-[#111827] text-sm truncate">{m.MEMBER_NAME || "—"}</p>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mt-0.5">
+                        <p className={`font-black text-sm truncate ${isSelected ? "text-[#1D4ED8]" : "text-[#111827]"}`}>
+                          {m.MEMBER_NAME || "—"}
+                        </p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold truncate">
                           {m.MEMBER_TYPE || "—"}
                         </p>
                       </div>
-                      <span className={`text-xl font-black tabular-nums shrink-0 ${isSelected ? "text-[#2563EB]" : "text-slate-700"}`}>
+                    </div>
+
+                    {/* Conteo + email */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className={`text-2xl font-black tabular-nums ${isSelected ? "text-[#2563EB]" : "text-slate-700"}`}>
                         {m.total.toLocaleString("es-CL")}
                       </span>
+                      {isTrue(m.IS_CONTACT) && (
+                        <span className="text-[9px] font-bold text-violet-600 bg-violet-50 rounded-full px-2 py-0.5 border border-violet-100">
+                          Contacto ext.
+                        </span>
+                      )}
                     </div>
+
                     {m.USER_MAIL && (
-                      <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1 truncate">
-                        <Mail className="w-3 h-3 text-slate-300 shrink-0" /> {m.USER_MAIL}
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1 truncate mb-2">
+                        <Mail className="w-3 h-3 shrink-0" /> {m.USER_MAIL}
                       </p>
                     )}
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {Object.entries(m.porGestion as Record<string, number>)
-                        .sort((a, b) => (b[1] as number) - (a[1] as number))
-                        .slice(0, 4)
-                        .map(([g, c]) => (
-                          <span
-                            key={g}
-                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${GESTION_COLORS[g] || GESTION_COLORS["Sin Definir"]}`}
-                          >
-                            {g} {c as number}
-                          </span>
-                        ))}
+
+                    {/* Breakdown gestión */}
+                    <div className="flex flex-wrap gap-1">
+                      {topGestion.map(([g, c]) => (
+                        <span
+                          key={g}
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${gestionPill(g)}`}
+                        >
+                          {g} · {c as number}
+                        </span>
+                      ))}
                     </div>
-                    {isTrue(m.IS_CONTACT) && (
-                      <p className="text-[9px] font-bold text-violet-600 flex items-center gap-0.5 mt-1.5">
-                        <Contact className="w-3 h-3" /> Contacto ext.
-                      </p>
-                    )}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -276,203 +445,414 @@ export default function BiExportPage() {
         </div>
       )}
 
-      {/* ── Tabla oportunidades ──────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* ── Tabla con filtros ─────────────────────────────────── */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
 
-        {/* Barra de filtros */}
-        <div className="px-5 py-4 border-b border-slate-50 space-y-3">
+        {/* Barra superior */}
+        <div className="px-6 py-4 border-b border-slate-50 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <h2 className="font-black text-[#111827] text-sm flex items-center gap-2 shrink-0">
+            <FileText className="w-4 h-4 text-[#2563EB]" />
+            Oportunidades asignadas
+            {!loading && (
+              <span className="text-[11px] font-normal text-slate-400">
+                ({activeFilterCount > 0 ? `${filtradas.length} de ${totalAsignadas.toLocaleString("es-CL")}` : filtradas.length.toLocaleString("es-CL")})
+              </span>
+            )}
+          </h2>
 
-          {/* Fila 1: título + búsqueda texto */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <h2 className="font-bold text-[#111827] text-sm flex items-center gap-2 flex-1">
-              <FileText className="w-4 h-4 text-[#2563EB]" />
-              Oportunidades asignadas ({loading ? "…" : filtradas.length})
-            </h2>
-            <div className="relative sm:max-w-xs">
+          <div className="flex items-center gap-2 ml-auto w-full sm:w-auto">
+            {/* Búsqueda */}
+            <div className="relative flex-1 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
                 placeholder="Código, nombre, organismo…"
-                className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"
               />
-            </div>
-          </div>
-
-          {/* Fila 2: selector de usuario */}
-          {!loading && members.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
-                <Users className="w-3 h-3" /> Usuario
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  onClick={() => setSelectedMemberKey(null)}
-                  className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
-                    !selectedMemberKey
-                      ? "bg-[#2563EB] text-white border-[#2563EB]"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  Todos
+              {texto && (
+                <button onClick={() => setTexto("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                  <X className="w-3.5 h-3.5" />
                 </button>
-                {members.map((m) => (
-                  <button
-                    key={m.key}
-                    onClick={() => setSelectedMemberKey(selectedMemberKey === m.key ? null : m.key)}
-                    className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${
-                      selectedMemberKey === m.key
-                        ? "bg-[#2563EB] text-white border-[#2563EB]"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    {m.MEMBER_NAME || m.USER_MAIL || "—"}
-                    <span className={`ml-1.5 text-[10px] font-normal ${selectedMemberKey === m.key ? "text-blue-200" : "text-slate-400"}`}>
-                      {m.total.toLocaleString("es-CL")}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
-          )}
 
-          {/* Fila 3: filtro de etiquetas */}
-          {!loading && tagsMap.length > 0 && (
-            <div className="flex items-start gap-2 flex-wrap">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1 pt-1">
-                <Tag className="w-3 h-3" /> Etiquetas
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {tagsMap.map(([tag, count]) => {
-                  const active = selectedTags.has(tag);
-                  return (
+            {/* Botón filtros */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setFiltrosOpen((o) => !o)}
+              className={`relative flex items-center gap-2 text-[12px] font-bold px-4 py-2 rounded-xl border transition-all ${
+                filtrosOpen || activeFilterCount > 0
+                  ? "bg-[#2563EB] text-white border-[#2563EB] shadow-md shadow-blue-300/30"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center border-2 border-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </motion.button>
+
+            {/* Limpiar */}
+            <AnimatePresence>
+              {activeFilterCount > 0 && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={limpiarFiltros}
+                  className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500 hover:text-rose-500 px-3 py-2 rounded-xl hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all"
+                >
+                  <X className="w-3.5 h-3.5" /> Limpiar
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Panel de filtros colapsable */}
+        <AnimatePresence initial={false}>
+          {filtrosOpen && (
+            <motion.div
+              key="filtros"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}
+              className="overflow-hidden"
+            >
+              <div className="px-6 py-5 bg-slate-50/60 border-b border-slate-100 grid gap-5">
+
+                {/* Usuario */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                    <Users className="w-3 h-3 text-[#2563EB]" /> Usuario asignado
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
                     <button
-                      key={tag}
-                      onClick={() => toggleTag(tag)}
-                      className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
-                        active
-                          ? "bg-[#2563EB] text-white border-[#2563EB]"
-                          : "bg-blue-50 text-[#2563EB] border-blue-100 hover:bg-blue-100"
+                      onClick={() => setMemberKey("")}
+                      className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${
+                        !memberKey
+                          ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
+                          : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
                       }`}
                     >
-                      <Hash className="w-2.5 h-2.5" /> {tag}
-                      <span className={`text-[10px] font-normal ${active ? "text-blue-200" : "text-blue-400"}`}>
-                        {count}
-                      </span>
+                      Todos
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                    {members.map((m) => (
+                      <button
+                        key={m.key}
+                        onClick={() => setMemberKey(memberKey === m.key ? "" : m.key)}
+                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${
+                          memberKey === m.key
+                            ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-[#2563EB]/40 hover:text-[#2563EB]"
+                        }`}
+                      >
+                        {m.MEMBER_NAME || m.USER_MAIL || "—"}
+                        <span className={`ml-1.5 text-[10px] font-normal ${memberKey === m.key ? "text-blue-200" : "text-slate-400"}`}>
+                          {m.total.toLocaleString("es-CL")}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          {/* Limpiar filtros */}
-          {hasFilters && (
-            <button
-              onClick={() => { setSelectedMemberKey(null); setSelectedTags(new Set()); setSearch(""); }}
-              className="text-[11px] font-bold text-slate-400 hover:text-rose-500 flex items-center gap-1 transition-colors"
-            >
-              <X className="w-3 h-3" /> Limpiar filtros
-            </button>
+                {/* Estado gestión */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                    <TrendingUp className="w-3 h-3 text-[#2563EB]" /> Estado de gestión
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setGestion("")}
+                      className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${
+                        !gestion
+                          ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
+                          : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {GESTIONES.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setGestion(gestion === g ? "" : g)}
+                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-all ${
+                          gestion === g
+                            ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
+                            : `${GESTION_STYLE[g]?.pill || "bg-slate-50 text-slate-500 border-slate-200"} hover:border-slate-300`
+                        }`}
+                      >
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${GESTION_STYLE[g]?.dot || "bg-slate-300"}`} />
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Rango de fechas */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-[#2563EB]" /> Fecha de cierre
+                  </p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-slate-500 font-semibold whitespace-nowrap">Desde</label>
+                      <input
+                        type="date"
+                        value={fechaDesde}
+                        onChange={(e) => setFechaDesde(e.target.value)}
+                        className="text-xs rounded-xl border border-slate-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-slate-500 font-semibold whitespace-nowrap">Hasta</label>
+                      <input
+                        type="date"
+                        value={fechaHasta}
+                        onChange={(e) => setFechaHasta(e.target.value)}
+                        className="text-xs rounded-xl border border-slate-200 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] bg-white transition-all"
+                      />
+                    </div>
+                    {(fechaDesde || fechaHasta) && (
+                      <button
+                        onClick={() => { setFechaDesde(""); setFechaHasta(""); }}
+                        className="text-[11px] text-slate-400 hover:text-rose-500 flex items-center gap-1 transition-colors"
+                      >
+                        <X className="w-3 h-3" /> Borrar fechas
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Etiquetas */}
+                {tagsMap.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+                      <Tag className="w-3 h-3 text-[#2563EB]" /> Etiquetas (TRANSLATED_TAGS)
+                      {selectedTags.length > 0 && (
+                        <button onClick={() => setSelectedTags([])} className="text-[10px] text-slate-400 hover:text-rose-500 font-bold ml-1 transition-colors">
+                          · limpiar
+                        </button>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tagsMap.map(([tag, count]) => {
+                        const active = selectedTags.includes(tag);
+                        return (
+                          <motion.button
+                            key={tag}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => toggleTag(tag)}
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all ${
+                              active
+                                ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm shadow-blue-300/30"
+                                : "bg-blue-50/60 text-[#2563EB] border-blue-100 hover:bg-blue-100 hover:border-blue-200"
+                            }`}
+                          >
+                            <Hash className="w-2.5 h-2.5" /> {tag}
+                            <span className={`text-[10px] font-normal ml-0.5 ${active ? "text-blue-200" : "text-blue-400"}`}>
+                              {count}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+
+        {/* Chips de filtros activos (panel cerrado) */}
+        <AnimatePresence>
+          {activeFilterCount > 0 && !filtrosOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-6 py-2.5 bg-blue-50/50 border-b border-blue-100/60 flex items-center gap-2 flex-wrap">
+                {memberKey && (
+                  <FilterChip label={`Usuario: ${selectedMemberName || memberKey}`} onRemove={() => setMemberKey("")} />
+                )}
+                {gestion && (
+                  <FilterChip label={`Gestión: ${gestion}`} onRemove={() => setGestion("")} />
+                )}
+                {selectedTags.map((t) => (
+                  <FilterChip key={t} label={t} onRemove={() => toggleTag(t)} />
+                ))}
+                {fechaDesde && (
+                  <FilterChip label={`Desde ${fechaDesde}`} onRemove={() => setFechaDesde("")} />
+                )}
+                {fechaHasta && (
+                  <FilterChip label={`Hasta ${fechaHasta}`} onRemove={() => setFechaHasta("")} />
+                )}
+                {texto.trim() && (
+                  <FilterChip label={`"${texto}"`} onRemove={() => setTexto("")} />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Tabla */}
         {loading ? (
-          <div className="px-5 py-4"><TableSkeleton rows={8} /></div>
+          <div className="px-6 py-5"><TableSkeleton rows={8} /></div>
         ) : error ? null : filtradas.length === 0 ? (
           <EmptyState
-            icon={FileText}
+            icon={AlertCircle}
             title="Sin resultados"
-            description="Ninguna oportunidad coincide con los filtros aplicados."
+            description="Ninguna oportunidad coincide con los filtros aplicados. Prueba ajustando los criterios de búsqueda."
           />
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-50">
-                    {!selectedMemberKey && <th className="px-5 py-3 whitespace-nowrap">Usuario</th>}
-                    <th className="px-5 py-3 whitespace-nowrap">Código</th>
-                    <th className="px-5 py-3">Nombre</th>
-                    <th className="px-5 py-3 whitespace-nowrap">Organismo</th>
-                    <th className="px-5 py-3 whitespace-nowrap">Gestión</th>
-                    <th className="px-5 py-3">Etiquetas</th>
-                    <th className="px-5 py-3 whitespace-nowrap">Línea negocio</th>
-                    <th className="px-5 py-3 whitespace-nowrap">Cierre</th>
-                    <th className="px-5 py-3 whitespace-nowrap text-right">Monto</th>
-                    <th className="px-5 py-3"></th>
+                  <tr className="text-left text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-50/50 border-b border-slate-100">
+                    {!memberKey && (
+                      <th
+                        className="px-6 py-3 whitespace-nowrap cursor-pointer select-none group"
+                        onClick={() => toggleSort("MEMBER_NAME")}
+                      >
+                        <span className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+                          Usuario <SortIcon col="MEMBER_NAME" sortCol={sortCol} sortDir={sortDir} />
+                        </span>
+                      </th>
+                    )}
+                    <th
+                      className="px-6 py-3 whitespace-nowrap cursor-pointer select-none group"
+                      onClick={() => toggleSort("OPPORTUNITY_CODE")}
+                    >
+                      <span className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+                        Código <SortIcon col="OPPORTUNITY_CODE" sortCol={sortCol} sortDir={sortDir} />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3">Nombre</th>
+                    <th
+                      className="px-6 py-3 whitespace-nowrap cursor-pointer select-none group"
+                      onClick={() => toggleSort("ORGANISM")}
+                    >
+                      <span className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+                        Organismo <SortIcon col="ORGANISM" sortCol={sortCol} sortDir={sortDir} />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 whitespace-nowrap">Gestión</th>
+                    <th className="px-6 py-3">Etiquetas</th>
+                    <th className="px-6 py-3 whitespace-nowrap">Línea negocio</th>
+                    <th
+                      className="px-6 py-3 whitespace-nowrap cursor-pointer select-none group"
+                      onClick={() => toggleSort("CLOSING_DATE")}
+                    >
+                      <span className="flex items-center gap-1 hover:text-slate-600 transition-colors">
+                        Cierre <SortIcon col="CLOSING_DATE" sortCol={sortCol} sortDir={sortDir} />
+                      </span>
+                    </th>
+                    <th
+                      className="px-6 py-3 whitespace-nowrap text-right cursor-pointer select-none group"
+                      onClick={() => toggleSort("AVAILABLE_AMOUNT")}
+                    >
+                      <span className="flex items-center justify-end gap-1 hover:text-slate-600 transition-colors">
+                        Monto <SortIcon col="AVAILABLE_AMOUNT" sortCol={sortCol} sortDir={sortDir} />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {pageRows.map((r, i) => {
-                    const tags = parseTags(r.TRANSLATED_TAGS);
-                    return (
-                      <tr
-                        key={r.OPPORTUNITY_ID ?? i}
-                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                        onClick={() => setSelected(r)}
-                      >
-                        {!selectedMemberKey && (
-                          <td className="px-5 py-3 whitespace-nowrap">
-                            <p className="font-bold text-slate-700">{r.MEMBER_NAME || "—"}</p>
-                            <p className="text-[10px] text-slate-400">{r.USER_MAIL || ""}</p>
+                <tbody>
+                  <AnimatePresence mode="wait">
+                    {pageRows.map((r, i) => {
+                      const tags = parseTags(r.TRANSLATED_TAGS);
+                      const isClosingSoon = r.CLOSING_DATE && (() => {
+                        const diff = new Date(r.CLOSING_DATE).getTime() - Date.now();
+                        return diff > 0 && diff < 3 * 24 * 60 * 60 * 1000;
+                      })();
+                      return (
+                        <motion.tr
+                          key={r.OPPORTUNITY_ID ?? i}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(i * 0.025, 0.35), duration: 0.2, ease: "easeOut" }}
+                          className="group border-b border-slate-50 last:border-0 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                          onClick={() => setSelected(r)}
+                        >
+                          {!memberKey && (
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <p className="font-bold text-slate-800">{r.MEMBER_NAME || "—"}</p>
+                              {r.USER_MAIL && (
+                                <p className="text-[10px] text-slate-400 mt-0.5">{r.USER_MAIL}</p>
+                              )}
+                            </td>
+                          )}
+                          <td className="px-6 py-3.5 font-mono font-bold text-slate-700 whitespace-nowrap text-[11px]">
+                            {r.OPPORTUNITY_CODE || "—"}
                           </td>
-                        )}
-                        <td className="px-5 py-3 font-mono font-bold text-slate-700 whitespace-nowrap">
-                          {r.OPPORTUNITY_CODE || "—"}
-                        </td>
-                        <td className="px-5 py-3 text-slate-700 max-w-[240px] truncate">
-                          {r.OPPORTUNITY_NAME || "—"}
-                        </td>
-                        <td className="px-5 py-3 text-slate-500 whitespace-nowrap max-w-[160px] truncate">
-                          {r.ORGANISM || "—"}
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <span className={`text-[10px] font-bold uppercase rounded-full px-2 py-0.5 ${GESTION_COLORS[r.MANAGED_STATUS_NAME] || GESTION_COLORS["Sin Definir"]}`}>
-                            {r.MANAGED_STATUS_NAME || "Sin Definir"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 max-w-[200px]">
-                          <div className="flex flex-wrap gap-1">
-                            {tags.length > 0
-                              ? tags.map((t) => (
-                                <span
-                                  key={t}
-                                  className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 ${
-                                    selectedTags.has(t)
-                                      ? "bg-[#2563EB] text-white"
-                                      : "bg-blue-50 text-[#2563EB]"
-                                  }`}
-                                >
-                                  {t}
-                                </span>
-                              ))
-                              : <span className="text-slate-300">—</span>}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{r.B_LINE || "—"}</td>
-                        <td className="px-5 py-3 whitespace-nowrap text-slate-500">{fmtDate(r.CLOSING_DATE)}</td>
-                        <td className="px-5 py-3 text-right tabular-nums text-slate-700 whitespace-nowrap">
-                          {r.AVAILABLE_AMOUNT ? `$${Number(r.AVAILABLE_AMOUNT).toLocaleString("es-CL")}` : "—"}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <ChevronRight className="w-4 h-4 text-slate-300" />
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="px-6 py-3.5 text-slate-700 max-w-[240px]">
+                            <p className="truncate">{r.OPPORTUNITY_NAME || "—"}</p>
+                          </td>
+                          <td className="px-6 py-3.5 text-slate-500 max-w-[160px]">
+                            <p className="truncate">{r.ORGANISM || "—"}</p>
+                          </td>
+                          <td className="px-6 py-3.5 whitespace-nowrap">
+                            <span className={`text-[10px] font-bold uppercase rounded-full px-2 py-0.5 border ${gestionPill(r.MANAGED_STATUS_NAME || "Sin Definir")}`}>
+                              {r.MANAGED_STATUS_NAME || "Sin Definir"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5 max-w-[200px]">
+                            <div className="flex flex-wrap gap-1">
+                              {tags.length > 0
+                                ? tags.map((t) => (
+                                  <span
+                                    key={t}
+                                    className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 ${
+                                      selectedTags.includes(t)
+                                        ? "bg-[#2563EB] text-white"
+                                        : "bg-blue-50 text-[#2563EB]"
+                                    }`}
+                                  >
+                                    {t}
+                                  </span>
+                                ))
+                                : <span className="text-slate-300">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-6 py-3.5 text-slate-500 whitespace-nowrap">{r.B_LINE || "—"}</td>
+                          <td className="px-6 py-3.5 whitespace-nowrap">
+                            <span className={isClosingSoon ? "text-amber-600 font-bold" : "text-slate-500"}>
+                              {fmtDate(r.CLOSING_DATE)}
+                            </span>
+                            {isClosingSoon && (
+                              <span className="ml-1.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">
+                                ¡Próximo!
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-3.5 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                            {r.AVAILABLE_AMOUNT ? `$${Number(r.AVAILABLE_AMOUNT).toLocaleString("es-CL")}` : "—"}
+                          </td>
+                          <td className="px-6 py-3.5 text-right">
+                            <ChevronRight className="w-4 h-4 text-slate-200 group-hover:text-[#2563EB] transition-colors" />
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                  </AnimatePresence>
                 </tbody>
               </table>
             </div>
-            <div className="pb-5">
+            <div className="py-4 border-t border-slate-50">
               <Paginacion currentPage={page} totalPages={totalPages} onPageChange={setPage} />
             </div>
           </>
         )}
       </div>
 
-      {/* ── Modal detalle ───────────────────────────────────── */}
+      {/* ── Modal detalle ─────────────────────────────────────── */}
       <Modal
         open={!!selected}
         onClose={() => setSelected(null)}
@@ -483,89 +863,82 @@ export default function BiExportPage() {
         {selected && (
           <div className="space-y-4">
 
+            {/* Usuario */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
                 <Users className="w-3.5 h-3.5 text-[#2563EB]" /> Usuario asignado
               </h3>
-              <dl className="grid grid-cols-2 gap-2 text-[11px]">
-                <div><dt className="text-slate-400 font-semibold">Nombre</dt><dd className="text-slate-700 font-bold">{selected.MEMBER_NAME || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Tipo</dt><dd className="text-slate-700">{selected.MEMBER_TYPE || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Activo</dt><dd className="text-slate-700">{isTrue(selected.MEMBER_ACTIVE) ? "Sí" : "No"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Es contacto ext.</dt><dd className="text-slate-700">{isTrue(selected.IS_CONTACT) ? "Sí" : "No"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">User ID</dt><dd className="text-slate-700 font-mono">{selected.USER_ID || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Email</dt><dd className="text-slate-700">{selected.USER_MAIL || "—"}</dd></div>
+              <dl className="grid grid-cols-2 gap-2.5 text-[11px]">
+                <div><dt className="text-slate-400 font-semibold">Nombre</dt><dd className="text-slate-800 font-black mt-0.5">{selected.MEMBER_NAME || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Tipo</dt><dd className="text-slate-700 mt-0.5">{selected.MEMBER_TYPE || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Activo</dt><dd className="mt-0.5">{isTrue(selected.MEMBER_ACTIVE) ? <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Sí</span> : <span className="text-slate-400">No</span>}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Contacto ext.</dt><dd className="text-slate-700 mt-0.5">{isTrue(selected.IS_CONTACT) ? "Sí" : "No"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">User ID</dt><dd className="font-mono text-slate-700 mt-0.5">{selected.USER_ID || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Email</dt><dd className="text-slate-700 mt-0.5">{selected.USER_MAIL || "—"}</dd></div>
               </dl>
             </div>
 
+            {/* Etiquetas */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
-                <Tag className="w-3.5 h-3.5 text-[#2563EB]" /> Etiquetas y clasificación
+                <Tag className="w-3.5 h-3.5 text-[#2563EB]" /> Clasificación y etiquetas
               </h3>
-              <div className="space-y-2.5 text-[11px]">
+              <div className="space-y-3 text-[11px]">
                 <div>
-                  <p className="text-slate-400 font-semibold mb-1">Etiquetas (TRANSLATED_TAGS)</p>
+                  <p className="text-slate-400 font-semibold mb-1.5">Etiquetas (TRANSLATED_TAGS)</p>
                   <div className="flex flex-wrap gap-1">
                     {parseTags(selected.TRANSLATED_TAGS).length > 0
                       ? parseTags(selected.TRANSLATED_TAGS).map((t) => (
-                        <span key={t} className="bg-blue-50 text-[#2563EB] font-bold rounded-full px-2 py-0.5">{t}</span>
+                        <span key={t} className="bg-blue-50 text-[#2563EB] font-bold rounded-full px-2 py-0.5 border border-blue-100">{t}</span>
                       ))
                       : <span className="text-slate-400">Sin etiquetas</span>}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <dt className="text-slate-400 font-semibold">Tags (códigos)</dt>
-                    <dd className="font-mono text-slate-700 mt-0.5">{selected.TAGS || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-400 font-semibold">Línea de negocio (B_LINE)</dt>
-                    <dd className="text-slate-700 mt-0.5">{selected.B_LINE || "—"}</dd>
-                  </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div><dt className="text-slate-400 font-semibold">Tags (códigos)</dt><dd className="font-mono text-slate-700 mt-0.5 text-[10px]">{selected.TAGS || "—"}</dd></div>
+                  <div><dt className="text-slate-400 font-semibold">Línea de negocio</dt><dd className="text-slate-700 mt-0.5">{selected.B_LINE || "—"}</dd></div>
                   <div>
                     <dt className="text-slate-400 font-semibold">Estado gestión</dt>
                     <dd className="mt-0.5">
-                      <span className={`font-bold rounded-full px-2 py-0.5 ${GESTION_COLORS[selected.MANAGED_STATUS_NAME] || GESTION_COLORS["Sin Definir"]}`}>
+                      <span className={`font-bold rounded-full px-2 py-0.5 border ${gestionPill(selected.MANAGED_STATUS_NAME || "Sin Definir")}`}>
                         {selected.MANAGED_STATUS_NAME || "Sin Definir"}
                       </span>
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-slate-400 font-semibold">Seguimiento / Leída / Descartada</dt>
+                    <dt className="text-slate-400 font-semibold">Banderas</dt>
                     <dd className="text-slate-700 mt-0.5">
-                      {[
-                        isTrue(selected.IS_FOLLOWED) && "En seguimiento",
-                        isTrue(selected.IS_READ) && "Leída",
-                        isTrue(selected.IS_DISCARTED) && "Descartada",
-                      ].filter(Boolean).join(" · ") || "—"}
+                      {[isTrue(selected.IS_FOLLOWED) && "Seguimiento", isTrue(selected.IS_READ) && "Leída", isTrue(selected.IS_DISCARTED) && "Descartada"].filter(Boolean).join(" · ") || "—"}
                     </dd>
                   </div>
                 </div>
               </div>
             </div>
 
+            {/* Oportunidad */}
             <div className="rounded-2xl border border-slate-100 p-4">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
                 <FileText className="w-3.5 h-3.5 text-[#2563EB]" /> Datos de la oportunidad
               </h3>
-              <dl className="grid grid-cols-2 gap-2 text-[11px]">
-                <div><dt className="text-slate-400 font-semibold">Código</dt><dd className="font-mono text-slate-700">{selected.OPPORTUNITY_CODE || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Tipo</dt><dd className="text-slate-700">{selected.OPPORTUNITY_TYPE || "—"}</dd></div>
-                <div className="col-span-2"><dt className="text-slate-400 font-semibold">Nombre</dt><dd className="text-slate-700">{selected.OPPORTUNITY_NAME || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Organismo</dt><dd className="text-slate-700">{selected.ORGANISM || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Categoría organismo</dt><dd className="text-slate-700">{selected.ORGANISM_CATEGORY || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Región</dt><dd className="text-slate-700">{selected.REGION || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Estado origen</dt><dd className="text-slate-700">{selected.STATUS || "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Fecha publicación</dt><dd className="text-slate-700">{fmtDate(selected.PUBLISH_DATE)}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Fecha cierre</dt><dd className="text-slate-700">{fmtDate(selected.CLOSING_DATE)}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Monto disponible</dt><dd className="text-slate-700">{selected.AVAILABLE_AMOUNT ? `$${Number(selected.AVAILABLE_AMOUNT).toLocaleString("es-CL")} ${selected.CURRENCY || ""}` : "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Monto postulado</dt><dd className="text-slate-700">{selected.APPLIED_AMOUNT ? `$${Number(selected.APPLIED_AMOUNT).toLocaleString("es-CL")}` : "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Monto ganado</dt><dd className="text-slate-700">{selected.WON_AMOUNT ? `$${Number(selected.WON_AMOUNT).toLocaleString("es-CL")}` : "—"}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Fecha postulación</dt><dd className="text-slate-700">{fmtDate(selected.ACTUAL_APPLICATION_DATE)}</dd></div>
-                <div><dt className="text-slate-400 font-semibold">Workspace</dt><dd className="text-slate-700">{selected.WORKSPACE_TITLE || "—"}</dd></div>
+              <dl className="grid grid-cols-2 gap-2.5 text-[11px]">
+                <div><dt className="text-slate-400 font-semibold">Código</dt><dd className="font-mono font-bold text-slate-800 mt-0.5">{selected.OPPORTUNITY_CODE || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Tipo</dt><dd className="text-slate-700 mt-0.5">{selected.OPPORTUNITY_TYPE || "—"}</dd></div>
+                <div className="col-span-2"><dt className="text-slate-400 font-semibold">Nombre</dt><dd className="text-slate-700 mt-0.5">{selected.OPPORTUNITY_NAME || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Organismo</dt><dd className="text-slate-700 mt-0.5">{selected.ORGANISM || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Categoría organismo</dt><dd className="text-slate-700 mt-0.5">{selected.ORGANISM_CATEGORY || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Región</dt><dd className="text-slate-700 mt-0.5">{selected.REGION || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Estado origen</dt><dd className="text-slate-700 mt-0.5">{selected.STATUS || "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Fecha publicación</dt><dd className="text-slate-700 mt-0.5">{fmtDate(selected.PUBLISH_DATE)}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Fecha cierre</dt><dd className="text-slate-700 mt-0.5">{fmtDate(selected.CLOSING_DATE)}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Monto disponible</dt><dd className="text-slate-700 mt-0.5">{selected.AVAILABLE_AMOUNT ? `$${Number(selected.AVAILABLE_AMOUNT).toLocaleString("es-CL")} ${selected.CURRENCY || ""}` : "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Monto postulado</dt><dd className="text-slate-700 mt-0.5">{selected.APPLIED_AMOUNT ? `$${Number(selected.APPLIED_AMOUNT).toLocaleString("es-CL")}` : "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Monto ganado</dt><dd className="text-slate-700 mt-0.5">{selected.WON_AMOUNT ? `$${Number(selected.WON_AMOUNT).toLocaleString("es-CL")}` : "—"}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Fecha postulación</dt><dd className="text-slate-700 mt-0.5">{fmtDate(selected.ACTUAL_APPLICATION_DATE)}</dd></div>
+                <div><dt className="text-slate-400 font-semibold">Workspace</dt><dd className="text-slate-700 mt-0.5">{selected.WORKSPACE_TITLE || "—"}</dd></div>
                 {selected.COMMENTS && (
                   <div className="col-span-2">
                     <dt className="text-slate-400 font-semibold">Comentarios</dt>
-                    <dd className="text-slate-700 mt-0.5 whitespace-pre-line">{selected.COMMENTS}</dd>
+                    <dd className="text-slate-700 mt-1 whitespace-pre-line bg-slate-50 rounded-xl p-3">{selected.COMMENTS}</dd>
                   </div>
                 )}
               </dl>
