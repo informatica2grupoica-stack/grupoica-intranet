@@ -61,6 +61,32 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   );
 }
 
+function StatChip({ label, count, color }: { label: string; count: number; color: string }) {
+  const colors: Record<string, string> = {
+    violet:  "bg-violet-50 text-violet-700 border-violet-200",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    blue:    "bg-blue-50 text-blue-700 border-blue-200",
+    teal:    "bg-teal-50 text-teal-700 border-teal-200",
+    rose:    "bg-rose-50 text-rose-700 border-rose-200",
+    amber:   "bg-amber-50 text-amber-700 border-amber-200",
+    slate:   "bg-slate-50 text-slate-600 border-slate-200",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 border ${colors[color] || colors.slate}`}>
+      {label}
+      <motion.span
+        key={count}
+        initial={{ opacity: 0, scale: 0.7 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className="font-black"
+      >
+        {count.toLocaleString("es-CL")}
+      </motion.span>
+    </span>
+  );
+}
+
 function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string | null; sortDir: "asc" | "desc" }) {
   if (sortCol !== col) return <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-400 transition-colors" />;
   return sortDir === "asc"
@@ -157,15 +183,16 @@ export default function BiExportPage() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
-  // ── Total asignadas (base sin filtros) ───────────────────────
+  // ── Total asignadas (base sin filtros, solo miembros activos) ─
   const totalAsignadas = useMemo(
-    () => rows.filter((x) => x.MEMBER_NAME || x.USER_MAIL).length,
+    () => rows.filter((x) => (x.MEMBER_NAME || x.USER_MAIL) && isTrue(x.MEMBER_ACTIVE)).length,
     [rows]
   );
 
   // ── Filtrado + ordenación ────────────────────────────────────
   const filtradas = useMemo(() => {
-    let r = rows.filter((x) => x.MEMBER_NAME || x.USER_MAIL);
+    // Base: solo oportunidades con miembro activo asignado
+    let r = rows.filter((x) => (x.MEMBER_NAME || x.USER_MAIL) && isTrue(x.MEMBER_ACTIVE));
 
     if (memberKey)
       r = r.filter((x) => `${x.USER_ID ?? ""}-${x.MEMBER_NAME ?? ""}` === memberKey);
@@ -247,6 +274,24 @@ export default function BiExportPage() {
   const selectedMemberName = members.find((m) => m.key === memberKey)?.MEMBER_NAME;
 
   // ── KPIs del header ─────────────────────────────────────────
+  // ── Stats en vivo (siempre desde filtradas) ─────────────────
+  const liveStats = useMemo(() => {
+    const ganadas     = filtradas.filter((r) => r.MANAGED_STATUS_NAME === "Ganada").length;
+    const seguimiento = filtradas.filter((r) => r.MANAGED_STATUS_NAME === "Seguimiento").length;
+    const postulado   = filtradas.filter((r) => r.MANAGED_STATUS_NAME === "Postulado").length;
+    const aceptado    = filtradas.filter((r) => r.MANAGED_STATUS_NAME === "Aceptado").length;
+    const perdida     = filtradas.filter((r) => r.MANAGED_STATUS_NAME === "Perdida").length;
+    const montoTotal  = filtradas.reduce((s, r) => s + (Number(r.AVAILABLE_AMOUNT) || 0), 0);
+    const montoGanado = filtradas.reduce((s, r) => s + (Number(r.WON_AMOUNT) || 0), 0);
+    const conCierre   = filtradas.filter((r) => r.CLOSING_DATE).length;
+    const proximos    = filtradas.filter((r) => {
+      if (!r.CLOSING_DATE) return false;
+      const diff = new Date(r.CLOSING_DATE).getTime() - Date.now();
+      return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000;
+    }).length;
+    return { ganadas, seguimiento, postulado, aceptado, perdida, montoTotal, montoGanado, conCierre, proximos };
+  }, [filtradas]);
+
   const kpiGanadas = useMemo(() => rows.filter((r) => (r.MANAGED_STATUS_NAME || "") === "Ganada").length, [rows]);
   const kpiSeguimiento = useMemo(() => rows.filter((r) => (r.MANAGED_STATUS_NAME || "") === "Seguimiento").length, [rows]);
 
@@ -699,6 +744,65 @@ export default function BiExportPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── Barra de resultados en vivo ──────────────────── */}
+        {!loading && !error && (
+          <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/40 flex flex-wrap items-center gap-3">
+
+            {/* Conteo principal animado */}
+            <div className="flex items-baseline gap-1.5">
+              <motion.span
+                key={filtradas.length}
+                initial={{ opacity: 0, y: -6, scale: 1.2 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                className="text-lg font-black text-[#111827] tabular-nums"
+              >
+                {filtradas.length.toLocaleString("es-CL")}
+              </motion.span>
+              <span className="text-xs text-slate-400 font-medium">
+                {activeFilterCount > 0
+                  ? `resultado${filtradas.length !== 1 ? "s" : ""} de ${totalAsignadas.toLocaleString("es-CL")} asignadas`
+                  : `oportunidad${filtradas.length !== 1 ? "es" : ""} asignadas`}
+              </span>
+            </div>
+
+            {/* Separador */}
+            {(liveStats.seguimiento > 0 || liveStats.ganadas > 0 || liveStats.postulado > 0 || liveStats.aceptado > 0 || liveStats.perdida > 0) && (
+              <span className="text-slate-200 select-none">|</span>
+            )}
+
+            {/* Desglose por gestión (solo estados con datos) */}
+            {liveStats.seguimiento > 0 && <StatChip label="Seguimiento" count={liveStats.seguimiento} color="violet" />}
+            {liveStats.ganadas > 0     && <StatChip label="Ganadas"     count={liveStats.ganadas}     color="emerald" />}
+            {liveStats.postulado > 0   && <StatChip label="Postulado"   count={liveStats.postulado}   color="blue" />}
+            {liveStats.aceptado > 0    && <StatChip label="Aceptado"    count={liveStats.aceptado}    color="teal" />}
+            {liveStats.perdida > 0     && <StatChip label="Perdida"     count={liveStats.perdida}     color="rose" />}
+
+            {/* Cierre próximo */}
+            {liveStats.proximos > 0 && (
+              <>
+                <span className="text-slate-200 select-none">|</span>
+                <StatChip label="⚠ Cierre esta semana" count={liveStats.proximos} color="amber" />
+              </>
+            )}
+
+            {/* Monto disponible total filtrado */}
+            {liveStats.montoTotal > 0 && (
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total disponible</span>
+                <motion.span
+                  key={liveStats.montoTotal}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-sm font-black text-slate-700 tabular-nums"
+                >
+                  ${liveStats.montoTotal.toLocaleString("es-CL")}
+                </motion.span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tabla */}
         {loading ? (
