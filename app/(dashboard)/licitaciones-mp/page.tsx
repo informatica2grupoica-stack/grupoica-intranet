@@ -291,7 +291,7 @@ export default function LicitacionesMPPage() {
     try {
       const res = await fetch("/api/licitapyme/documentos/auto-descargar", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ codigo }),
+        body: JSON.stringify({ licitacionCodigo: codigo }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Error ${res.status}`);
