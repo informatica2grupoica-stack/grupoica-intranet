@@ -1,9 +1,10 @@
 // app/api/bi-export/route.ts
-// Proxy server-side hacia el endpoint BI de LiciTaLab — mantiene la x-api-key
-// fuera del cliente. Consumido por la vista de prueba en /bi-export.
+// Proxy server-side hacia el endpoint BI de LiciTaLab.
+// Cachea 20 minutos en el edge para no golpear la API externa en cada render.
 import { NextResponse } from "next/server";
 
 const BI_API_URL = "https://biapi.licitalab.cl/bi/opportunities";
+const CACHE_TTL  = 1200; // 20 min en segundos
 
 export async function GET() {
   const apiKey = process.env.X_API_KEY;
@@ -18,7 +19,7 @@ export async function GET() {
   try {
     const res = await fetch(BI_API_URL, {
       headers: { "x-api-key": apiKey },
-      cache: "no-store",
+      next: { revalidate: CACHE_TTL }, // ISR-style cache en el runtime de Next.js
     });
 
     const text = await res.text();
@@ -32,11 +33,16 @@ export async function GET() {
 
     const rows = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       rows,
       count: rows.length,
       fetchedAt: new Date().toISOString(),
     });
+
+    // Cache-Control para el cliente: 5 min fresh, luego stale-while-revalidate 15 min
+    response.headers.set("Cache-Control", "public, max-age=300, stale-while-revalidate=900");
+    return response;
+
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "No se pudo conectar con la API de BI." },
