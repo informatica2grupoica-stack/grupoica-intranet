@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock } from "lucide-react";
+import { Loader2, RefreshCcw, AlertCircle, Check, ArrowLeft, Save, Globe, Lock, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -191,7 +191,12 @@ export default function NuevoProductoForm() {
             <h1 className="text-3xl font-black text-slate-800 tracking-tighter italic uppercase">Nuevo Producto</h1>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Panel de Creación Directa Obuma</p>
           </div>
-          <Link href="/obuma-productos" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#2563EB] transition-all shadow-sm"><ArrowLeft size={20} /></Link>
+          <div className="flex items-center gap-3">
+            <Link href="/obuma-productos/nuevo/masivo" className="px-4 py-3 bg-[#2563EB] rounded-2xl text-white hover:bg-blue-800 transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase">
+              <UploadCloud size={16} /> Carga masiva
+            </Link>
+            <Link href="/obuma-productos" className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-[#2563EB] transition-all shadow-sm"><ArrowLeft size={20} /></Link>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-8">
