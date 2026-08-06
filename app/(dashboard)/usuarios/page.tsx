@@ -8,8 +8,18 @@ import {
   UserPlus, Loader2, X, Pencil, Trash2, Search,
   Lock, Briefcase, CheckCircle2, Circle, LayoutList, Package, Laptop,
   Calendar, Phone, MapPin, Building, Globe, Eye, ShieldCheck,
-  ToggleLeft, ToggleRight, Layout
+  ToggleLeft, ToggleRight, Layout, Mail, AlertTriangle, Wrench
 } from "lucide-react";
+
+// Estados que puede devolver GET /api/usuarios al cruzar "perfiles" con auth.users
+const DIAG_LABELS: Record<string, { texto: string; clase: string }> = {
+  OK:                  { texto: "OK",                    clase: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+  SIN_CUENTA_AUTH:     { texto: "Sin cuenta de acceso",   clase: "bg-rose-50 text-rose-600 border-rose-100" },
+  USER_ID_VACIO:       { texto: "Sin cuenta de acceso",   clase: "bg-rose-50 text-rose-600 border-rose-100" },
+  USER_ID_NO_EXISTE:   { texto: "Cuenta no existe",       clase: "bg-rose-50 text-rose-600 border-rose-100" },
+  EMAIL_DESALINEADO:   { texto: "Correo desalineado",     clase: "bg-amber-50 text-amber-600 border-amber-100" },
+  EMAIL_SIN_CONFIRMAR: { texto: "Correo sin confirmar",   clase: "bg-amber-50 text-amber-600 border-amber-100" },
+};
 
 // Permisos de acción (independientes de las secciones)
 const ACTION_PERMS = [
@@ -51,6 +61,9 @@ export default function GestionUsuarios() {
   const [mensaje, setMensaje]                 = useState({ tipo: "", texto: "" });
   const [editandoId, setEditandoId]           = useState<string | null>(null);
   const [tabActivo, setTabActivo]             = useState<"datos" | "acceso">("datos");
+  const [diagOpen, setDiagOpen]               = useState(false);
+  const [diagLoading, setDiagLoading]         = useState(false);
+  const [diagData, setDiagData]               = useState<any>(null);
 
   const [formData, setFormData] = useState(() => ({
     email:           "",
@@ -176,6 +189,13 @@ export default function GestionUsuarios() {
       },
     }));
 
+  // La creación/edición se hace vía /api/usuarios (service role, en el servidor).
+  // Antes se usaba supabase.auth.signUp() desde el navegador: eso reemplazaba la
+  // sesión del admin logueado por la del usuario recién creado, y el INSERT en
+  // "perfiles" que venía justo después terminaba corriendo como ese usuario nuevo
+  // (no admin) — la política RLS lo rechazaba. Además dependía del correo de
+  // confirmación de Supabase, que con el SMTP por defecto no llega a nadie fuera
+  // del equipo del proyecto.
   async function handleGuardarUsuario(e: React.FormEvent) {
     e.preventDefault();
     setLoadingForm(true);
@@ -194,26 +214,18 @@ export default function GestionUsuarios() {
         cargo:            formData.cargo            || null,
         rol:              formData.rol,
         permisos:         formData.permisos,
-        updated_at:       new Date().toISOString(),
+        email:            formData.email,
       };
+      if (formData.password) dataPayload.password = formData.password;
+      if (editandoId) dataPayload.id = editandoId;
 
-      if (editandoId) {
-        const { error } = await supabase.from("perfiles").update(dataPayload).eq("id", editandoId);
-        if (error) throw error;
-      } else {
-        const { data: auth, error: authErr } = await supabase.auth.signUp({
-          email:    formData.email,
-          password: formData.password,
-        });
-        if (authErr) throw authErr;
-        const { error: pErr } = await supabase.from("perfiles").insert([{
-          ...dataPayload,
-          user_id: auth.user?.id,
-          email:   formData.email.toLowerCase().trim(),
-          activo:  true,
-        }]);
-        if (pErr) throw pErr;
-      }
+      const res = await fetch("/api/usuarios", {
+        method:  editandoId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(dataPayload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al guardar");
 
       setMensaje({ tipo: "success", texto: editandoId ? "✅ Cambios guardados" : "✅ Miembro registrado" });
       setTimeout(() => { cerrarModal(); obtenerUsuariosYSesion(); }, 1200);
@@ -233,9 +245,15 @@ export default function GestionUsuarios() {
       danger: true,
     });
     if (!ok) return;
-    const { error } = await supabase.from("perfiles").delete().eq("id", user.id);
-    if (!error) { toast("Usuario eliminado", "success"); obtenerUsuariosYSesion(); }
-    else toast("No tienes permisos suficientes.", "error");
+    try {
+      const res = await fetch(`/api/usuarios?id=${encodeURIComponent(user.id)}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo eliminar");
+      toast("Usuario eliminado", "success");
+      obtenerUsuariosYSesion();
+    } catch (err: any) {
+      toast(err.message || "No tienes permisos suficientes.", "error");
+    }
   }
 
   async function toggleEstado(user: any) {
@@ -245,6 +263,32 @@ export default function GestionUsuarios() {
       .update({ activo: !user.activo, updated_at: new Date().toISOString() })
       .eq("id", user.id);
     if (!error) obtenerUsuariosYSesion();
+  }
+
+  // Cruza "perfiles" con auth.users para ver a quién realmente le puede llegar
+  // un correo de recuperación (perfiles sin cuenta de auth nunca lo reciben,
+  // aunque Supabase responda "enviado" igual).
+  async function abrirDiagnostico() {
+    setDiagOpen(true);
+    setDiagLoading(true);
+    try {
+      const res = await fetch("/api/usuarios");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al cargar el diagnóstico");
+      setDiagData(json);
+    } catch (err: any) {
+      toast(err.message || "Error al cargar el diagnóstico", "error");
+      setDiagOpen(false);
+    } finally {
+      setDiagLoading(false);
+    }
+  }
+
+  function repararDesdeDiagnostico(id: string) {
+    const user = usuarios.find(u => u.id === id);
+    if (!user) return toast("No se encontró el perfil en la lista.", "error");
+    setDiagOpen(false);
+    prepararEdicion(user);
   }
 
   const formatearFecha = (fecha: string) =>
@@ -291,12 +335,21 @@ export default function GestionUsuarios() {
             />
           </div>
           {soyAdminOSuper && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-[#2563EB] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-100"
-            >
-              <UserPlus className="w-4 h-4" /> Nuevo Miembro
-            </button>
+            <>
+              <button
+                onClick={abrirDiagnostico}
+                className="flex items-center gap-2 bg-white border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-600 hover:text-amber-700 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+                title="Revisa qué perfiles no tienen (o tienen mal) su cuenta de acceso — la causa típica de que no llegue el correo de recuperación"
+              >
+                <Mail className="w-4 h-4" /> Diagnóstico de correos
+              </button>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-2 bg-[#2563EB] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-100"
+              >
+                <UserPlus className="w-4 h-4" /> Nuevo Miembro
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -534,9 +587,21 @@ export default function GestionUsuarios() {
                     {/* Credenciales */}
                     <div className="bg-slate-100 rounded-2xl p-5 space-y-4">
                       <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">🔐 Credenciales de Acceso</h3>
-                      <input type="email" placeholder="Email *" disabled={!!editandoId} required className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm disabled:opacity-50 outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                      {!editandoId && (
-                        <input type="password" placeholder="Contraseña temporal *" required className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono outline-none" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                      <input type="email" placeholder="Email *" required className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                      <input
+                        type="password"
+                        placeholder={editandoId ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña temporal *"}
+                        required={!editandoId}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono outline-none"
+                        value={formData.password}
+                        onChange={e => setFormData({...formData, password: e.target.value})}
+                      />
+                      {editandoId && (
+                        <p className="text-[10px] text-slate-400 leading-relaxed">
+                          Si el correo o la contraseña cambian, la cuenta de acceso se actualiza también.
+                          Si este perfil quedó sin cuenta de acceso (por eso no le llegan los correos), define
+                          una contraseña aquí y se creará automáticamente.
+                        </p>
                       )}
                     </div>
                   </>
@@ -679,6 +744,118 @@ export default function GestionUsuarios() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: DIAGNÓSTICO DE CORREOS ────────────────────────────────── */}
+      {diagOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden my-8">
+            <div className="px-8 py-5 flex justify-between items-center bg-slate-50/50 sticky top-0 border-b border-slate-100 z-10">
+              <div>
+                <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-[#2563EB]" /> Diagnóstico de correos
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Cruza cada perfil con su cuenta real de acceso (Supabase Auth). Un perfil sin cuenta
+                  válida <strong>nunca</strong> va a recibir el correo de recuperación, aunque el sistema diga "enviado".
+                </p>
+              </div>
+              <button onClick={() => setDiagOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-8 max-h-[65vh] overflow-y-auto space-y-6">
+              {diagLoading ? (
+                <div className="py-16 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#2563EB] mb-2 opacity-40" />
+                  <p className="text-slate-400 text-xs">Cruzando perfiles con cuentas de acceso...</p>
+                </div>
+              ) : !diagData ? (
+                <p className="text-slate-400 text-sm text-center py-16">Sin datos.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 rounded-2xl p-4 text-center">
+                      <p className="text-2xl font-black text-slate-800">{diagData.total_perfiles}</p>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Perfiles</p>
+                    </div>
+                    <div className={`rounded-2xl p-4 text-center ${diagData.con_problemas > 0 ? "bg-rose-50" : "bg-emerald-50"}`}>
+                      <p className={`text-2xl font-black ${diagData.con_problemas > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        {diagData.con_problemas}
+                      </p>
+                      <p className={`text-[9px] font-black uppercase tracking-wider mt-1 ${diagData.con_problemas > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        Con problemas
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 rounded-2xl p-4 text-center">
+                      <p className="text-2xl font-black text-slate-800">{diagData.auth_sin_perfil?.length ?? 0}</p>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">Cuentas sin perfil</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Perfiles</h3>
+                    <div className="space-y-2">
+                      {diagData.perfiles.map((p: any) => {
+                        const label = DIAG_LABELS[p.estado] || { texto: p.estado, clase: "bg-slate-50 text-slate-500 border-slate-100" };
+                        return (
+                          <div key={p.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 bg-white">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{p.nombre || "(sin nombre)"}</p>
+                              <p className="text-[10px] text-slate-400 font-mono truncate">
+                                {p.email_perfil || "—"}
+                                {p.email_auth && p.email_auth !== p.email_perfil ? ` (auth: ${p.email_auth})` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[9px] font-black px-2.5 py-1 rounded-full border ${label.clase}`}>
+                                {p.estado !== "OK" && <AlertTriangle className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                                {label.texto}
+                              </span>
+                              {p.estado !== "OK" && (
+                                <button
+                                  onClick={() => repararDesdeDiagnostico(p.id)}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase text-[#2563EB] hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-[#EFF6FF] transition-all"
+                                  title="Abrir este perfil para crear/arreglar su cuenta de acceso"
+                                >
+                                  <Wrench className="w-3 h-3" /> Reparar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {diagData.auth_sin_perfil?.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-600 mb-3">
+                        Cuentas de acceso sin perfil (entran a la app sin permisos)
+                      </h3>
+                      <div className="space-y-2">
+                        {diagData.auth_sin_perfil.map((u: any) => (
+                          <div key={u.user_id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50/50">
+                            <p className="text-xs font-mono text-slate-600 truncate">{u.email}</p>
+                            <span className={`text-[9px] font-black px-2 py-1 rounded-full ${u.confirmado ? "bg-slate-100 text-slate-500" : "bg-amber-100 text-amber-600"}`}>
+                              {u.confirmado ? "confirmada" : "sin confirmar"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-2">
+                        Estas cuentas existen en Supabase Auth pero no tienen fila en "perfiles" — probablemente
+                        de intentos de creación que fallaron antes de esta corrección. Elimínalas desde el panel
+                        de Supabase (Authentication → Users) si no corresponden a nadie real.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
