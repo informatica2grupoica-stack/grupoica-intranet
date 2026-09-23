@@ -7,7 +7,7 @@ import { getSectionKeyForPath, puedeVerSeccion } from '@/lib/sections'
 // 1) Autenticación: sin sesión válida → login (páginas) o 401 (APIs).
 // 2) Autorización centralizada: rutas sensibles exigen rol/permiso del perfil.
 
-const RUTAS_PUBLICAS = ['/login', '/forgot-password', '/update-password', '/auth', '/api/webhooks', '/api/indicadores']
+const RUTAS_PUBLICAS = ['/login', '/forgot-password', '/update-password', '/auth', '/api/webhooks', '/api/indicadores', '/api/health']
 
 function esRutaPublica(path: string): boolean {
   return RUTAS_PUBLICAS.some((r) => path === r || path.startsWith(r + '/'))
