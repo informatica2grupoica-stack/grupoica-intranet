@@ -39,6 +39,7 @@ interface FilaProcesada {
   nombre: string;
   problema: string | null;        // error de validación (no se envía)
   duplicado: boolean;             // se omitirá automáticamente
+  sku_existente: string | null;   // SKU del producto ya existente, si es duplicado
 }
 
 interface ResultadoFila {
@@ -120,6 +121,24 @@ export default function CargaMasivaProductos() {
     [productosExistentes]
   );
 
+  // Nombre limpio -> SKU, para mostrar el SKU del producto ya existente en un duplicado
+  const skuPorNombre = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of productosExistentes) {
+      const n = limpiar(p.nombre);
+      if (n && p.sku) map.set(n, p.sku);
+    }
+    return map;
+  }, [productosExistentes]);
+
+  const buscarSkuExistente = (nombreNorm: string): string | null => {
+    if (skuPorNombre.has(nombreNorm)) return skuPorNombre.get(nombreNorm)!;
+    for (const [n, sku] of skuPorNombre) {
+      if (n.includes(nombreNorm) || nombreNorm.includes(n)) return sku;
+    }
+    return null;
+  };
+
   const descargarPlantilla = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       ["C1 (Tipo)", "C2 (Atributo)", "C3 (Medida)", "C4 (Marca)", "Categoria", "Subcategoria",
@@ -199,6 +218,7 @@ export default function CargaMasivaProductos() {
             !problema &&
             (nombresEnLote.has(nombreNorm) || nombresExistentes.some((n) => n.includes(nombreNorm)));
           if (!problema && !duplicado) nombresEnLote.add(nombreNorm);
+          const sku_existente = duplicado ? buscarSkuExistente(nombreNorm) : null;
 
           return {
             idx: i + 2, // número de fila en Excel (1 = encabezado)
@@ -219,6 +239,7 @@ export default function CargaMasivaProductos() {
             nombre: nombreNorm,
             problema,
             duplicado: !!duplicado,
+            sku_existente,
           };
         });
 
@@ -240,6 +261,40 @@ export default function CargaMasivaProductos() {
       errores: filas.filter((f) => f.problema).length,
     };
   }, [filas]);
+
+  const descargarExcelPrevisualizacion = () => {
+    const filasExport = filas.map((f) => ({
+      "#": f.idx,
+      "Nombre final": f.nombre,
+      "Categoría": f.categoria_nombre,
+      "Subcategoría": f.subcategoria_nombre,
+      "Costo": f.precio_costo,
+      "Venta": f.precio_venta,
+      "Estado": f.problema ? "Error" : f.duplicado ? "Duplicado" : "A crear",
+      "SKU existente": f.sku_existente || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(filasExport);
+    ws['!cols'] = [{ wch: 5 }, { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Previsualizacion");
+    XLSX.writeFile(wb, `previsualizacion_carga_masiva_${Date.now()}.xlsx`);
+  };
+
+  const descargarExcelResultado = () => {
+    if (!resultado) return;
+    const filasExport = resultado.resultados.map((r) => ({
+      "#": r.fila,
+      "Nombre": r.nombre,
+      "SKU": r.sku || "",
+      "Estado": r.estado === 'creado' ? "Creado" : r.estado === 'omitido_duplicado' ? "Omitido (duplicado)" : "Error",
+      "Detalle": r.detalle || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(filasExport);
+    ws['!cols'] = [{ wch: 5 }, { wch: 40 }, { wch: 16 }, { wch: 20 }, { wch: 30 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Resultado");
+    XLSX.writeFile(wb, `resultado_carga_masiva_${Date.now()}.xlsx`);
+  };
 
   const limpiarTodo = () => {
     setFilas([]);
@@ -360,11 +415,17 @@ export default function CargaMasivaProductos() {
         {/* PASO 2: Previsualización */}
         {filas.length > 0 && !resultado && (
           <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 space-y-6">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Badge color="blue" label="Total" value={stats.total} />
               <Badge color="emerald" label="A crear" value={stats.aCrear} />
               <Badge color="amber" label="Duplicados (se omiten)" value={stats.duplicados} />
               <Badge color="rose" label="Con error" value={stats.errores} />
+              <button
+                onClick={descargarExcelPrevisualizacion}
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase text-[#2563EB] bg-[#EFF6FF] border border-blue-100 hover:bg-blue-100 transition-all"
+              >
+                <Download size={14} /> Descargar Excel (SKU existentes)
+              </button>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-slate-100 max-h-[500px] overflow-y-auto">
@@ -378,6 +439,7 @@ export default function CargaMasivaProductos() {
                     <th className="p-3 text-right">Costo</th>
                     <th className="p-3 text-right">Venta</th>
                     <th className="p-3">Estado</th>
+                    <th className="p-3">SKU existente</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -404,6 +466,7 @@ export default function CargaMasivaProductos() {
                           </span>
                         )}
                       </td>
+                      <td className="p-3 font-black text-slate-500">{f.sku_existente || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -436,10 +499,16 @@ export default function CargaMasivaProductos() {
               <FileSpreadsheet size={24} className="text-[#2563EB]" />
               <h2 className="text-xl font-black uppercase italic text-slate-800">Resultado de la carga</h2>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Badge color="emerald" label="Creados" value={resultado.resumen.creados} />
               <Badge color="amber" label="Omitidos (duplicado)" value={resultado.resumen.omitidos} />
               <Badge color="rose" label="Errores" value={resultado.resumen.errores} />
+              <button
+                onClick={descargarExcelResultado}
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase text-[#2563EB] bg-[#EFF6FF] border border-blue-100 hover:bg-blue-100 transition-all"
+              >
+                <Download size={14} /> Descargar Excel (SKU creados)
+              </button>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-slate-100 max-h-[400px] overflow-y-auto">

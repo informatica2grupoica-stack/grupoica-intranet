@@ -1,0 +1,15 @@
+name: Keep-alive Render
+
+on:
+  schedule:
+    # Cada 10 minutos. El sleep de Render free ocurre a los 15 min sin requests.
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          curl -sf --max-time 20 "${{ vars.RENDER_APP_URL }}/api/health" || echo "Ping falló (puede ser cold start, no falla el job)"
